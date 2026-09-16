@@ -2387,11 +2387,20 @@ export function AppShell() {
               onExtensionWidgetsChange={handleExtensionWidgetsChange}
               onRequestNewSession={() => {
                 const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd ?? "";
-                if (selectedSession && !runningSessionIds.has(selectedSession.id)) {
-                  fetch(`/api/sessions/${encodeURIComponent(selectedSession.id)}`, { method: "DELETE" })
-                    .then(() => setRefreshKey((k) => k + 1))
-                    .catch(() => {});
-                }
+                fetch("/api/sessions")
+                  .then((r) => r.json())
+                  .then((data: { sessions?: Array<{ id: string; cwd?: string }> }) => {
+                    const toDelete = (data.sessions ?? []).filter(
+                      (s) => s.cwd === cwd && !runningSessionIds.has(s.id),
+                    );
+                    return Promise.all(
+                      toDelete.map((s) =>
+                        fetch(`/api/sessions/${encodeURIComponent(s.id)}`, { method: "DELETE" }).catch(() => {}),
+                      ),
+                    );
+                  })
+                  .then(() => setRefreshKey((k) => k + 1))
+                  .catch(() => {});
                 handleNewSession(`new-${Date.now()}`, cwd);
               }}
             />
