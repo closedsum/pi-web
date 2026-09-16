@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { GsdTask, GsdBoardData } from "@/lib/gsd-board";
+import type { BoardTask, TaskBoardData } from "@/lib/task-board";
 
-const STATUS_ORDER: GsdTask["status"][] = ["in_progress", "pending", "completed"];
-const STATUS_LABELS: Record<GsdTask["status"], string> = {
+const STATUS_ORDER: BoardTask["status"][] = ["in_progress", "pending", "completed"];
+const STATUS_LABELS: Record<BoardTask["status"], string> = {
   in_progress: "In Progress",
   pending: "Pending",
   completed: "Completed",
 };
-const STATUS_COLORS: Record<GsdTask["status"], string> = {
+const STATUS_COLORS: Record<BoardTask["status"], string> = {
   in_progress: "#3b82f6",
   pending: "#f59e0b",
   completed: "#22c55e",
@@ -21,7 +21,7 @@ function extractTitle(subject: string): string {
   return subject.replace(/^\[.*?\]\s*/, "");
 }
 
-function TaskItem({ task }: { task: GsdTask }) {
+function TaskItem({ task }: { task: BoardTask }) {
   const [expanded, setExpanded] = useState(false);
   const title = extractTitle(task.subject);
   if (!title) return null;
@@ -76,7 +76,7 @@ function TaskItem({ task }: { task: GsdTask }) {
   );
 }
 
-function StatusSection({ status, tasks }: { status: GsdTask["status"]; tasks: GsdTask[] }) {
+function StatusSection({ status, tasks }: { status: BoardTask["status"]; tasks: BoardTask[] }) {
   const [open, setOpen] = useState(status !== "completed");
   if (tasks.length === 0) return null;
 
@@ -145,20 +145,20 @@ function StatusSection({ status, tasks }: { status: GsdTask["status"]; tasks: Gs
   );
 }
 
-export function GsdPanel({ cwd }: { cwd: string | null }) {
-  const [data, setData] = useState<GsdBoardData | null>(null);
+export function TaskPanel({ cwd }: { cwd: string | null }) {
+  const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchBoard = useCallback(async () => {
     if (!cwd) return;
     try {
-      const res = await fetch(`/api/gsd-board?cwd=${encodeURIComponent(cwd)}`);
+      const res = await fetch(`/api/task-board?cwd=${encodeURIComponent(cwd)}`);
       if (!res.ok) {
         setError(`HTTP ${res.status}`);
         return;
       }
-      const json = await res.json() as GsdBoardData;
+      const json = await res.json() as TaskBoardData;
       setData(json);
       setError(null);
     } catch (e) {
@@ -174,7 +174,7 @@ export function GsdPanel({ cwd }: { cwd: string | null }) {
     };
   }, [fetchBoard]);
 
-  const grouped = new Map<GsdTask["status"], GsdTask[]>();
+  const grouped = new Map<BoardTask["status"], BoardTask[]>();
   for (const s of STATUS_ORDER) grouped.set(s, []);
   if (data) {
     for (const task of data.tasks) {

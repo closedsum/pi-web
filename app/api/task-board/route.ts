@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { getAllowedFileRoots, isExistingFilePathAllowed, isFilePathAllowed, isWindowsAbsolutePath } from "@/lib/file-access";
-import { parseBoard, countByStatus, type GsdBoardData } from "@/lib/gsd-board";
+import { parseBoard, countByStatus, type TaskBoardData } from "@/lib/task-board";
 
 const BOARD_REL_PATH = ".planning/threads/board.jsonl";
 
@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
       stat = fs.statSync(boardPath);
       content = fs.readFileSync(boardPath, "utf-8");
     } catch {
-      const result: GsdBoardData = { tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 }, lastModified: null };
+      const result: TaskBoardData = { tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 }, lastModified: null };
       return NextResponse.json(result);
     }
 
     const tasks = parseBoard(content.split("\n"));
-    const result: GsdBoardData = {
+    const result: TaskBoardData = {
       tasks,
       counts: countByStatus(tasks),
       lastModified: stat.mtime.toISOString(),

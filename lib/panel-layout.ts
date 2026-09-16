@@ -9,9 +9,9 @@ export const RIGHT_PANEL_FALLBACK_WIDTH = 560;
 export const RIGHT_PANEL_MIN_WIDTH = 300;
 export const RIGHT_PANEL_MAX_WIDTH = 1200;
 
-export const GSD_PANEL_DEFAULT_WIDTH = 280;
-export const GSD_PANEL_MIN_WIDTH = 200;
-export const GSD_PANEL_MAX_WIDTH = 480;
+export const TASK_PANEL_DEFAULT_WIDTH = 280;
+export const TASK_PANEL_MIN_WIDTH = 200;
+export const TASK_PANEL_MAX_WIDTH = 480;
 
 const COMPACT_CHAT_MIN_WIDTH = 320;
 const DESKTOP_CHAT_MIN_WIDTH = 420;
@@ -30,20 +30,20 @@ export function getSidebarMaxWidth(options: {
   viewportWidth: number;
   rightPanelOpen: boolean;
   rightPanelWidth: number;
-  gsdPanelOpen?: boolean;
-  gsdPanelWidth?: number;
+  taskPanelOpen?: boolean;
+  taskPanelWidth?: number;
 }): number {
-  const { viewportWidth, rightPanelOpen, rightPanelWidth, gsdPanelOpen, gsdPanelWidth } = options;
+  const { viewportWidth, rightPanelOpen, rightPanelWidth, taskPanelOpen, taskPanelWidth } = options;
   if (viewportWidth <= MOBILE_MAX_WIDTH) return SIDEBAR_MAX_WIDTH;
 
   const compact = viewportWidth < SPLIT_PANEL_MIN_WIDTH;
   const chatWidth = compact ? COMPACT_CHAT_MIN_WIDTH : DESKTOP_CHAT_MIN_WIDTH;
   const visibleRightPanelWidth = !compact && rightPanelOpen ? rightPanelWidth : 0;
-  const visibleGsdPanelWidth = !compact && gsdPanelOpen ? (gsdPanelWidth ?? 0) : 0;
+  const visibleGsdPanelWidth = !compact && taskPanelOpen ? (taskPanelWidth ?? 0) : 0;
   return Math.min(SIDEBAR_MAX_WIDTH, viewportWidth - chatWidth - visibleRightPanelWidth - visibleGsdPanelWidth);
 }
 
-export function getGsdPanelMaxWidth(options: {
+export function getTaskPanelMaxWidth(options: {
   viewportWidth: number;
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -51,12 +51,12 @@ export function getGsdPanelMaxWidth(options: {
   rightPanelWidth: number;
 }): number {
   const { viewportWidth, sidebarOpen, sidebarWidth, rightPanelOpen, rightPanelWidth } = options;
-  if (viewportWidth < SPLIT_PANEL_MIN_WIDTH) return GSD_PANEL_MAX_WIDTH;
+  if (viewportWidth < SPLIT_PANEL_MIN_WIDTH) return TASK_PANEL_MAX_WIDTH;
 
   const visibleSidebarWidth = sidebarOpen ? sidebarWidth : 0;
   const visibleRightPanelWidth = rightPanelOpen ? rightPanelWidth : 0;
   return Math.min(
-    GSD_PANEL_MAX_WIDTH,
+    TASK_PANEL_MAX_WIDTH,
     viewportWidth - DESKTOP_CHAT_MIN_WIDTH - visibleSidebarWidth - visibleRightPanelWidth,
   );
 }
