@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import type { BoardTask, TaskBoardData } from "@/lib/task-board";
 
 const STATUS_ORDER: BoardTask["status"][] = ["in_progress", "pending", "completed"];
@@ -65,11 +65,42 @@ function Tag({ label, kind }: { label: string; kind: "model" | "effort" | "taskt
   );
 }
 
+function formatElapsed(createdAt: string): string {
+  const ms = Date.now() - new Date(createdAt).getTime();
+  if (ms < 0) return "0m";
+  const totalMin = Math.floor(ms / 60_000);
+  if (totalMin < 60) return `${totalMin}m`;
+  const hours = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  if (hours < 24) return min > 0 ? `${hours}h${min}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d${remHours}h` : `${days}d`;
+}
+
+let minuteTick = 0;
+const minuteListeners = new Set<() => void>();
+let minuteTimer: ReturnType<typeof setInterval> | null = null;
+function subscribeMinuteTick(cb: () => void) {
+  minuteListeners.add(cb);
+  if (!minuteTimer) {
+    minuteTimer = setInterval(() => { minuteTick++; minuteListeners.forEach((fn) => fn()); }, 60_000);
+  }
+  return () => {
+    minuteListeners.delete(cb);
+    if (minuteListeners.size === 0 && minuteTimer) { clearInterval(minuteTimer); minuteTimer = null; }
+  };
+}
+function getMinuteTick() { return minuteTick; }
+function useMinuteTick() { useSyncExternalStore(subscribeMinuteTick, getMinuteTick, getMinuteTick); }
+
 function TaskItem({ task }: { task: BoardTask }) {
+  useMinuteTick();
   const [expanded, setExpanded] = useState(false);
   const parsed = parseSubject(task.subject);
   if (!parsed.title) return null;
-  const hasTags = parsed.model || parsed.effort || parsed.tasktype;
+  const showElapsed = task.status === "in_progress" && task.created_at;
+  const hasTags = parsed.model || parsed.effort || parsed.tasktype || showElapsed;
   const isBlocked = task.status === "pending" && task.blockedBy.length > 0;
 
   return (
@@ -109,6 +140,16 @@ function TaskItem({ task }: { task: BoardTask }) {
               background: "rgba(245, 158, 11, 0.10)", borderRadius: 4, padding: "1px 4px",
             }}>
               <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>[</span>
+              {showElapsed && (
+                <span style={{
+                  display: "inline-block", padding: "1px 5px", borderRadius: 4,
+                  fontSize: 10, fontWeight: 500, fontFamily: "var(--font-mono)",
+                  background: "rgba(34, 197, 94, 0.15)", color: "#22c55e",
+                  lineHeight: 1.5, whiteSpace: "nowrap",
+                }}>
+                  {formatElapsed(task.created_at)}
+                </span>
+              )}
               {parsed.model && <Tag label={parsed.model} kind="model" />}
               {parsed.effort && <Tag label={parsed.effort} kind="effort" />}
               {parsed.tasktype && <Tag label={parsed.tasktype} kind="tasktype" />}
