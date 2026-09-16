@@ -101,7 +101,7 @@ describe("SidebarExtensions integration", () => {
       ];
       const html = render({ widgets });
       assert.match(html, /above-line-1/);
-      assert.match(html, /widget-key">below</, "below widget trigger present");
+      assert.match(html, /below-line-1/, "below widget content visible");
     });
   });
 

@@ -108,15 +108,28 @@ describe("SidebarExtensions", () => {
       assert.match(html, /a-line-2/);
     });
 
-    it("renders multiple widgets", () => {
+    it("renders multiple widgets with all content visible", () => {
       const html = render({ widgets: [makeWidget("a"), makeWidget("b")] });
-      assert.match(html, /a-line-1/, "first widget content visible (expanded by default)");
-      assert.match(html, /widget-key">b</, "second widget trigger present");
+      assert.match(html, /a-line-1/, "first widget content visible");
+      assert.match(html, /b-line-1/, "second widget content also visible (no accordion)");
     });
 
     it("scrollable container has overflow-y auto", () => {
       const html = render({ widgets: [makeWidget("a")] });
       assert.match(html, /overflow-y:\s*auto/i);
+    });
+  });
+
+  describe("display name mapping", () => {
+    it("maps gsd-task to Checklist in heading", () => {
+      const html = render({ widgets: [makeWidget("gsd-task", 2)] });
+      assert.match(html, /Checklist/, "gsd-task should display as Checklist");
+      assert.doesNotMatch(html, /letter-spacing[^>]*>gsd-task</, "heading should not show raw key");
+    });
+
+    it("shows raw key when no mapping exists", () => {
+      const html = render({ widgets: [makeWidget("custom-widget", 2)] });
+      assert.match(html, /custom-widget/);
     });
   });
 
