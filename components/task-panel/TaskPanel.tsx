@@ -288,10 +288,10 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
           Tasks
         </span>
         {data && data.tasks.length > 0 && (
-          <span style={{ fontSize: 10, color: "var(--text-dim)", display: "flex", gap: 6 }}>
-            {data.counts.completed > 0 && <span style={{ color: "#22c55e" }}>{data.counts.completed}&#x2713;</span>}
-            {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}>{data.counts.in_progress}&#x25B6;</span>}
-            {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}>{data.counts.pending}&#x25CB;</span>}
+          <span style={{ fontSize: 10, display: "flex", gap: 6, whiteSpace: "nowrap" }}>
+            {data.counts.completed > 0 && <span style={{ color: "#22c55e" }}>{data.counts.completed} done</span>}
+            {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}>{data.counts.in_progress} active</span>}
+            {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}>{data.counts.pending} pending</span>}
           </span>
         )}
         <button
