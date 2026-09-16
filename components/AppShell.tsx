@@ -7,6 +7,7 @@ import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
 import type { ChatScrollPosition } from "@/lib/chat-scroll-position";
 import { FileViewer } from "./FileViewer";
+import { GsdPanel } from "./gsd-panel/GsdPanel";
 import { TabBar, type Tab } from "./TabBar";
 import { openFileTab, saveFileViewerState } from "./file-tab-state";
 import { SettingsPanel, SettingsSectionIcon } from "./SettingsPanel";
@@ -43,8 +44,12 @@ import {
 } from "@/lib/workspace-memory";
 import {
   getDefaultRightPanelWidth,
+  getGsdPanelMaxWidth,
   getRightPanelMaxWidth,
   getSidebarMaxWidth,
+  GSD_PANEL_DEFAULT_WIDTH,
+  GSD_PANEL_MAX_WIDTH,
+  GSD_PANEL_MIN_WIDTH,
   RIGHT_PANEL_FALLBACK_WIDTH,
   RIGHT_PANEL_MAX_WIDTH,
   RIGHT_PANEL_MIN_WIDTH,
@@ -173,10 +178,14 @@ export function AppShell() {
   const [projectTrustError, setProjectTrustError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => !initialNavigation.sidebarCollapsed);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [gsdPanelOpen, setGsdPanelOpen] = useState(() => {
+    try { return window.localStorage.getItem("pi-gsd-panel-open") !== "false"; } catch { return true; }
+  });
   const [mobileToolbarMoreOpen, setMobileToolbarMoreOpen] = useState(false);
   const [mobileSidebarReady, setMobileSidebarReady] = useState(false);
   const sidebarWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const rightPanelWidthRef = useRef(RIGHT_PANEL_FALLBACK_WIDTH);
+  const gsdPanelWidthRef = useRef(GSD_PANEL_DEFAULT_WIDTH);
   const getResponsiveRightPanelWidth = useCallback(
     () => typeof window === "undefined"
       ? RIGHT_PANEL_FALLBACK_WIDTH
@@ -190,8 +199,10 @@ export function AppShell() {
         viewportWidth: window.innerWidth,
         rightPanelOpen,
         rightPanelWidth: rightPanelWidthRef.current,
+        gsdPanelOpen,
+        gsdPanelWidth: gsdPanelWidthRef.current,
       }),
-    [rightPanelOpen],
+    [rightPanelOpen, gsdPanelOpen],
   );
   const getResponsiveRightPanelMaxWidth = useCallback(
     () => typeof window === "undefined"
@@ -202,6 +213,18 @@ export function AppShell() {
         sidebarWidth: sidebarWidthRef.current,
       }),
     [sidebarOpen],
+  );
+  const getResponsiveGsdPanelMaxWidth = useCallback(
+    () => typeof window === "undefined"
+      ? GSD_PANEL_MAX_WIDTH
+      : getGsdPanelMaxWidth({
+        viewportWidth: window.innerWidth,
+        sidebarOpen,
+        sidebarWidth: sidebarWidthRef.current,
+        rightPanelOpen,
+        rightPanelWidth: rightPanelWidthRef.current,
+      }),
+    [sidebarOpen, rightPanelOpen],
   );
   const sidebarResizer = useResizablePanel({
     ariaLabel: translate("layout.resizeSidebar"),
@@ -226,8 +249,27 @@ export function AppShell() {
     storageKey: "pi-right-panel-width",
     widthRef: rightPanelWidthRef,
   });
+  const gsdPanelResizer = useResizablePanel({
+    ariaLabel: "Resize tasks panel",
+    cssVariable: "--gsd-panel-width",
+    defaultWidth: GSD_PANEL_DEFAULT_WIDTH,
+    getMaxWidth: getResponsiveGsdPanelMaxWidth,
+    growthDirection: "right",
+    maxWidth: GSD_PANEL_MAX_WIDTH,
+    minWidth: GSD_PANEL_MIN_WIDTH,
+    storageKey: "pi-gsd-panel-width",
+    widthRef: gsdPanelWidthRef,
+  });
+  const handleGsdPanelToggle = useCallback(() => {
+    setGsdPanelOpen((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem("pi-gsd-panel-open", String(next)); } catch {}
+      return next;
+    });
+  }, []);
   const reclampSidebarWidth = sidebarResizer.reclampWidth;
   const reclampRightPanelWidth = rightPanelResizer.reclampWidth;
+  const reclampGsdPanelWidth = gsdPanelResizer.reclampWidth;
   // On mobile the sidebar is an overlay drawer; hide it by default so the chat
   // is visible on load. Runs once the breakpoint resolves after hydration.
   useEffect(() => {
@@ -240,7 +282,13 @@ export function AppShell() {
     if (!rightPanelOpen) return;
     reclampSidebarWidth();
     reclampRightPanelWidth();
-  }, [reclampRightPanelWidth, reclampSidebarWidth, rightPanelOpen]);
+    reclampGsdPanelWidth();
+  }, [reclampRightPanelWidth, reclampSidebarWidth, reclampGsdPanelWidth, rightPanelOpen]);
+  useEffect(() => {
+    if (!gsdPanelOpen) return;
+    reclampSidebarWidth();
+    reclampGsdPanelWidth();
+  }, [reclampSidebarWidth, reclampGsdPanelWidth, gsdPanelOpen]);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const [pendingQuotePrompt, setPendingQuotePrompt] = useState<{ sessionId: string; text: string } | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
@@ -1701,6 +1749,34 @@ export function AppShell() {
     );
   };
 
+  const renderGsdPanelToggle = () => {
+    if (isMobile) return null;
+    return (
+      <button
+        type="button"
+        onClick={handleGsdPanelToggle}
+        aria-controls="gsd-panel"
+        aria-expanded={gsdPanelOpen}
+        title={gsdPanelOpen ? "Hide tasks panel" : "Show tasks panel"}
+        aria-label={gsdPanelOpen ? "Hide tasks panel" : "Show tasks panel"}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: TOP_BAR_ICON_BUTTON_SIZE, height: TOP_BAR_ICON_BUTTON_SIZE, padding: 0,
+          background: gsdPanelOpen ? "var(--bg-selected)" : "none",
+          border: "none", borderLeft: "1px solid var(--border)",
+          color: gsdPanelOpen ? "var(--text)" : "var(--text-muted)",
+          cursor: "pointer", flexShrink: 0, transition: "color 0.12s, background 0.12s",
+        }}
+        onMouseEnter={(event) => { event.currentTarget.style.color = "var(--text)"; }}
+        onMouseLeave={(event) => { event.currentTarget.style.color = gsdPanelOpen ? "var(--text)" : "var(--text-muted)"; }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="10" y1="10" x2="10" y2="19" />
+        </svg>
+      </button>
+    );
+  };
+
   const renderMainFileToggle = (mobile: boolean) => {
     const covered = mobile && isNarrowMobile && mobileToolbarMoreOpen;
     return (
@@ -1875,6 +1951,33 @@ export function AppShell() {
         />
       )}
 
+      {/* GSD tasks panel */}
+      {!isMobile && (
+        <div
+          ref={gsdPanelResizer.panelRef}
+          id="gsd-panel"
+          className={`gsd-panel-container${gsdPanelOpen ? " gsd-panel-open" : " gsd-panel-closed"}${gsdPanelResizer.isResizing ? " gsd-panel-resizing" : ""}`}
+          style={{
+            "--gsd-panel-width": `${gsdPanelResizer.width}px`,
+            display: "flex",
+            flexDirection: "column",
+            borderRight: "1px solid var(--border)",
+            background: "var(--bg)",
+          } as React.CSSProperties}
+        >
+          <GsdPanel cwd={selectedSession?.cwd ?? activeCwd} />
+        </div>
+      )}
+      {!isMobile && gsdPanelOpen && (
+        <div
+          {...gsdPanelResizer.separatorProps}
+          aria-controls="gsd-panel"
+          className={`panel-resize-handle gsd-panel-resize-handle${gsdPanelResizer.isResizing ? " is-resizing" : ""}`}
+          data-resize-handle="gsd-panel"
+          title="Resize tasks panel: drag or use arrow keys"
+        />
+      )}
+
       {/* Center: chat */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* Top bar with sidebar toggle */}
@@ -1982,6 +2085,7 @@ export function AppShell() {
               {renderSessionStatsButton(false)}
             </>
           )}
+          {!isMobile && renderGsdPanelToggle()}
           {!isMobile && renderMainFileToggle(false)}
           {isMobile && sessionHasBranches && (
             <BranchNavigator

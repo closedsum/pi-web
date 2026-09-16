@@ -1632,6 +1632,32 @@ span.token.table {
   }
 }
 
+/* GSD panel: sits between sidebar and chat center */
+@media (min-width: 641px) {
+  .gsd-panel-container {
+    overflow: hidden;
+    transition: width 0.2s ease, min-width 0.2s ease;
+    flex-shrink: 0;
+  }
+  .gsd-panel-container.gsd-panel-open {
+    width: var(--gsd-panel-width, 280px);
+    min-width: 200px;
+  }
+  .gsd-panel-container.gsd-panel-closed {
+    width: 0;
+    min-width: 0;
+    border-right: none !important;
+  }
+  .gsd-panel-container > * {
+    width: var(--gsd-panel-width, 280px);
+    min-width: 200px;
+  }
+  .gsd-panel-container.gsd-panel-resizing,
+  .gsd-panel-container.gsd-panel-resizing > * {
+    transition: none !important;
+  }
+}
+
 /* Compact desktop file panel: overlay the chat instead of collapsing it. */
 @media (min-width: 641px) and (max-width: 959px) {
   .right-panel-resize-handle {
