@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, typ
 import type { ExtensionWidgetItem, SessionInfo } from "@/lib/types";
 import { SidebarExtensions } from "@/components/sidebar-extensions/SidebarExtensions";
 import { listSessionFamilies } from "@/lib/session-family";
-import { loadExplorerOpen, saveExplorerOpen } from "@/lib/file-explorer-state";
+import { loadExplorerOpen, saveExplorerOpen, loadSessionsOpen, saveSessionsOpen } from "@/lib/file-explorer-state";
 import { dispatchSessionRowContextMenu } from "@/lib/session-row-context-menu";
 import { skillExpansionToCommand } from "@/lib/slash-display";
 import { getProjectActivity, getRecentProjects, sessionsForProject } from "@/lib/project-groups";
@@ -402,6 +402,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const wtDropdownRef = useRef<HTMLDivElement>(null);
   const wtNewInputRef = useRef<HTMLInputElement>(null);
   const [explorerOpen, setExplorerOpen] = useState(true);
+  const [sessionsOpen, setSessionsOpen] = useState(true);
   const [explorerKey, setExplorerKey] = useState(0);
   const [explorerUploadBusy, setExplorerUploadBusy] = useState(false);
   const [fileSearchOpen, setFileSearchOpen] = useState(false);
@@ -505,6 +506,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   // preference after hydration so a collapsed explorer stays collapsed on reload.
   useEffect(() => {
     setExplorerOpen(loadExplorerOpen());
+    setSessionsOpen(loadSessionsOpen());
   }, []);
 
   // Persist unread markers so they survive a browser refresh before the user
@@ -1674,7 +1676,50 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         )}
       </div>
 
+      {/* Session list header */}
+      <div style={{ display: "flex", alignItems: "center", flexShrink: 0, borderTop: "1px solid var(--border)" }}>
+        <button
+          onClick={() => setSessionsOpen((prev) => {
+            const next = !prev;
+            saveSessionsOpen(next);
+            return next;
+          })}
+          aria-expanded={sessionsOpen}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flex: 1,
+            padding: "6px 10px",
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            textAlign: "left",
+          }}
+        >
+          <svg
+            width="9" height="9" viewBox="0 0 10 10" fill="none"
+            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: sessionsOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }}
+          >
+            <polyline points="3 2 7 5 3 8" />
+          </svg>
+          Sessions
+          {sessionFamilies.length > 0 && (
+            <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 2 }}>
+              {sessionFamilies.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Session list */}
+      {sessionsOpen && (
       <SessionSearch open={sessionSearchOpen} query={sessionSearchQuery} refreshKey={sessionListVersion} selectedSessionId={selectedSessionId} onSelectSession={handleSelectSessionFromList}>
       <div
         ref={listScrollRef}
@@ -1736,6 +1781,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         )}
       </div>
       </SessionSearch>
+      )}
 
       {/* File Explorer section */}
       {(selectedCwdProp || selectedCwd) && (
