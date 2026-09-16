@@ -396,6 +396,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [wtNewOpen, setWtNewOpen] = useState(false);
   const [wtNewBranch, setWtNewBranch] = useState("");
   const [wtError, setWtError] = useState<string | null>(null);
+  const [recentDropdownOpen, setRecentDropdownOpen] = useState(false);
+  const [recentList, setRecentList] = useState<Array<{ cwd: string; name: string; lastOpened: string }>>([]);
+  const recentDropdownRef = useRef<HTMLDivElement>(null);
   const [wtBusy, setWtBusy] = useState(false);
   const [wtConfirmRemove, setWtConfirmRemove] = useState<string | null>(null);
   const [worktreeLoadingCwd, setWorktreeLoadingCwd] = useState<string | null>(null);
@@ -508,6 +511,34 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
     setExplorerOpen(loadExplorerOpen());
     setSessionsOpen(loadSessionsOpen());
   }, []);
+
+  useEffect(() => {
+    fetch("/api/recent-projects").then((r) => r.json()).then((data) => {
+      if (Array.isArray(data.projects)) setRecentList(data.projects);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCwd) return;
+    fetch("/api/recent-projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: selectedCwd }),
+    }).then((r) => r.json()).then((data) => {
+      if (Array.isArray(data.projects)) setRecentList(data.projects);
+    }).catch(() => {});
+  }, [selectedCwd]);
+
+  useEffect(() => {
+    if (!recentDropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (recentDropdownRef.current && !recentDropdownRef.current.contains(e.target as Node)) {
+        setRecentDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [recentDropdownOpen]);
 
   // Persist unread markers so they survive a browser refresh before the user
   // has actually opened the completed session.
@@ -1041,6 +1072,71 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <PiWebTitle />
           <div style={{ display: "flex", gap: 6 }}>
+            <div ref={recentDropdownRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => { setRecentDropdownOpen((v) => !v); setDropdownOpen(false); setWtDropdownOpen(false); }}
+                title="Recent projects"
+                aria-label="Recent projects"
+                aria-expanded={recentDropdownOpen}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 32, height: 32, padding: 0,
+                  background: recentDropdownOpen ? "var(--bg-selected)" : "var(--bg-hover)",
+                  border: "1px solid var(--border)",
+                  color: recentDropdownOpen ? "var(--accent)" : "var(--text-muted)",
+                  cursor: "pointer", borderRadius: 7, flexShrink: 0,
+                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-selected)"; e.currentTarget.style.color = "var(--accent)"; }}
+                onMouseLeave={(e) => { if (!recentDropdownOpen) { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-muted)"; } }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+              </button>
+              <AnimatedDropdown
+                open={recentDropdownOpen}
+                style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 300,
+                  minWidth: 240, maxWidth: 340,
+                  background: "var(--bg-panel)", border: "1px solid var(--border)",
+                  borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                  padding: "4px 0", maxHeight: 320, overflowY: "auto",
+                }}
+              >
+                <div style={{ padding: "6px 10px 4px", fontSize: 10, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Recent Projects
+                </div>
+                {recentList.length === 0 && (
+                  <div style={{ padding: "8px 10px", fontSize: 12, color: "var(--text-muted)" }}>No recent projects</div>
+                )}
+                {recentList.map((project) => (
+                  <button
+                    key={project.cwd}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCwd(project.cwd);
+                      onCwdChange?.(project.cwd);
+                      setRecentDropdownOpen(false);
+                    }}
+                    style={{
+                      display: "flex", flexDirection: "column", gap: 1,
+                      width: "100%", padding: "6px 10px",
+                      background: project.cwd === selectedCwd ? "var(--bg-selected)" : "none",
+                      border: "none", cursor: "pointer", textAlign: "left",
+                      color: "var(--text)", fontSize: 12,
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = project.cwd === selectedCwd ? "var(--bg-selected)" : "transparent"; }}
+                  >
+                    <span style={{ fontWeight: 500 }}>{project.name}</span>
+                    <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.cwd}</span>
+                  </button>
+                ))}
+              </AnimatedDropdown>
+            </div>
             <button
               onClick={handleNewSession}
               disabled={!selectedCwd}
