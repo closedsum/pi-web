@@ -103,12 +103,15 @@ function TaskItem({ task }: { task: BoardTask }) {
         />
         <span style={{ minWidth: 0, wordBreak: "break-word" }}>
           {hasTags && (
-            <span style={{ display: "inline-flex", gap: 2, marginRight: 4, verticalAlign: "baseline", alignItems: "baseline" }}>
-              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>[</span>
+            <span style={{
+              display: "inline-flex", gap: 2, marginRight: 4, verticalAlign: "baseline", alignItems: "baseline",
+              background: "rgba(245, 158, 11, 0.10)", borderRadius: 4, padding: "1px 4px",
+            }}>
+              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>[</span>
               {parsed.model && <Tag label={parsed.model} kind="model" />}
               {parsed.effort && <Tag label={parsed.effort} kind="effort" />}
               {parsed.tasktype && <Tag label={parsed.tasktype} kind="tasktype" />}
-              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>]</span>
+              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>]</span>
             </span>
           )}
           {isBlocked && (
