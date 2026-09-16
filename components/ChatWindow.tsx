@@ -309,18 +309,21 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const onRequestNewSessionRef = useRef(onRequestNewSession);
   onRequestNewSessionRef.current = onRequestNewSession;
   const wrappedBuiltinSlashCommand = useCallback(async (text: string) => {
-    if (text === "/new") {
+    if (text === "/new" || text === "/clear") {
       onRequestNewSessionRef.current?.();
-      return { handled: true, message: "New session" } as const;
-    }
-    if (text === "/clear") {
-      const sid = sessionIdRef.current;
-      if (!sid) return { handled: true, error: "No active session" } as const;
-      await handleCompact();
-      return { handled: true, message: "Context cleared" } as const;
+      return { handled: true, message: text === "/new" ? "New session" : "Chat cleared" } as const;
     }
     return handleBuiltinSlashCommand(text);
-  }, [handleBuiltinSlashCommand, handleCompact]);
+  }, [handleBuiltinSlashCommand]);
+
+  const builtinSlashCommands = useMemo(() => [
+    { name: "new", description: "Start a new session", source: "extension" as const },
+    { name: "clear", description: "Clear chat and start fresh", source: "extension" as const },
+  ], []);
+  const mergedSlashCommands = useMemo(
+    () => [...builtinSlashCommands, ...slashCommands],
+    [builtinSlashCommands, slashCommands],
+  );
 
   const [quotedSelection, setQuotedSelection] = useState<{
     text: string;
@@ -914,7 +917,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       queuedMessages={queuedMessages}
       inputHistory={inputHistory}
       onRecallQueue={handleRecallQueue}
-      slashCommands={slashCommands}
+      slashCommands={mergedSlashCommands}
       slashCommandsLoading={slashCommandsLoading}
       onLoadSlashCommands={loadSlashCommands}
       onBuiltinCommand={wrappedBuiltinSlashCommand}
