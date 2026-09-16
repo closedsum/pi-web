@@ -27,9 +27,8 @@ export function SidebarExtensions({
         borderTop: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
-        flex: open ? "1 1 0" : "0 0 auto",
-        minHeight: 0,
-        overflow: "hidden",
+        flexShrink: 0,
+        ...(open ? { minHeight: 150, maxHeight: "50%" } : {}),
       }}
     >
       <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
