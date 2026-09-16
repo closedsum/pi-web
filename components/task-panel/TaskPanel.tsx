@@ -197,15 +197,24 @@ function StatusSection({ status, tasks }: { status: BoardTask["status"]; tasks: 
         >
           <polyline points="3 2 7 5 3 8" />
         </svg>
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: STATUS_COLORS[status],
-            flexShrink: 0,
-          }}
-        />
+        {status === "in_progress" ? (
+          <span style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
+            <span style={{
+              position: "absolute", inset: 0, borderRadius: "50%",
+              background: STATUS_COLORS.in_progress, opacity: 0.3,
+              animation: "task-pulse 1.5s ease-in-out infinite",
+            }} />
+            <span style={{
+              position: "absolute", top: 1, left: 1, width: 6, height: 6,
+              borderRadius: "50%", background: STATUS_COLORS.in_progress,
+            }} />
+          </span>
+        ) : (
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%",
+            background: STATUS_COLORS[status], flexShrink: 0,
+          }} />
+        )}
         {STATUS_LABELS[status]}
         <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 2 }}>
           {tasks.length}
@@ -262,6 +271,7 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <style>{`@keyframes task-pulse { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.8); opacity: 0; } }`}</style>
       <div
         style={{
           display: "flex",
