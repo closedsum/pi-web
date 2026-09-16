@@ -15,6 +15,7 @@ export interface DebugSessionState {
   extensionWidgets: ExtensionWidgetItem[];
   extensionStatusCount: number;
   extensionStatuses: ExtensionStatusItem[];
+  _error?: string;
 }
 
 export interface DebugStateResponse {
@@ -42,13 +43,14 @@ export async function buildDebugState(
     const alive = provider?.isAlive() ?? false;
     let extensionWidgets: ExtensionWidgetItem[] = [];
     let extensionStatuses: ExtensionStatusItem[] = [];
+    let stateError: string | undefined;
     if (alive && provider) {
       try {
         const state = await provider.getState();
         extensionWidgets = state?.extensionWidgets ?? [];
         extensionStatuses = state?.extensionStatuses ?? [];
-      } catch {
-        // state query failed
+      } catch (error) {
+        stateError = `getState failed: ${error instanceof Error ? error.message : String(error)}`;
       }
     }
     return {
@@ -60,6 +62,7 @@ export async function buildDebugState(
       extensionWidgets,
       extensionStatusCount: extensionStatuses.length,
       extensionStatuses,
+      ...(stateError ? { _error: stateError } : {}),
     };
   }));
 

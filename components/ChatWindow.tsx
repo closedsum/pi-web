@@ -310,7 +310,11 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   onRequestNewSessionRef.current = onRequestNewSession;
   const wrappedBuiltinSlashCommand = useCallback(async (text: string) => {
     if (text === "/new" || text === "/clear") {
-      onRequestNewSessionRef.current?.();
+      const handler = onRequestNewSessionRef.current;
+      if (!handler) {
+        return { handled: true, error: `/${text.slice(1)} failed: no session handler available` } as const;
+      }
+      handler();
       return { handled: true, message: text === "/new" ? "New session" : "Chat cleared" } as const;
     }
     return handleBuiltinSlashCommand(text);
