@@ -2387,6 +2387,11 @@ export function AppShell() {
               onExtensionWidgetsChange={handleExtensionWidgetsChange}
               onRequestNewSession={() => {
                 const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd ?? "";
+                if (selectedSession && !runningSessionIds.has(selectedSession.id)) {
+                  fetch(`/api/sessions/${encodeURIComponent(selectedSession.id)}`, { method: "DELETE" })
+                    .then(() => setRefreshKey((k) => k + 1))
+                    .catch(() => {});
+                }
                 handleNewSession(`new-${Date.now()}`, cwd);
               }}
             />
