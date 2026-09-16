@@ -289,9 +289,9 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
         </span>
         {data && data.tasks.length > 0 && (
           <span style={{ fontSize: 10, display: "flex", gap: 6, whiteSpace: "nowrap" }}>
-            {data.counts.completed > 0 && <span style={{ color: "#22c55e" }}>{data.counts.completed} done</span>}
-            {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}>{data.counts.in_progress} active</span>}
-            {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}>{data.counts.pending} pending</span>}
+            {data.counts.completed > 0 && <span style={{ color: "#22c55e" }}><b>{data.counts.completed}</b> done</span>}
+            {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}><b>{data.counts.in_progress}</b> active</span>}
+            {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}><b>{data.counts.pending}</b> pending</span>}
           </span>
         )}
         <button
