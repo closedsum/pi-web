@@ -17,14 +17,58 @@ const STATUS_COLORS: Record<BoardTask["status"], string> = {
 
 const POLL_INTERVAL_MS = 10_000;
 
-function extractTitle(subject: string): string {
-  return subject.replace(/^\[.*?\]\s*/, "");
+const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
+  model: { bg: "rgba(139, 92, 246, 0.15)", fg: "#a78bfa" },
+  effort: { bg: "rgba(59, 130, 246, 0.15)", fg: "#60a5fa" },
+  tasktype: { bg: "rgba(234, 179, 8, 0.15)", fg: "#facc15" },
+};
+
+interface ParsedSubject {
+  title: string;
+  model?: string;
+  effort?: string;
+  tasktype?: string;
+}
+
+function parseSubject(subject: string): ParsedSubject {
+  const match = subject.match(/^\[([^\]]*)\]\s*([\s\S]*)/);
+  if (!match) return { title: subject };
+  const prefix = match[1].trim();
+  const title = match[2].trim();
+  const parts = prefix.split(/\s+/);
+  const statusWords = new Set(["PENDING", "DONE", "IN_PROGRESS", "IN-PROGRESS", "PLANNED", "PLANNING", "gap", "claude", "pi-web", "gsd-config"]);
+  const filtered = parts.filter((p) => !statusWords.has(p) && !statusWords.has(p.toUpperCase()));
+  if (filtered.length === 0) return { title };
+  if (filtered.length === 1) return { title, tasktype: filtered[0] };
+  if (filtered.length === 2) return { title, model: filtered[0], tasktype: filtered[1] };
+  return { title, model: filtered[0], effort: filtered[1], tasktype: filtered.slice(2).join(" ") };
+}
+
+function Tag({ label, kind }: { label: string; kind: "model" | "effort" | "tasktype" }) {
+  const colors = TAG_COLORS[kind];
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "1px 5px",
+      borderRadius: 4,
+      fontSize: 10,
+      fontWeight: 500,
+      fontFamily: "var(--font-mono)",
+      background: colors.bg,
+      color: colors.fg,
+      lineHeight: 1.5,
+      whiteSpace: "nowrap",
+    }}>
+      {label}
+    </span>
+  );
 }
 
 function TaskItem({ task }: { task: BoardTask }) {
   const [expanded, setExpanded] = useState(false);
-  const title = extractTitle(task.subject);
-  if (!title) return null;
+  const parsed = parseSubject(task.subject);
+  if (!parsed.title) return null;
+  const hasTags = parsed.model || parsed.effort || parsed.tasktype;
 
   return (
     <div style={{ padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
@@ -56,7 +100,16 @@ function TaskItem({ task }: { task: BoardTask }) {
             marginTop: 4,
           }}
         />
-        <span style={{ minWidth: 0, wordBreak: "break-word" }}>{title}</span>
+        <span style={{ minWidth: 0, wordBreak: "break-word" }}>
+          {hasTags && (
+            <span style={{ display: "inline-flex", gap: 3, marginRight: 4, verticalAlign: "baseline" }}>
+              {parsed.model && <Tag label={parsed.model} kind="model" />}
+              {parsed.effort && <Tag label={parsed.effort} kind="effort" />}
+              {parsed.tasktype && <Tag label={parsed.tasktype} kind="tasktype" />}
+            </span>
+          )}
+          {parsed.title}
+        </span>
       </button>
       {expanded && task.description && (
         <div
