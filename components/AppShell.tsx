@@ -2282,8 +2282,8 @@ export function AppShell() {
               unlockAudio={unlockAudio}
               onExtensionWidgetsChange={handleExtensionWidgetsChange}
               onRequestNewSession={() => {
-                const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd;
-                if (cwd) handleNewSession(`new-${Date.now()}`, cwd);
+                const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd ?? "";
+                handleNewSession(`new-${Date.now()}`, cwd);
               }}
             />
           ) : initialCwdStatus === "validating" ? (
