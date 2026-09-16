@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { checkExtensionDialogs, extensionSource } from "./extension-dialog.mjs";
 import { checkChatAppearance } from "./chat-appearance.mjs";
+import { checkSidebarExtensions, sidebarExtensionSource } from "./sidebar-extensions.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const mode = process.env.E2E_SERVER_MODE || "dev";
@@ -60,6 +61,7 @@ try {
   // Seed before startup so the first catalogue scan sees every fixture.
   mkdirSync(join(agentDir, "extensions"));
   writeFileSync(join(agentDir, "extensions", "e2e-dialog.js"), extensionSource);
+  writeFileSync(join(agentDir, "extensions", "e2e-sidebar.js"), sidebarExtensionSource);
   const longEntries = Array.from({ length: 5000 }, (_, i) =>
     message(`e${i}`, i ? `e${i - 1}` : null, i % 2 ? "assistant" : "user", text(i)));
   longEntries.splice(1, 0, message("alternate", "e0", "user", "E2E alternate history branch"));
@@ -353,6 +355,9 @@ try {
       await heading.waitFor({ state: "visible" });
     }
     await checkExtensionDialogs(page, artifacts, viewport.width);
+    if (viewport.width > 600) {
+      await checkSidebarExtensions(page, artifacts);
+    }
     if (viewport.width > 600) {
       await page.goto(`${base}/?session=${RICH}`, { waitUntil: "domcontentloaded" });
       await page.locator(".markdown-code-block pre").waitFor();
