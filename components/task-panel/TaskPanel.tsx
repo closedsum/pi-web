@@ -36,8 +36,9 @@ function parseSubject(subject: string): ParsedSubject {
   const prefix = match[1].trim();
   const title = match[2].trim();
   const parts = prefix.split(/\s+/);
-  const statusWords = new Set(["PENDING", "DONE", "IN_PROGRESS", "IN-PROGRESS", "PLANNED", "PLANNING", "gap", "claude", "pi-web", "gsd-config"]);
-  const filtered = parts.filter((p) => !statusWords.has(p) && !statusWords.has(p.toUpperCase()));
+  const isStatusWord = (p: string) => /^(PENDING|DONE|IN_PROGRESS|IN-PROGRESS|PLANNED|PLANNING|GAP|#\d+)/i.test(p);
+  const isContextWord = (p: string) => /^(claude|pi-web|gsd-config|cropout|s\d+)/i.test(p) || /^\(s\d+\)$/i.test(p);
+  const filtered = parts.filter((p) => !isStatusWord(p) && !isContextWord(p));
   if (filtered.length === 0) return { title };
   if (filtered.length === 1) return { title, tasktype: filtered[0] };
   if (filtered.length === 2) return { title, model: filtered[0], tasktype: filtered[1] };
