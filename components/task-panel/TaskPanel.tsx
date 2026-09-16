@@ -15,7 +15,7 @@ const STATUS_COLORS: Record<BoardTask["status"], string> = {
   completed: "#22c55e",
 };
 
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 5_000;
 
 const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
   model: { bg: "rgba(139, 92, 246, 0.15)", fg: "#a78bfa" },
@@ -69,6 +69,7 @@ function TaskItem({ task }: { task: BoardTask }) {
   const parsed = parseSubject(task.subject);
   if (!parsed.title) return null;
   const hasTags = parsed.model || parsed.effort || parsed.tasktype;
+  const isBlocked = task.status === "pending" && task.blockedBy.length > 0;
 
   return (
     <div style={{ padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
@@ -102,10 +103,29 @@ function TaskItem({ task }: { task: BoardTask }) {
         />
         <span style={{ minWidth: 0, wordBreak: "break-word" }}>
           {hasTags && (
-            <span style={{ display: "inline-flex", gap: 3, marginRight: 4, verticalAlign: "baseline" }}>
+            <span style={{ display: "inline-flex", gap: 2, marginRight: 4, verticalAlign: "baseline", alignItems: "baseline" }}>
+              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>[</span>
               {parsed.model && <Tag label={parsed.model} kind="model" />}
               {parsed.effort && <Tag label={parsed.effort} kind="effort" />}
               {parsed.tasktype && <Tag label={parsed.tasktype} kind="tasktype" />}
+              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>]</span>
+            </span>
+          )}
+          {isBlocked && (
+            <span style={{
+              display: "inline-block",
+              padding: "1px 5px",
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 600,
+              fontFamily: "var(--font-mono)",
+              background: "rgba(239, 68, 68, 0.15)",
+              color: "#ef4444",
+              lineHeight: 1.5,
+              whiteSpace: "nowrap",
+              marginRight: 4,
+            }}>
+              BLOCKED ({task.blockedBy.map((id) => `#${id}`).join(", ")})
             </span>
           )}
           {parsed.title}
