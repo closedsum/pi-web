@@ -1811,6 +1811,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       addNotice({ type: "error", message: "No active session for the queued message" });
       return;
     }
+    const userMsg: AgentMessage = {
+      role: "user",
+      content: message,
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    pendingScrollToUserRef.current = true;
     const piImages = images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType }));
     try {
       await sendAgentCommand(sid, {
