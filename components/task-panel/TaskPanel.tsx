@@ -114,7 +114,7 @@ function BrailleSpinner({ color }: { color: string }) {
   );
 }
 
-function TaskItem({ task }: { task: BoardTask }) {
+function TaskItem({ task, isDead }: { task: BoardTask; isDead?: boolean }) {
   useMinuteTick();
   const { prefs: itemPrefs } = useLayoutPreferences();
   const [expanded, setExpanded] = useState(false);
@@ -178,6 +178,23 @@ function TaskItem({ task }: { task: BoardTask }) {
               <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>]</span>
             </span>
           )}
+          {isDead && (
+            <span style={{
+              display: "inline-block",
+              padding: "1px 5px",
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: "var(--font-mono)",
+              background: "rgba(239, 68, 68, 0.2)",
+              color: "#ef4444",
+              lineHeight: 1.5,
+              whiteSpace: "nowrap",
+              marginRight: 4,
+            }}>
+              DEAD
+            </span>
+          )}
           {isBlocked && (
             <span style={{
               display: "inline-block",
@@ -216,7 +233,7 @@ function TaskItem({ task }: { task: BoardTask }) {
   );
 }
 
-function StatusSection({ status, tasks }: { status: BoardTask["status"]; tasks: BoardTask[] }) {
+function StatusSection({ status, tasks, deadKeys }: { status: BoardTask["status"]; tasks: BoardTask[]; deadKeys?: Set<string> }) {
   const [open, setOpen] = useState(status !== "completed");
   if (tasks.length === 0) return null;
 
@@ -276,7 +293,7 @@ function StatusSection({ status, tasks }: { status: BoardTask["status"]; tasks: 
       {open && (
         <div style={{ paddingLeft: 4 }}>
           {tasks.map((task, i) => (
-            <TaskItem key={`${task.session_id}-${task.id}-${i}`} task={task} />
+            <TaskItem key={`${task.session_id}-${task.id}-${i}`} task={task} isDead={deadKeys?.has(`${task.id}\0${task.session_id}`)} />
           ))}
         </div>
       )}
@@ -317,10 +334,16 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
   }, [fetchBoard, pollMs]);
 
   const sessionStart = sessionStartRef.current;
+  const STALE_MS = 4 * 60 * 60 * 1000;
   const grouped = new Map<BoardTask["status"], BoardTask[]>();
   for (const s of STATUS_ORDER) grouped.set(s, []);
+  const deadTasks = new Set<string>();
   let sessionCompletedCount = 0;
   if (data) {
+    const activeSessions = new Set<string>();
+    for (const task of data.tasks) {
+      if (task.created_at >= sessionStart) activeSessions.add(task.session_id);
+    }
     for (const task of data.tasks) {
       if (task.status === "completed") {
         if (prefs.completedScope === "all" || (task.completed_at && task.completed_at >= sessionStart)) {
@@ -328,12 +351,22 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
           sessionCompletedCount++;
         }
       } else {
+        const age = Date.now() - new Date(task.created_at).getTime();
+        if (!activeSessions.has(task.session_id) && age > STALE_MS) {
+          deadTasks.add(`${task.id}\0${task.session_id}`);
+        }
         const list = grouped.get(task.status);
         if (list) list.push(task);
       }
     }
     for (const status of ["in_progress", "pending"] as const) {
-      grouped.get(status)!.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const list = grouped.get(status)!;
+      list.sort((a, b) => {
+        const aDead = deadTasks.has(`${a.id}\0${a.session_id}`) ? 1 : 0;
+        const bDead = deadTasks.has(`${b.id}\0${b.session_id}`) ? 1 : 0;
+        if (aDead !== bDead) return aDead - bDead;
+        return a.created_at.localeCompare(b.created_at);
+      });
     }
   }
 
@@ -415,7 +448,7 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
           </div>
         )}
         {data && STATUS_ORDER.map((status) => (
-          <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} />
+          <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} deadKeys={deadTasks} />
         ))}
       </div>
     </div>
