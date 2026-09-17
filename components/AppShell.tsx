@@ -1694,7 +1694,18 @@ export function AppShell() {
               </span>
             )}
             {mobileContextText && (
-              <span style={{ color: contextColor, flexShrink: 0 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4, color: contextColor, flexShrink: 0 }}>
+                <span style={{
+                  position: "relative", width: 32, height: 5, borderRadius: 3,
+                  background: "var(--bg-hover)", overflow: "hidden", flexShrink: 0,
+                }}>
+                  <span style={{
+                    position: "absolute", top: 0, left: 0, height: "100%", borderRadius: 3,
+                    width: `${Math.min(100, contextUsage?.percent ?? 0)}%`,
+                    background: contextColor,
+                    transition: "width 0.3s ease",
+                  }} />
+                </span>
                 {mobileContextText}
               </span>
             )}
@@ -1736,10 +1747,18 @@ export function AppShell() {
               </span>
             )}
             {desktopContextText && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, color: contextColor }}>
-                <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M1 9 L1 5 Q1 1 5 1 Q9 1 9 5 L9 9" /><line x1="1" y1="9" x2="9" y2="9" />
-                </svg>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, color: contextColor }}>
+                <span style={{
+                  position: "relative", width: 48, height: 6, borderRadius: 3,
+                  background: "var(--bg-hover)", overflow: "hidden", flexShrink: 0,
+                }}>
+                  <span style={{
+                    position: "absolute", top: 0, left: 0, height: "100%", borderRadius: 3,
+                    width: `${Math.min(100, contextUsage?.percent ?? 0)}%`,
+                    background: contextColor,
+                    transition: "width 0.3s ease, background 0.3s ease",
+                  }} />
+                </span>
                 {desktopContextText}
               </span>
             )}
