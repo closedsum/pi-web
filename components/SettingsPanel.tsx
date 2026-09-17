@@ -320,18 +320,53 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
               onChange={(e) => setLayoutPref("taskPollInterval", Number(e.target.value))}
             />
           </div>
+          <div className="settings-chat-option settings-chat-range-option">
+            <div className="settings-chat-range-header">
+              <label htmlFor="settings-task-font-size">Task font size</label>
+              <output htmlFor="settings-task-font-size">{layoutPrefs.taskFontSize}px</output>
+            </div>
+            <input id="settings-task-font-size" type="range" min={10} max={16} step={1} value={layoutPrefs.taskFontSize} onChange={(e) => setLayoutPref("taskFontSize", Number(e.target.value))} />
+          </div>
           <div className="settings-chat-option settings-chat-switch-option">
             <span>Context bar color</span>
-            <select
-              id="settings-context-color"
-              className="settings-layout-select"
-              value={layoutPrefs.contextBarColor}
-              onChange={(e) => setLayoutPref("contextBarColor", e.target.value)}
-            >
+            <select id="settings-context-color" className="settings-layout-select" value={layoutPrefs.contextBarColor} onChange={(e) => setLayoutPref("contextBarColor", e.target.value)}>
               <option value="rgba(0,255,0,0.95)">Bright green</option>
               <option value="#22c55e">Soft green</option>
               <option value="#16a34a">Deep green</option>
               <option value="#3b82f6">Blue</option>
+              <option value="var(--text-muted)">Muted</option>
+            </select>
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Model tag color</span>
+            <select className="settings-layout-select" value={layoutPrefs.tagColorModel} onChange={(e) => setLayoutPref("tagColorModel", e.target.value)}>
+              <option value="#a78bfa">Purple</option>
+              <option value="#3b82f6">Blue</option>
+              <option value="#22c55e">Green</option>
+              <option value="#f59e0b">Orange</option>
+              <option value="#ef4444">Red</option>
+              <option value="var(--text-muted)">Muted</option>
+            </select>
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Effort tag color</span>
+            <select className="settings-layout-select" value={layoutPrefs.tagColorEffort} onChange={(e) => setLayoutPref("tagColorEffort", e.target.value)}>
+              <option value="#60a5fa">Blue</option>
+              <option value="#a78bfa">Purple</option>
+              <option value="#22c55e">Green</option>
+              <option value="#f59e0b">Orange</option>
+              <option value="#ef4444">Red</option>
+              <option value="var(--text-muted)">Muted</option>
+            </select>
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Task type tag color</span>
+            <select className="settings-layout-select" value={layoutPrefs.tagColorTasktype} onChange={(e) => setLayoutPref("tagColorTasktype", e.target.value)}>
+              <option value="#facc15">Gold</option>
+              <option value="#f59e0b">Orange</option>
+              <option value="#a78bfa">Purple</option>
+              <option value="#3b82f6">Blue</option>
+              <option value="#22c55e">Green</option>
               <option value="var(--text-muted)">Muted</option>
             </select>
           </div>

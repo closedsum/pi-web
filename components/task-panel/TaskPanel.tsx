@@ -46,8 +46,13 @@ function parseSubject(subject: string): ParsedSubject {
   return { title, model: filtered[0], effort: filtered[1], tasktype: filtered.slice(2).join(" ") };
 }
 
-function Tag({ label, kind }: { label: string; kind: "model" | "effort" | "tasktype" }) {
-  const colors = TAG_COLORS[kind];
+function hexToRgba(hex: string, alpha: number): string {
+  const match = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!match) return `color-mix(in srgb, ${hex} ${Math.round(alpha * 100)}%, transparent)`;
+  return `rgba(${parseInt(match[1], 16)},${parseInt(match[2], 16)},${parseInt(match[3], 16)},${alpha})`;
+}
+
+function Tag({ label, color }: { label: string; color: string }) {
   return (
     <span style={{
       display: "inline-block",
@@ -56,8 +61,8 @@ function Tag({ label, kind }: { label: string; kind: "model" | "effort" | "taskt
       fontSize: 10,
       fontWeight: 500,
       fontFamily: "var(--font-mono)",
-      background: colors.bg,
-      color: colors.fg,
+      background: hexToRgba(color, 0.15),
+      color,
       lineHeight: 1.5,
       whiteSpace: "nowrap",
     }}>
@@ -111,6 +116,7 @@ function BrailleSpinner({ color }: { color: string }) {
 
 function TaskItem({ task }: { task: BoardTask }) {
   useMinuteTick();
+  const { prefs: itemPrefs } = useLayoutPreferences();
   const [expanded, setExpanded] = useState(false);
   const parsed = parseSubject(task.subject);
   if (!parsed.title) return null;
@@ -133,7 +139,7 @@ function TaskItem({ task }: { task: BoardTask }) {
           color: "var(--text)",
           cursor: "pointer",
           textAlign: "left",
-          fontSize: 13,
+          fontSize: itemPrefs.taskFontSize,
           lineHeight: 1.4,
           fontFamily: "inherit",
         }}
@@ -149,7 +155,7 @@ function TaskItem({ task }: { task: BoardTask }) {
           }}
         />
         <span style={{ minWidth: 0, wordBreak: "break-word" }}>
-          <span style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 700, marginRight: 3 }}>#{task.id}</span>
+          <span style={{ color: "var(--text)", fontSize: 12, fontWeight: 700, marginRight: 3 }}>#{task.id}</span>
           {hasTags && (
             <span style={{
               display: "inline-flex", gap: 2, marginRight: 4, verticalAlign: "baseline", alignItems: "baseline",
@@ -166,9 +172,9 @@ function TaskItem({ task }: { task: BoardTask }) {
                   {formatElapsed(task.created_at)}
                 </span>
               )}
-              {parsed.model && <Tag label={parsed.model} kind="model" />}
-              {parsed.effort && <Tag label={parsed.effort} kind="effort" />}
-              {parsed.tasktype && <Tag label={parsed.tasktype} kind="tasktype" />}
+              {parsed.model && <Tag label={parsed.model} color={itemPrefs.tagColorModel} />}
+              {parsed.effort && <Tag label={parsed.effort} color={itemPrefs.tagColorEffort} />}
+              {parsed.tasktype && <Tag label={parsed.tasktype} color={itemPrefs.tagColorTasktype} />}
               <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>]</span>
             </span>
           )}

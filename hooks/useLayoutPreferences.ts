@@ -11,6 +11,10 @@ const DEFAULTS = {
   clearSessionsOnNew: true,
   contextBarColor: "rgba(0,255,0,0.95)",
   processDetailsCollapsed: true,
+  taskFontSize: 12,
+  tagColorModel: "#a78bfa",
+  tagColorEffort: "#60a5fa",
+  tagColorTasktype: "#facc15",
 };
 
 export type LayoutPreferences = typeof DEFAULTS;
