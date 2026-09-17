@@ -1643,24 +1643,34 @@ function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessag
           opacity: isHiddenDisplay && !contentExpanded ? 0.82 : 1,
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => setContentExpanded((v) => !v)}
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
+            width: "100%",
             padding: "7px 10px",
             borderBottom: "1px solid var(--border)",
             background: "var(--bg-panel)",
+            border: "none",
             color: "var(--text-muted)",
             fontSize: 12,
+            cursor: "pointer",
+            textAlign: "left",
           }}
         >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: contentExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+            <polyline points="3 2 7 5 3 8" />
+          </svg>
           <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 650 }}>
             {title}
           </span>
            {isHiddenDisplay && <span style={{ color: "var(--text-dim)", fontSize: 11 }}>{t("i18n.hiddenExtensionMessage")}</span>}
-          {time && <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: 10 }}>{time}</span>}
-        </div>
+          {!contentExpanded && text && <span style={{ color: "var(--text-dim)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{text.split("\n")[0].slice(0, 60)}</span>}
+          {time && <span style={{ marginLeft: "auto", color: "var(--text-dim)", fontSize: 10, flexShrink: 0 }}>{time}</span>}
+        </button>
 
         {contentExpanded ? (
           <div style={{ padding: "6px 9px" }}>
@@ -1684,24 +1694,7 @@ function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessag
             )}
              {text ? <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile}>{text}</MarkdownBody> : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("i18n.noMessage")}</span>}
           </div>
-        ) : (
-          <button
-            onClick={() => setContentExpanded(true)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "8px 10px",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-dim)",
-              cursor: "pointer",
-              fontSize: 12,
-              textAlign: "left",
-            }}
-          >
-             {text ? previewText(text) : t("i18n.showExtensionMessage")}
-          </button>
-        )}
+        ) : null}
 
         <div
           style={{
