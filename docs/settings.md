@@ -27,9 +27,9 @@ useLayoutPreferences.ts          SettingsPanel.tsx          Components
 | `contextBarColor` | string | `"rgba(0,255,0,0.95)"` | Context bar starting color |
 | `processDetailsCollapsed` | boolean | `true` | Collapse process details by default |
 | `taskFontSize` | number | `12` | Task panel font size (px, 10-16) |
-| `tagColorModel` | string | `"#a78bfa"` | Model tag color (task panel + selectors) |
-| `tagColorEffort` | string | `"#60a5fa"` | Effort tag color (task panel + selectors) |
-| `tagColorTasktype` | string | `"#facc15"` | Task type tag color |
+| `tagColorModel` | string | `"#a78bfa"` | Model tag fallback color (task panel uses per-family colors from `lib/model-display.json`) |
+| `tagColorEffort` | string | `"#22d3ee"` | Effort tag color (cyan) |
+| `tagColorTasktype` | string | `"#fb923c"` | Task type tag color (orange) |
 | `collapsePatterns` | string | `"gsd-ue-dispatch,..."` | Auto-collapse pattern list |
 | `processHeaderColor` | string | `"var(--text-muted)"` | Process details header color |
 | `processHeaderStyle` | string | `"normal"` | Process header font (normal/mono) |

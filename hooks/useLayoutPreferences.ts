@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { TAG_COLORS } from "@/lib/model-registry";
 
 const STORAGE_PREFIX = "pi-layout:";
 
@@ -13,8 +14,8 @@ export const LAYOUT_DEFAULTS = {
   processDetailsCollapsed: true,
   taskFontSize: 12,
   tagColorModel: "#a78bfa",
-  tagColorEffort: "#60a5fa",
-  tagColorTasktype: "#facc15",
+  tagColorEffort: TAG_COLORS.effort,
+  tagColorTasktype: TAG_COLORS.tasktype,
   collapsePatterns: "gsd-ue-dispatch,UE-ACTION-DISPATCH,FORK-LEDGER,SESSION-REMINDER,GAP-ENFORCEMENT,TASK-ROUTING" as string,
   processHeaderColor: "var(--text-muted)" as string,
   processHeaderStyle: "normal" as "normal" | "mono",

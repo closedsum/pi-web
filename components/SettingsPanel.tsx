@@ -351,6 +351,7 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
           <div className="settings-chat-option settings-chat-switch-option">
             <span>Effort tag color</span>
             <select className="settings-layout-select" value={layoutPrefs.tagColorEffort} onChange={(e) => setLayoutPref("tagColorEffort", e.target.value)}>
+              <option value="#22d3ee">Cyan</option>
               <option value="#60a5fa">Blue</option>
               <option value="#a78bfa">Purple</option>
               <option value="#22c55e">Green</option>
@@ -362,8 +363,8 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
           <div className="settings-chat-option settings-chat-switch-option">
             <span>Task type tag color</span>
             <select className="settings-layout-select" value={layoutPrefs.tagColorTasktype} onChange={(e) => setLayoutPref("tagColorTasktype", e.target.value)}>
+              <option value="#fb923c">Orange</option>
               <option value="#facc15">Gold</option>
-              <option value="#f59e0b">Orange</option>
               <option value="#a78bfa">Purple</option>
               <option value="#3b82f6">Blue</option>
               <option value="#22c55e">Green</option>

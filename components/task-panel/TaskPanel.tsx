@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import type { BoardTask, TaskBoardData } from "@/lib/task-board";
 import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
+import { resolveModelDisplayName, getModelFamilyColor } from "@/lib/model-registry";
 
 const STATUS_ORDER: BoardTask["status"][] = ["in_progress", "pending", "completed"];
 const STATUS_LABELS: Record<BoardTask["status"], string> = {
@@ -17,12 +18,6 @@ const STATUS_COLORS: Record<BoardTask["status"], string> = {
 };
 
 const POLL_INTERVAL_MS = 5_000;
-
-const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
-  model: { bg: "rgba(139, 92, 246, 0.15)", fg: "#a78bfa" },
-  effort: { bg: "rgba(59, 130, 246, 0.15)", fg: "#60a5fa" },
-  tasktype: { bg: "rgba(234, 179, 8, 0.15)", fg: "#facc15" },
-};
 
 interface ParsedSubject {
   title: string;
@@ -189,7 +184,7 @@ function TaskItem({ task, isDead }: { task: BoardTask; isDead?: boolean }) {
                   {formatElapsed(task.created_at)}
                 </span>
               )}
-              {parsed.model && <Tag label={parsed.model} color={itemPrefs.tagColorModel} />}
+              {parsed.model && <Tag label={resolveModelDisplayName(parsed.model)} color={getModelFamilyColor(parsed.model)} />}
               {parsed.effort && <Tag label={parsed.effort} color={itemPrefs.tagColorEffort} />}
               {parsed.tasktype && <Tag label={parsed.tasktype} color={itemPrefs.tagColorTasktype} />}
               <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>]</span>

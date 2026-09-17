@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { MODEL_FAMILY_COLORS } from "@/lib/model-registry";
 
 export interface ModelSelectorOption {
   provider: string;
@@ -291,7 +292,7 @@ export function ModelSelector({
               ) : modelsByProvider.map((group, index) => (
                 <div key={group.provider}>
                   {modelsByProvider.length > 1 && (
-                    <div style={{ padding: "6px 12px 4px", borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none", color: "var(--text-dim)", fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: "uppercase" }}>
+                    <div style={{ padding: "6px 12px 4px", borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none", color: MODEL_FAMILY_COLORS[group.provider.toLowerCase()] ?? "var(--text-dim)", fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: "uppercase" }}>
                       {group.provider}
                     </div>
                   )}
@@ -302,6 +303,7 @@ export function ModelSelector({
                       label={option.name}
                       onClick={() => choose(option)}
                       activeColor={accentColor}
+                      providerColor={MODEL_FAMILY_COLORS[option.provider?.toLowerCase()] ?? undefined}
                     />
                   ))}
                 </div>
@@ -314,14 +316,14 @@ export function ModelSelector({
   );
 }
 
-function ModelOptionButton({ active, label, onClick, activeColor }: { active: boolean; label: string; onClick: () => void; activeColor?: string }) {
+function ModelOptionButton({ active, label, onClick, activeColor, providerColor }: { active: boolean; label: string; onClick: () => void; activeColor?: string; providerColor?: string }) {
   return (
     <button
       type="button"
       role="option"
       aria-selected={active}
       onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: active ? "var(--bg-selected)" : "none", color: active ? (activeColor || "var(--text)") : "var(--text-muted)", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, textAlign: "left", whiteSpace: "nowrap" }}
+      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: active ? "var(--bg-selected)" : "none", color: active ? (activeColor || "var(--text)") : (providerColor ?? "var(--text-muted)"), cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, textAlign: "left", whiteSpace: "nowrap" }}
       onMouseEnter={(event) => { if (!active) event.currentTarget.style.background = "var(--bg-hover)"; }}
       onMouseLeave={(event) => { if (!active) event.currentTarget.style.background = "none"; }}
     >

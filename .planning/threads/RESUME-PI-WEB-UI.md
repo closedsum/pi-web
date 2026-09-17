@@ -24,7 +24,7 @@
 
 ### Task Panel
 - **Dedicated resizable TaskPanel** between sidebar and chat, reads `.planning/threads/board.jsonl` via `/api/task-board` API route
-- Color-coded `[model effort tasktype]` tags (purple/blue/gold) with orange brackets, configurable in settings
+- Color-coded `[model effort tasktype]` tags — per-family model colors (amber=anthropic, green=openai, blue=qwen, pink=meta), cyan effort, orange tasktype — driven by `lib/model-display.json`, with orange brackets
 - `#id` task numbers prepended, bold
 - In Progress/Pending sorted by `created_at`
 - Braille spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` on In Progress section header
