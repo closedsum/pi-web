@@ -1,0 +1,1949 @@
+{
+  "schema": "gsd-review-manifest/1",
+  "slug": "cross-review",
+  "series_id": "review-36d5c542541abb02b2315e3f",
+  "mcp_policy": "none",
+  "dispatcher_pid": 62292,
+  "started_epoch": 1789623357.0384195,
+  "prompt_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-cross-review-prompt.md",
+  "output_dir": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/",
+  "written": "2026-09-17T05:47:43Z",
+  "round": {
+    "round_number": 1,
+    "series_id": "review-36d5c542541abb02b2315e3f",
+    "reviewer_deadline_seconds": 4928,
+    "condensed_retry_budget_seconds": 600,
+    "dispatcher_pid": 62292,
+    "started_epoch": 1789623357.0384195,
+    "round_seconds": 705.897,
+    "process_ledger": {
+      "owner": "cross-review",
+      "repo": "C:\\Users\\bedit\\gsd-config\\get-shit-done",
+      "ledger": "C:\\Users\\bedit\\gsd-config\\get-shit-done\\.planning\\impl-lanes\\processes.jsonl",
+      "evidence_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-22276a21ee04\\proc-tree-evidence.json",
+      "errors": [],
+      "_error": null
+    }
+  },
+  "findings": [
+    {
+      "severity": "MEDIUM",
+      "title": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+      "body_md": "A git rev-parse failure is converted to the literal base HEAD. In an empty repository, non-Git directory, or environment without Git, the extension can continue creating artifacts and pass a revision that was already proven unresolvable to the lane producer. The producer implementation is not supplied, so whether build-queue catches this is unverified.\n\n**Recommendation:** Remove the HEAD fallback and return a structured isError result containing the Git failure before writing artifacts or invoking the lane producer.",
+      "description": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+      "normalized": "unverified contract unresolvable git revisions are replaced with head",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:104"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:104",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "correctness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:104:correctness",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Caller-provided slugs can escape lane directories",
+      "body_md": "A supplied slug bypasses slugify and is embedded in artifact, worktree, and branch paths. A value containing repeated parent components can normalize outside .planning/impl-lanes or the configured worktree root, while other unsupported characters can create invalid Git references.\n\n**Recommendation:** Normalize or reject supplied slugs with a strict kebab-case pattern and length limit, then verify every generated path remains beneath its intended root using path.relative before writing or dispatching.",
+      "description": "Caller-provided slugs can escape lane directories",
+      "normalized": "caller provided slugs can escape lane directories",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:92"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:92",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "safety",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:92:safety",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Synchronous setup can delay background dispatch by 55 seconds",
+      "body_md": "Worktree configuration, Git resolution, model resolution, and queue construction are awaited serially before returning. Their timeouts permit an approximately 55-second response even though the extension promises responsive background dispatch.\n\n**Recommendation:** Run independent resolution operations concurrently and launch a detached bootstrap that performs queue construction and execution while persisting setup failures to the lane log and task state.",
+      "description": "Synchronous setup can delay background dispatch by 55 seconds",
+      "normalized": "synchronous setup can delay background dispatch by 55 seconds",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:96"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:96",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "performance",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:96:performance",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Tests never execute the DispatchLane implementation",
+      "body_md": "All added tests inspect registration or schema structure. The custom gsdBinDir test merely verifies that construction succeeds, so ignored options, malformed parameter files, false spawn success, and resource leaks would all pass.\n\n**Recommendation:** Inject process and filesystem dependencies and add execution tests for generated parameters, custom paths, queue-build errors, spawn errors, invalid slugs, and log-handle cleanup.",
+      "description": "Tests never execute the DispatchLane implementation",
+      "normalized": "tests never execute the dispatchlane implementation",
+      "file_refs": [
+        "lib/gsd-lane-extension.test.mjs:16"
+      ],
+      "file_ref": "lib/gsd-lane-extension.test.mjs:16",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "testing",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.test.mjs:16:testing",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Whitespace-only tasks are accepted and dispatched",
+      "body_md": "The required task string has no content validation. A whitespace-only task creates a generic lane and nearly empty specification, consuming an autonomous worker without an actionable request.\n\n**Recommendation:** Add a schema minimum length, trim the value at runtime, reject an empty normalized task before filesystem work, and use the normalized value throughout lane construction.",
+      "description": "Whitespace-only tasks are accepted and dispatched",
+      "normalized": "whitespace only tasks are accepted and dispatched",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:85"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:85",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "api",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:85:api",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Spawn failures are reported as successful lane dispatches",
+      "body_md": "The code returns without waiting for the child process spawn event. An asynchronous process-creation failure is only written to the log, while the caller receives Lane dispatched with PID 0.\n\n**Recommendation:** Await a promise that resolves on spawn and rejects on error, return isError on rejection, and close the log handle in every synchronous and asynchronous failure path.",
+      "description": "Spawn failures are reported as successful lane dispatches",
+      "normalized": "spawn failures are reported as successful lane dispatches",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:161"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:161",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:161:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+      "body_md": "Worktree and model resolver failures are silently converted to fallback values, and parsed model JSON is not shape-validated. For example, an empty object is treated as a resolved model and produces undefined routing fields and user-visible undefined values. The producer output contract is not supplied.\n\n**Recommendation:** Return discriminated resolver results, validate absolute worktree paths and non-empty provider/model/effort strings, and expose fallback diagnostics or fail when required routing cannot be resolved.",
+      "description": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+      "normalized": "unverified contract resolver errors and malformed results are silently accepted",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:36"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:36",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:36:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+      "body_md": "Date.now can return the same value for parallel calls or separate sessions within one millisecond, potentially conflating status records keyed by Task. The producer's task-ID schema is not included, so the exact downstream effect is unverified.\n\n**Recommendation:** Allocate task IDs atomically in the producer's task-registration path and use the returned value, or adopt a producer-supported collision-resistant identifier.",
+      "description": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+      "normalized": "unverified contract millisecond timestamps are not unique task ids",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:116"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:116",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "scalability",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:116:scalability",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+      "body_md": "Three call sites (resolveWorktreeRoot line 44, resolveModel lines 56-58, and the git rev-parse HEAD fallback lines 104-106) catch and silently discard errors, substituting defaults with no log entry or diagnostic. The HEAD fallback is most consequential: on failure `Base` is set to the literal string \"HEAD\" instead of a pinned commit SHA, which is then sent to the lane pipeline as `laneParams.Base` (line 128), silently changing base-pinning semantics for the lane's diff/integration step.\n\n**Recommendation:** Log the caught error (e.g. write to the lane's log file or append a warning line to the tool's returned text) instead of an empty/silent catch, and consider failing the tool call outright when `git rev-parse HEAD` fails, since Base is used for lane isolation correctness.",
+      "description": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+      "normalized": "silent catch blocks swallow failures on worktree model head resolution",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:44"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:44",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:44:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "No test exercises execute() — the 8 claimed fixes are untested",
+      "body_md": "All 5 tests check tool registration, name/hidden flag, parameter schema shape, and executionMode. None invoke `tool.execute()`, so unique-slug generation, ScopeGlobs defaulting, PID capture, spawn error handling, and log-file writing — the exact behaviors this PR claims to fix — have zero regression coverage.\n\n**Recommendation:** Add a test that mocks execFile/spawn (or points gsdBinDir/python at stub scripts) and calls execute() to assert: two calls with identical task/slug produce different slugs, ScopeGlobs defaults to [], and the response text contains a non-zero pid.",
+      "description": "No test exercises execute() — the 8 claimed fixes are untested",
+      "normalized": "no test exercises execute the 8 claimed fixes are untested",
+      "file_refs": [
+        "lib/gsd-lane-extension.test.mjs:1"
+      ],
+      "file_ref": "lib/gsd-lane-extension.test.mjs:1",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "testing",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.test.mjs:1:testing",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Task ID uses Date.now(), collidable under parallel execution",
+      "body_md": "`const taskId = Date.now();` is used as the lane's Task ID. The tool declares `executionMode: \"parallel\"` (line 83), meaning multiple DispatchLane calls can be in flight concurrently; two calls resolving within the same millisecond receive identical Task IDs, which the task panel displays as `#id` per the RESUME doc, causing UI/task-board ambiguity.\n\n**Recommendation:** Derive the Task ID from the already-unique `slug` (e.g. a hash of it) or combine Date.now() with the same random suffix used in uniqueSlug().",
+      "description": "Task ID uses Date.now(), collidable under parallel execution",
+      "normalized": "task id uses datenow collidable under parallel execution",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:116"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:116",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "correctness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:116:correctness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+      "body_md": "resolveWorktreeRoot (lines 36-46), resolveModel (lines 48-59), and the build-queue invocation each independently construct `execFileAsync(python, [join(gsdBinDir, script), ...args], { timeout })` with their own try/catch and different failure semantics (silent-default, silent-null, loud isError), making error-handling policy inconsistent across near-identical code.\n\n**Recommendation:** Extract a shared `runGsdScript(gsdBinDir, python, script, args, opts)` helper returning `{ ok, stdout, error }`, and have each call site apply a single, consistent policy for reacting to failure.",
+      "description": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+      "normalized": "duplicated execfileasync python script invocation pattern across three call sites",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:36"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:36",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "dry",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:36:dry",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Spawn failure returned to the user as a successful dispatch",
+      "body_md": "spawn() is asynchronous; a missing `python` or missing gsd_impl_lane.py surfaces via the 'error' event after execute() has already returned. `const pid = child.pid || 0` (L173) masks the exact signal that detects this, and the return at L183-191 runs unconditionally. The user is told `Lane dispatched: <slug> (pid 0)` while no process exists; the real error is appended to a log file nothing reads, via a write that may itself fail with EBADF and is swallowed by `.catch(() => {})` (L176).\n\n**Recommendation:** After spawn, `if (child.pid === undefined) return { content: [...], isError: true }`, and await a one-tick race on `child.once('spawn')` vs `child.once('error')` before returning, propagating err.message as isError text.",
+      "description": "Spawn failure returned to the user as a successful dispatch",
+      "normalized": "spawn failure returned to the user as a successful dispatch",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:183"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:183",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:183:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Extension registered unconditionally with a behavior-overriding prompt directive",
+      "body_md": "`createGsdLaneExtension({ cwd: sessionCwd })` is added with no availability check or feature flag, while the adjacent subagent extension at L2054 is gated by `isBuiltInSubagentsEnabled`. gsdBinDir defaults to `$HOME/gsd-config/get-shit-done/bin` (gsd-lane-extension.ts:62-65). On any machine without GSD, every session gains a DispatchLane tool whose promptGuidelines[0] says 'never run Edit/Write inline when a lane can do it' (L78). The model obeys, build-queue fails on a nonexistent script, and the user receives a lane-queue error instead of the requested edit — a behavioral regression, not a no-op.\n\n**Recommendation:** Probe `existsSync(join(gsdBinDir, 'gsd_impl_lane.py'))` in createGsdLaneExtension and register no tool when absent, or gate the rpc-manager entry behind an `isGsdLanesEnabled`-style predicate matching the surrounding pattern.",
+      "description": "Extension registered unconditionally with a behavior-overriding prompt directive",
+      "normalized": "extension registered unconditionally with a behavior overriding prompt directive",
+      "file_refs": [
+        "lib/rpc-manager.ts:2056"
+      ],
+      "file_ref": "lib/rpc-manager.ts:2056",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "architecture",
+      "_source": "json",
+      "finding_key": "lib/rpc-manager.ts:2056:architecture",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "No durable PID/exit-code record for detached lane processes",
+      "body_md": "The PID exists only in transient chat text (L185); `child.on('exit', () => { logFd.close() })` ignores the exit code and signal entirely, and nothing is persisted to disk. The machine contract requires managed Windows Python children to retain stdout, stderr, PID, exit code and whole-tree termination evidence — only stdout/stderr are captured. An orphaned detached lane cannot be located or swept, and no caller can ever determine whether the lane succeeded.\n\n**Recommendation:** Write `join(lanesDir, `pid-${slug}.json`)` with `{ pid, slug, startedAt, queuePath }` immediately after spawn, and update it with `{ exitCode, signal, endedAt }` inside the exit handler: `child.on('exit', (code, signal) => { ... })`.",
+      "description": "No durable PID/exit-code record for detached lane processes",
+      "normalized": "no durable pid exit code record for detached lane processes",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:178"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:178",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:178:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Tests cover only registration metadata; execute() is entirely untested",
+      "body_md": "All five tests assert tool name, extension name/hidden, presence of five schema keys, and executionMode. No test invokes execute(), so slug sanitization, the git-failure branch, the build-queue failure return, the emitted lane-params shape, and the spawn arguments have zero coverage — every HIGH finding in this review sits in code no test touches. The suite stays green through all of them.\n\n**Recommendation:** Inject `python`/`gsdBinDir` pointing at a temp-dir stub script, call `tool.execute('id', {...})`, and assert on the written `p-<slug>-params.json`: ScopeGlobs is an array, Base is a 40-char SHA, a traversal slug resolves under lanesDir, and build-queue failure yields `isError: true`.",
+      "description": "Tests cover only registration metadata; execute() is entirely untested",
+      "normalized": "tests cover only registration metadata execute is entirely untested",
+      "file_refs": [
+        "lib/gsd-lane-extension.test.mjs:17"
+      ],
+      "file_ref": "lib/gsd-lane-extension.test.mjs:17",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "testing",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.test.mjs:17:testing",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+      "body_md": "The test passes `gsdBinDir: '/custom/bin'` then asserts `assert.ok(ext, 'extension should accept custom gsdBinDir')`. createGsdLaneExtension always returns an object literal, so this assertion cannot fail whether gsdBinDir is honored or silently ignored. It reads as coverage of the injection point while verifying nothing — worse than omitting the test.\n\n**Recommendation:** Dispatch against `gsdBinDir: '/definitely/missing'` and assert the returned `isError` text contains that path, proving the value actually reaches the argv construction at L148.",
+      "description": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+      "normalized": "tautological test uses provided gsdbindir asserts only object truthiness",
+      "file_refs": [
+        "lib/gsd-lane-extension.test.mjs:46"
+      ],
+      "file_ref": "lib/gsd-lane-extension.test.mjs:46",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "testing",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.test.mjs:46:testing",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Silent fallback to floating `HEAD` as the lane base commit",
+      "body_md": "If `git rev-parse HEAD` fails (git not on PATH, unborn branch, permission error), `head` becomes the literal string 'HEAD' and is sent as laneParams.Base. Given executionMode 'parallel' and detached background execution, the worktree is then created off whatever HEAD points at whenever the lane starts, which can be several commits past the dispatch point — a nondeterministic base in the authoritative path. The status line also degrades to `Base: HEAD` (L188 `head.slice(0, 8)`), which reads as a plausible short SHA.\n\n**Recommendation:** Treat rev-parse failure as fatal: return `{ content: [...], isError: true }` naming the repo path and the git error, rather than substituting a floating ref.",
+      "description": "Silent fallback to floating `HEAD` as the lane base commit",
+      "normalized": "silent fallback to floating head as the lane base commit",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:105"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:105",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "correctness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:105:correctness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+      "body_md": "gsd_impl_lane.py is not in the review material, so its `Task` contract is unconfirmed. Two risks hold regardless: two dispatches in the same millisecond emit identical Task IDs with differing slugs, and the stated integration goal ('task panel shows lane progress' via .planning/threads/board.jsonl, which uses small `#id` numbers per RESUME-PI-WEB-UI.md) cannot correlate against a 13-digit epoch value — the panel will show nothing for dispatched lanes.\n\n**Recommendation:** Read the gsd_impl_lane.py params schema; either allocate a real board ID via gsd_board.py, or omit `Task` if it is optional. Do not mint IDs client-side.",
+      "description": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+      "normalized": "unverified contract task datenow is a synthetic id that cannot join the task board",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:116"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:116",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "integration",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:116:integration",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+      "body_md": "`params.write_scope || []` sends an empty array when write_scope is omitted, which is the common case since the parameter is optional and no prompt guideline requires it. An empty glob list and an absent key are different signals: `[]` commonly means 'no path matches, no writes permitted' (fail-closed) while omission means unrestricted. If the producer fails closed, every default lane produces zero commits against `ExpectedCommits: 1` and reports a failed integration.\n\n**Recommendation:** Omit the key when undefined: `...(params.write_scope?.length ? { ScopeGlobs: params.write_scope } : {})`, after confirming the producer's interpretation of a missing key.",
+      "description": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+      "normalized": "unverified contract scopeglobs may fail closed for every default dispatch",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:125"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:125",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "integration",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:125:integration",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+      "body_md": "`Message: params.task` (L123) and `SpecFile: specPath` (L124, whose file content is `# title\\n\\n${params.task}` from L114) carry identical information, and `Title` derives from it a third time (L122). Whichever one the lane consumes, the others are unread duplicates that will diverge the moment either format changes — and no reader of this file can tell which is authoritative.\n\n**Recommendation:** Pick one channel. If the lane reads SpecFile, drop `Message` and the redundant write; if it reads Message, drop the spec-file write at L113-114 entirely (which also removes one accumulating artifact).",
+      "description": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+      "normalized": "task text triple encoded across message specfile and title with no precedence",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:123"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:123",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "api",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:123:api",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "FileHandle.fd passed to stdio with racy double-close",
+      "body_md": "The 'error' handler writes then closes (L175-177) while the 'exit' handler closes independently (L178-180). Node does not guarantee 'exit' fires after a spawn 'error', and when both fire the write can land after the close, yielding EBADF swallowed by `.catch(() => {})` — so the sole diagnostic for a failed spawn is best-effort. Separately, holding the FileHandle open in the parent for the full lifetime of a multi-hour autonomous lane leaks a parent-side descriptor per dispatch.\n\n**Recommendation:** Close the handle immediately after spawn() returns (the child already holds its own duplicated descriptor) and route spawn errors through the session logger and the tool's isError return instead of the file handle.",
+      "description": "FileHandle.fd passed to stdio with racy double-close",
+      "normalized": "filehandlefd passed to stdio with racy double close",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:175"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:175",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "safety",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:175:safety",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Unbounded dispatch-artifact accumulation inside the target repo",
+      "body_md": "Every dispatch writes four files under `<repo>/.planning/impl-lanes/`: spec-<slug>.md (L113), p-<slug>-params.json (L141), q-<slug>.json (L144), log-<slug>.txt (L158). Nothing deletes them on success, failure, or a retention schedule, and the random slug suffix guarantees re-dispatching the same task adds four more rather than overwriting. These are untracked files in the working tree of the repo the lane is about to commit to, so a permissively-scoped lane can commit its own dispatch metadata — including full task text — into the user's history.\n\n**Recommendation:** Write artifacts under `join(tmpdir(), 'pi-lanes', slug)` (consistent with the worktree-root fallback at L45), or add a retention sweep that prunes completed lanes' files.",
+      "description": "Unbounded dispatch-artifact accumulation inside the target repo",
+      "normalized": "unbounded dispatch artifact accumulation inside the target repo",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:110"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:110",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "debt",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:110:debt",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Three copies of the GSD-script invocation pattern with three different error policies",
+      "body_md": "resolveWorktreeRoot (L37-45), resolveModel (L49-58) and the build-queue call (L146-156) all build `execFileAsync(python, [join(gsdBinDir, '<script>.py'), ...args], { timeout })`. The first two are near-identical 8-line bodies differing only in script name, argv tail and parsing. Each carries an independently written timeout (10_000 / 10_000 / 30_000) and a different error policy (swallow-and-default / swallow-and-null / return isError), so the error contract is a hidden property of each copy rather than a caller decision.\n\n**Recommendation:** Extract `async function runGsd(script, args, opts): Promise<{ ok: true, stdout: string } | { ok: false, error: string }>`; each call site becomes one line plus an explicit decision on the result.",
+      "description": "Three copies of the GSD-script invocation pattern with three different error policies",
+      "normalized": "three copies of the gsd script invocation pattern with three different error policies",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:38"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:38",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "dry",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:38:dry",
+      "occurrences": 1
+    },
+    {
+      "severity": "HIGH",
+      "title": "Spawn failure is reported as a successful dispatch",
+      "body_md": "When spawn fails (e.g. `python` not on PATH), `child.pid` is undefined and the async `error` event fires after the tool has already returned. The code defaults `pid` to 0 and returns the success block (lines 183-199) without `isError`, telling the caller 'Lane dispatched ... running autonomously. Progress is visible in the task panel.' The lane never runs and the agent/user waits indefinitely; the only trace is a 'spawn error' line written to the log after the success response. This contradicts the tool's own contract, demonstrated one line above: `build-queue` failure returns `isError: true` (line 155).\n\n**Recommendation:** After spawn, check `if (child.pid === undefined) { await logFd.close(); return { content: [{ type: 'text', text: `Lane spawn failed for ${slug}: ${python} could not be started` }], details: undefined, isError: true }; }`. Node leaves `pid` undefined synchronously when the process fails to start, so this reliably catches ENOENT/EACCES before returning.",
+      "description": "Spawn failure is reported as a successful dispatch",
+      "normalized": "spawn failure is reported as a successful dispatch",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:173"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:173",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "robustness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:173:robustness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+      "body_md": "resolveModel (lines 48-59) returns raw JSON.parse output typed as {provider, model, effort} without validating the shape. Concrete scenario: `gsd_impl_lane.py resolve-model` prints valid JSON missing keys (e.g. `{\"model\":\"gpt-5\"}` or an error object). The `if (resolved)` guard at line 134 passes, `Provider`/`Model`/`Effort` are set to `undefined` and silently dropped by JSON.stringify (line 142), so the lane runs on consumer-side default routing instead of the resolved one, and the dispatch message at line 191 prints 'Model: undefined (undefined)'. This is a system boundary (subprocess stdout) with no validation.\n\n**Recommendation:** Validate before returning: `if (parsed && typeof parsed.provider === 'string' && typeof parsed.model === 'string' && typeof parsed.effort === 'string') return parsed;` otherwise return null so the existing fallback path applies.",
+      "description": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+      "normalized": "resolvemodel returns unvalidated json missing keys flow into lane params and output",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:54"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:54",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "correctness",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:54:correctness",
+      "occurrences": 1
+    },
+    {
+      "severity": "MEDIUM",
+      "title": "Module specifiers render with a leading space — verify before merge",
+      "body_md": "UNVERIFIED from rendered packet: both imports show `from \" @earendil-works/pi-ai\"` (line 1) and `from \" @earendil-works/pi-coding-agent\"` (line 5) with a space after the opening quote. Other column-0 lines in the same packet render without inserted spaces, so this may be real source text rather than a rendering artifact. If real, both imports fail module resolution at load time: the extension module cannot be imported, which breaks the extension array passed to startRpcSession (lib/rpc-manager.ts:2056) and fails the jiti import in lib/gsd-lane-extension.test.mjs:5 — i.e., the entire feature and its tests are dead on arrival.\n\n**Recommendation:** Open the actual file and confirm the specifiers are exactly \"@earendil-works/pi-ai\" and \"@earendil-works/pi-coding-agent\" with no leading whitespace; fix if present and re-run the test file, which would catch this immediately.",
+      "description": "Module specifiers render with a leading space — verify before merge",
+      "normalized": "module specifiers render with a leading space verify before merge",
+      "file_refs": [
+        "lib/gsd-lane-extension.ts:1"
+      ],
+      "file_ref": "lib/gsd-lane-extension.ts:1",
+      "code_block_count": 0,
+      "fix_markers": 1,
+      "copy_id": "",
+      "lens": null,
+      "richness": 2.0,
+      "category": "integration",
+      "_source": "json",
+      "finding_key": "lib/gsd-lane-extension.ts:1:integration",
+      "occurrences": 1
+    }
+  ],
+  "convergence": {
+    "series_id": "review-36d5c542541abb02b2315e3f",
+    "round": 1,
+    "findings": [
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+        "body_md": "A git rev-parse failure is converted to the literal base HEAD. In an empty repository, non-Git directory, or environment without Git, the extension can continue creating artifacts and pass a revision that was already proven unresolvable to the lane producer. The producer implementation is not supplied, so whether build-queue catches this is unverified.\n\n**Recommendation:** Remove the HEAD fallback and return a structured isError result containing the Git failure before writing artifacts or invoking the lane producer.",
+        "description": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+        "normalized": "unverified contract unresolvable git revisions are replaced with head",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:104"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:104",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:104:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Caller-provided slugs can escape lane directories",
+        "body_md": "A supplied slug bypasses slugify and is embedded in artifact, worktree, and branch paths. A value containing repeated parent components can normalize outside .planning/impl-lanes or the configured worktree root, while other unsupported characters can create invalid Git references.\n\n**Recommendation:** Normalize or reject supplied slugs with a strict kebab-case pattern and length limit, then verify every generated path remains beneath its intended root using path.relative before writing or dispatching.",
+        "description": "Caller-provided slugs can escape lane directories",
+        "normalized": "caller provided slugs can escape lane directories",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:92"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:92",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "safety",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:92:safety",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Synchronous setup can delay background dispatch by 55 seconds",
+        "body_md": "Worktree configuration, Git resolution, model resolution, and queue construction are awaited serially before returning. Their timeouts permit an approximately 55-second response even though the extension promises responsive background dispatch.\n\n**Recommendation:** Run independent resolution operations concurrently and launch a detached bootstrap that performs queue construction and execution while persisting setup failures to the lane log and task state.",
+        "description": "Synchronous setup can delay background dispatch by 55 seconds",
+        "normalized": "synchronous setup can delay background dispatch by 55 seconds",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:96"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:96",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "performance",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:96:performance",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Tests never execute the DispatchLane implementation",
+        "body_md": "All added tests inspect registration or schema structure. The custom gsdBinDir test merely verifies that construction succeeds, so ignored options, malformed parameter files, false spawn success, and resource leaks would all pass.\n\n**Recommendation:** Inject process and filesystem dependencies and add execution tests for generated parameters, custom paths, queue-build errors, spawn errors, invalid slugs, and log-handle cleanup.",
+        "description": "Tests never execute the DispatchLane implementation",
+        "normalized": "tests never execute the dispatchlane implementation",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:16"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:16",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:16:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Whitespace-only tasks are accepted and dispatched",
+        "body_md": "The required task string has no content validation. A whitespace-only task creates a generic lane and nearly empty specification, consuming an autonomous worker without an actionable request.\n\n**Recommendation:** Add a schema minimum length, trim the value at runtime, reject an empty normalized task before filesystem work, and use the normalized value throughout lane construction.",
+        "description": "Whitespace-only tasks are accepted and dispatched",
+        "normalized": "whitespace only tasks are accepted and dispatched",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:85"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:85",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "api",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:85:api",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failures are reported as successful lane dispatches",
+        "body_md": "The code returns without waiting for the child process spawn event. An asynchronous process-creation failure is only written to the log, while the caller receives Lane dispatched with PID 0.\n\n**Recommendation:** Await a promise that resolves on spawn and rejects on error, return isError on rejection, and close the log handle in every synchronous and asynchronous failure path.",
+        "description": "Spawn failures are reported as successful lane dispatches",
+        "normalized": "spawn failures are reported as successful lane dispatches",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:161"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:161",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:161:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+        "body_md": "Worktree and model resolver failures are silently converted to fallback values, and parsed model JSON is not shape-validated. For example, an empty object is treated as a resolved model and produces undefined routing fields and user-visible undefined values. The producer output contract is not supplied.\n\n**Recommendation:** Return discriminated resolver results, validate absolute worktree paths and non-empty provider/model/effort strings, and expose fallback diagnostics or fail when required routing cannot be resolved.",
+        "description": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+        "normalized": "unverified contract resolver errors and malformed results are silently accepted",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:36"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:36",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:36:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+        "body_md": "Date.now can return the same value for parallel calls or separate sessions within one millisecond, potentially conflating status records keyed by Task. The producer's task-ID schema is not included, so the exact downstream effect is unverified.\n\n**Recommendation:** Allocate task IDs atomically in the producer's task-registration path and use the returned value, or adopt a producer-supported collision-resistant identifier.",
+        "description": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+        "normalized": "unverified contract millisecond timestamps are not unique task ids",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "scalability",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:scalability",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+        "body_md": "Three call sites (resolveWorktreeRoot line 44, resolveModel lines 56-58, and the git rev-parse HEAD fallback lines 104-106) catch and silently discard errors, substituting defaults with no log entry or diagnostic. The HEAD fallback is most consequential: on failure `Base` is set to the literal string \"HEAD\" instead of a pinned commit SHA, which is then sent to the lane pipeline as `laneParams.Base` (line 128), silently changing base-pinning semantics for the lane's diff/integration step.\n\n**Recommendation:** Log the caught error (e.g. write to the lane's log file or append a warning line to the tool's returned text) instead of an empty/silent catch, and consider failing the tool call outright when `git rev-parse HEAD` fails, since Base is used for lane isolation correctness.",
+        "description": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+        "normalized": "silent catch blocks swallow failures on worktree model head resolution",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:44"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:44",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:44:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "No test exercises execute() — the 8 claimed fixes are untested",
+        "body_md": "All 5 tests check tool registration, name/hidden flag, parameter schema shape, and executionMode. None invoke `tool.execute()`, so unique-slug generation, ScopeGlobs defaulting, PID capture, spawn error handling, and log-file writing — the exact behaviors this PR claims to fix — have zero regression coverage.\n\n**Recommendation:** Add a test that mocks execFile/spawn (or points gsdBinDir/python at stub scripts) and calls execute() to assert: two calls with identical task/slug produce different slugs, ScopeGlobs defaults to [], and the response text contains a non-zero pid.",
+        "description": "No test exercises execute() — the 8 claimed fixes are untested",
+        "normalized": "no test exercises execute the 8 claimed fixes are untested",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:1"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:1",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:1:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Task ID uses Date.now(), collidable under parallel execution",
+        "body_md": "`const taskId = Date.now();` is used as the lane's Task ID. The tool declares `executionMode: \"parallel\"` (line 83), meaning multiple DispatchLane calls can be in flight concurrently; two calls resolving within the same millisecond receive identical Task IDs, which the task panel displays as `#id` per the RESUME doc, causing UI/task-board ambiguity.\n\n**Recommendation:** Derive the Task ID from the already-unique `slug` (e.g. a hash of it) or combine Date.now() with the same random suffix used in uniqueSlug().",
+        "description": "Task ID uses Date.now(), collidable under parallel execution",
+        "normalized": "task id uses datenow collidable under parallel execution",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+        "body_md": "resolveWorktreeRoot (lines 36-46), resolveModel (lines 48-59), and the build-queue invocation each independently construct `execFileAsync(python, [join(gsdBinDir, script), ...args], { timeout })` with their own try/catch and different failure semantics (silent-default, silent-null, loud isError), making error-handling policy inconsistent across near-identical code.\n\n**Recommendation:** Extract a shared `runGsdScript(gsdBinDir, python, script, args, opts)` helper returning `{ ok, stdout, error }`, and have each call site apply a single, consistent policy for reacting to failure.",
+        "description": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+        "normalized": "duplicated execfileasync python script invocation pattern across three call sites",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:36"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:36",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "dry",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:36:dry",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failure returned to the user as a successful dispatch",
+        "body_md": "spawn() is asynchronous; a missing `python` or missing gsd_impl_lane.py surfaces via the 'error' event after execute() has already returned. `const pid = child.pid || 0` (L173) masks the exact signal that detects this, and the return at L183-191 runs unconditionally. The user is told `Lane dispatched: <slug> (pid 0)` while no process exists; the real error is appended to a log file nothing reads, via a write that may itself fail with EBADF and is swallowed by `.catch(() => {})` (L176).\n\n**Recommendation:** After spawn, `if (child.pid === undefined) return { content: [...], isError: true }`, and await a one-tick race on `child.once('spawn')` vs `child.once('error')` before returning, propagating err.message as isError text.",
+        "description": "Spawn failure returned to the user as a successful dispatch",
+        "normalized": "spawn failure returned to the user as a successful dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:183"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:183",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:183:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Extension registered unconditionally with a behavior-overriding prompt directive",
+        "body_md": "`createGsdLaneExtension({ cwd: sessionCwd })` is added with no availability check or feature flag, while the adjacent subagent extension at L2054 is gated by `isBuiltInSubagentsEnabled`. gsdBinDir defaults to `$HOME/gsd-config/get-shit-done/bin` (gsd-lane-extension.ts:62-65). On any machine without GSD, every session gains a DispatchLane tool whose promptGuidelines[0] says 'never run Edit/Write inline when a lane can do it' (L78). The model obeys, build-queue fails on a nonexistent script, and the user receives a lane-queue error instead of the requested edit — a behavioral regression, not a no-op.\n\n**Recommendation:** Probe `existsSync(join(gsdBinDir, 'gsd_impl_lane.py'))` in createGsdLaneExtension and register no tool when absent, or gate the rpc-manager entry behind an `isGsdLanesEnabled`-style predicate matching the surrounding pattern.",
+        "description": "Extension registered unconditionally with a behavior-overriding prompt directive",
+        "normalized": "extension registered unconditionally with a behavior overriding prompt directive",
+        "file_refs": [
+          "lib/rpc-manager.ts:2056"
+        ],
+        "file_ref": "lib/rpc-manager.ts:2056",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "architecture",
+        "_source": "json",
+        "finding_key": "lib/rpc-manager.ts:2056:architecture",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "No durable PID/exit-code record for detached lane processes",
+        "body_md": "The PID exists only in transient chat text (L185); `child.on('exit', () => { logFd.close() })` ignores the exit code and signal entirely, and nothing is persisted to disk. The machine contract requires managed Windows Python children to retain stdout, stderr, PID, exit code and whole-tree termination evidence — only stdout/stderr are captured. An orphaned detached lane cannot be located or swept, and no caller can ever determine whether the lane succeeded.\n\n**Recommendation:** Write `join(lanesDir, `pid-${slug}.json`)` with `{ pid, slug, startedAt, queuePath }` immediately after spawn, and update it with `{ exitCode, signal, endedAt }` inside the exit handler: `child.on('exit', (code, signal) => { ... })`.",
+        "description": "No durable PID/exit-code record for detached lane processes",
+        "normalized": "no durable pid exit code record for detached lane processes",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:178"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:178",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:178:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Tests cover only registration metadata; execute() is entirely untested",
+        "body_md": "All five tests assert tool name, extension name/hidden, presence of five schema keys, and executionMode. No test invokes execute(), so slug sanitization, the git-failure branch, the build-queue failure return, the emitted lane-params shape, and the spawn arguments have zero coverage — every HIGH finding in this review sits in code no test touches. The suite stays green through all of them.\n\n**Recommendation:** Inject `python`/`gsdBinDir` pointing at a temp-dir stub script, call `tool.execute('id', {...})`, and assert on the written `p-<slug>-params.json`: ScopeGlobs is an array, Base is a 40-char SHA, a traversal slug resolves under lanesDir, and build-queue failure yields `isError: true`.",
+        "description": "Tests cover only registration metadata; execute() is entirely untested",
+        "normalized": "tests cover only registration metadata execute is entirely untested",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:17"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:17",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:17:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+        "body_md": "The test passes `gsdBinDir: '/custom/bin'` then asserts `assert.ok(ext, 'extension should accept custom gsdBinDir')`. createGsdLaneExtension always returns an object literal, so this assertion cannot fail whether gsdBinDir is honored or silently ignored. It reads as coverage of the injection point while verifying nothing — worse than omitting the test.\n\n**Recommendation:** Dispatch against `gsdBinDir: '/definitely/missing'` and assert the returned `isError` text contains that path, proving the value actually reaches the argv construction at L148.",
+        "description": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+        "normalized": "tautological test uses provided gsdbindir asserts only object truthiness",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:46"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:46",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:46:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Silent fallback to floating `HEAD` as the lane base commit",
+        "body_md": "If `git rev-parse HEAD` fails (git not on PATH, unborn branch, permission error), `head` becomes the literal string 'HEAD' and is sent as laneParams.Base. Given executionMode 'parallel' and detached background execution, the worktree is then created off whatever HEAD points at whenever the lane starts, which can be several commits past the dispatch point — a nondeterministic base in the authoritative path. The status line also degrades to `Base: HEAD` (L188 `head.slice(0, 8)`), which reads as a plausible short SHA.\n\n**Recommendation:** Treat rev-parse failure as fatal: return `{ content: [...], isError: true }` naming the repo path and the git error, rather than substituting a floating ref.",
+        "description": "Silent fallback to floating `HEAD` as the lane base commit",
+        "normalized": "silent fallback to floating head as the lane base commit",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:105"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:105",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:105:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+        "body_md": "gsd_impl_lane.py is not in the review material, so its `Task` contract is unconfirmed. Two risks hold regardless: two dispatches in the same millisecond emit identical Task IDs with differing slugs, and the stated integration goal ('task panel shows lane progress' via .planning/threads/board.jsonl, which uses small `#id` numbers per RESUME-PI-WEB-UI.md) cannot correlate against a 13-digit epoch value — the panel will show nothing for dispatched lanes.\n\n**Recommendation:** Read the gsd_impl_lane.py params schema; either allocate a real board ID via gsd_board.py, or omit `Task` if it is optional. Do not mint IDs client-side.",
+        "description": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+        "normalized": "unverified contract task datenow is a synthetic id that cannot join the task board",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:integration",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+        "body_md": "`params.write_scope || []` sends an empty array when write_scope is omitted, which is the common case since the parameter is optional and no prompt guideline requires it. An empty glob list and an absent key are different signals: `[]` commonly means 'no path matches, no writes permitted' (fail-closed) while omission means unrestricted. If the producer fails closed, every default lane produces zero commits against `ExpectedCommits: 1` and reports a failed integration.\n\n**Recommendation:** Omit the key when undefined: `...(params.write_scope?.length ? { ScopeGlobs: params.write_scope } : {})`, after confirming the producer's interpretation of a missing key.",
+        "description": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+        "normalized": "unverified contract scopeglobs may fail closed for every default dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:125"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:125",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:125:integration",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+        "body_md": "`Message: params.task` (L123) and `SpecFile: specPath` (L124, whose file content is `# title\\n\\n${params.task}` from L114) carry identical information, and `Title` derives from it a third time (L122). Whichever one the lane consumes, the others are unread duplicates that will diverge the moment either format changes — and no reader of this file can tell which is authoritative.\n\n**Recommendation:** Pick one channel. If the lane reads SpecFile, drop `Message` and the redundant write; if it reads Message, drop the spec-file write at L113-114 entirely (which also removes one accumulating artifact).",
+        "description": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+        "normalized": "task text triple encoded across message specfile and title with no precedence",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:123"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:123",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "api",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:123:api",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "FileHandle.fd passed to stdio with racy double-close",
+        "body_md": "The 'error' handler writes then closes (L175-177) while the 'exit' handler closes independently (L178-180). Node does not guarantee 'exit' fires after a spawn 'error', and when both fire the write can land after the close, yielding EBADF swallowed by `.catch(() => {})` — so the sole diagnostic for a failed spawn is best-effort. Separately, holding the FileHandle open in the parent for the full lifetime of a multi-hour autonomous lane leaks a parent-side descriptor per dispatch.\n\n**Recommendation:** Close the handle immediately after spawn() returns (the child already holds its own duplicated descriptor) and route spawn errors through the session logger and the tool's isError return instead of the file handle.",
+        "description": "FileHandle.fd passed to stdio with racy double-close",
+        "normalized": "filehandlefd passed to stdio with racy double close",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:175"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:175",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "safety",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:175:safety",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Unbounded dispatch-artifact accumulation inside the target repo",
+        "body_md": "Every dispatch writes four files under `<repo>/.planning/impl-lanes/`: spec-<slug>.md (L113), p-<slug>-params.json (L141), q-<slug>.json (L144), log-<slug>.txt (L158). Nothing deletes them on success, failure, or a retention schedule, and the random slug suffix guarantees re-dispatching the same task adds four more rather than overwriting. These are untracked files in the working tree of the repo the lane is about to commit to, so a permissively-scoped lane can commit its own dispatch metadata — including full task text — into the user's history.\n\n**Recommendation:** Write artifacts under `join(tmpdir(), 'pi-lanes', slug)` (consistent with the worktree-root fallback at L45), or add a retention sweep that prunes completed lanes' files.",
+        "description": "Unbounded dispatch-artifact accumulation inside the target repo",
+        "normalized": "unbounded dispatch artifact accumulation inside the target repo",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:110"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:110",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "debt",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:110:debt",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Three copies of the GSD-script invocation pattern with three different error policies",
+        "body_md": "resolveWorktreeRoot (L37-45), resolveModel (L49-58) and the build-queue call (L146-156) all build `execFileAsync(python, [join(gsdBinDir, '<script>.py'), ...args], { timeout })`. The first two are near-identical 8-line bodies differing only in script name, argv tail and parsing. Each carries an independently written timeout (10_000 / 10_000 / 30_000) and a different error policy (swallow-and-default / swallow-and-null / return isError), so the error contract is a hidden property of each copy rather than a caller decision.\n\n**Recommendation:** Extract `async function runGsd(script, args, opts): Promise<{ ok: true, stdout: string } | { ok: false, error: string }>`; each call site becomes one line plus an explicit decision on the result.",
+        "description": "Three copies of the GSD-script invocation pattern with three different error policies",
+        "normalized": "three copies of the gsd script invocation pattern with three different error policies",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:38"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:38",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "dry",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:38:dry",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failure is reported as a successful dispatch",
+        "body_md": "When spawn fails (e.g. `python` not on PATH), `child.pid` is undefined and the async `error` event fires after the tool has already returned. The code defaults `pid` to 0 and returns the success block (lines 183-199) without `isError`, telling the caller 'Lane dispatched ... running autonomously. Progress is visible in the task panel.' The lane never runs and the agent/user waits indefinitely; the only trace is a 'spawn error' line written to the log after the success response. This contradicts the tool's own contract, demonstrated one line above: `build-queue` failure returns `isError: true` (line 155).\n\n**Recommendation:** After spawn, check `if (child.pid === undefined) { await logFd.close(); return { content: [{ type: 'text', text: `Lane spawn failed for ${slug}: ${python} could not be started` }], details: undefined, isError: true }; }`. Node leaves `pid` undefined synchronously when the process fails to start, so this reliably catches ENOENT/EACCES before returning.",
+        "description": "Spawn failure is reported as a successful dispatch",
+        "normalized": "spawn failure is reported as a successful dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:173"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:173",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:173:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+        "body_md": "resolveModel (lines 48-59) returns raw JSON.parse output typed as {provider, model, effort} without validating the shape. Concrete scenario: `gsd_impl_lane.py resolve-model` prints valid JSON missing keys (e.g. `{\"model\":\"gpt-5\"}` or an error object). The `if (resolved)` guard at line 134 passes, `Provider`/`Model`/`Effort` are set to `undefined` and silently dropped by JSON.stringify (line 142), so the lane runs on consumer-side default routing instead of the resolved one, and the dispatch message at line 191 prints 'Model: undefined (undefined)'. This is a system boundary (subprocess stdout) with no validation.\n\n**Recommendation:** Validate before returning: `if (parsed && typeof parsed.provider === 'string' && typeof parsed.model === 'string' && typeof parsed.effort === 'string') return parsed;` otherwise return null so the existing fallback path applies.",
+        "description": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+        "normalized": "resolvemodel returns unvalidated json missing keys flow into lane params and output",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:54"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:54",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:54:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Module specifiers render with a leading space — verify before merge",
+        "body_md": "UNVERIFIED from rendered packet: both imports show `from \" @earendil-works/pi-ai\"` (line 1) and `from \" @earendil-works/pi-coding-agent\"` (line 5) with a space after the opening quote. Other column-0 lines in the same packet render without inserted spaces, so this may be real source text rather than a rendering artifact. If real, both imports fail module resolution at load time: the extension module cannot be imported, which breaks the extension array passed to startRpcSession (lib/rpc-manager.ts:2056) and fails the jiti import in lib/gsd-lane-extension.test.mjs:5 — i.e., the entire feature and its tests are dead on arrival.\n\n**Recommendation:** Open the actual file and confirm the specifiers are exactly \"@earendil-works/pi-ai\" and \"@earendil-works/pi-coding-agent\" with no leading whitespace; fix if present and re-run the test file, which would catch this immediately.",
+        "description": "Module specifiers render with a leading space — verify before merge",
+        "normalized": "module specifiers render with a leading space verify before merge",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:1"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:1",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:1:integration",
+        "occurrences": 1
+      }
+    ],
+    "persistent": [],
+    "resolved": [],
+    "new": [
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+        "body_md": "A git rev-parse failure is converted to the literal base HEAD. In an empty repository, non-Git directory, or environment without Git, the extension can continue creating artifacts and pass a revision that was already proven unresolvable to the lane producer. The producer implementation is not supplied, so whether build-queue catches this is unverified.\n\n**Recommendation:** Remove the HEAD fallback and return a structured isError result containing the Git failure before writing artifacts or invoking the lane producer.",
+        "description": "UNVERIFIED-CONTRACT: Unresolvable Git revisions are replaced with HEAD",
+        "normalized": "unverified contract unresolvable git revisions are replaced with head",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:104"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:104",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:104:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Caller-provided slugs can escape lane directories",
+        "body_md": "A supplied slug bypasses slugify and is embedded in artifact, worktree, and branch paths. A value containing repeated parent components can normalize outside .planning/impl-lanes or the configured worktree root, while other unsupported characters can create invalid Git references.\n\n**Recommendation:** Normalize or reject supplied slugs with a strict kebab-case pattern and length limit, then verify every generated path remains beneath its intended root using path.relative before writing or dispatching.",
+        "description": "Caller-provided slugs can escape lane directories",
+        "normalized": "caller provided slugs can escape lane directories",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:92"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:92",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "safety",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:92:safety",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Synchronous setup can delay background dispatch by 55 seconds",
+        "body_md": "Worktree configuration, Git resolution, model resolution, and queue construction are awaited serially before returning. Their timeouts permit an approximately 55-second response even though the extension promises responsive background dispatch.\n\n**Recommendation:** Run independent resolution operations concurrently and launch a detached bootstrap that performs queue construction and execution while persisting setup failures to the lane log and task state.",
+        "description": "Synchronous setup can delay background dispatch by 55 seconds",
+        "normalized": "synchronous setup can delay background dispatch by 55 seconds",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:96"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:96",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "performance",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:96:performance",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Tests never execute the DispatchLane implementation",
+        "body_md": "All added tests inspect registration or schema structure. The custom gsdBinDir test merely verifies that construction succeeds, so ignored options, malformed parameter files, false spawn success, and resource leaks would all pass.\n\n**Recommendation:** Inject process and filesystem dependencies and add execution tests for generated parameters, custom paths, queue-build errors, spawn errors, invalid slugs, and log-handle cleanup.",
+        "description": "Tests never execute the DispatchLane implementation",
+        "normalized": "tests never execute the dispatchlane implementation",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:16"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:16",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:16:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Whitespace-only tasks are accepted and dispatched",
+        "body_md": "The required task string has no content validation. A whitespace-only task creates a generic lane and nearly empty specification, consuming an autonomous worker without an actionable request.\n\n**Recommendation:** Add a schema minimum length, trim the value at runtime, reject an empty normalized task before filesystem work, and use the normalized value throughout lane construction.",
+        "description": "Whitespace-only tasks are accepted and dispatched",
+        "normalized": "whitespace only tasks are accepted and dispatched",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:85"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:85",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "api",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:85:api",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failures are reported as successful lane dispatches",
+        "body_md": "The code returns without waiting for the child process spawn event. An asynchronous process-creation failure is only written to the log, while the caller receives Lane dispatched with PID 0.\n\n**Recommendation:** Await a promise that resolves on spawn and rejects on error, return isError on rejection, and close the log handle in every synchronous and asynchronous failure path.",
+        "description": "Spawn failures are reported as successful lane dispatches",
+        "normalized": "spawn failures are reported as successful lane dispatches",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:161"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:161",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:161:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+        "body_md": "Worktree and model resolver failures are silently converted to fallback values, and parsed model JSON is not shape-validated. For example, an empty object is treated as a resolved model and produces undefined routing fields and user-visible undefined values. The producer output contract is not supplied.\n\n**Recommendation:** Return discriminated resolver results, validate absolute worktree paths and non-empty provider/model/effort strings, and expose fallback diagnostics or fail when required routing cannot be resolved.",
+        "description": "UNVERIFIED-CONTRACT: Resolver errors and malformed results are silently accepted",
+        "normalized": "unverified contract resolver errors and malformed results are silently accepted",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:36"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:36",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:36:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+        "body_md": "Date.now can return the same value for parallel calls or separate sessions within one millisecond, potentially conflating status records keyed by Task. The producer's task-ID schema is not included, so the exact downstream effect is unverified.\n\n**Recommendation:** Allocate task IDs atomically in the producer's task-registration path and use the returned value, or adopt a producer-supported collision-resistant identifier.",
+        "description": "UNVERIFIED-CONTRACT: Millisecond timestamps are not unique task IDs",
+        "normalized": "unverified contract millisecond timestamps are not unique task ids",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "scalability",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:scalability",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+        "body_md": "Three call sites (resolveWorktreeRoot line 44, resolveModel lines 56-58, and the git rev-parse HEAD fallback lines 104-106) catch and silently discard errors, substituting defaults with no log entry or diagnostic. The HEAD fallback is most consequential: on failure `Base` is set to the literal string \"HEAD\" instead of a pinned commit SHA, which is then sent to the lane pipeline as `laneParams.Base` (line 128), silently changing base-pinning semantics for the lane's diff/integration step.\n\n**Recommendation:** Log the caught error (e.g. write to the lane's log file or append a warning line to the tool's returned text) instead of an empty/silent catch, and consider failing the tool call outright when `git rev-parse HEAD` fails, since Base is used for lane isolation correctness.",
+        "description": "Silent catch blocks swallow failures on worktree/model/HEAD resolution",
+        "normalized": "silent catch blocks swallow failures on worktree model head resolution",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:44"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:44",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:44:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "No test exercises execute() — the 8 claimed fixes are untested",
+        "body_md": "All 5 tests check tool registration, name/hidden flag, parameter schema shape, and executionMode. None invoke `tool.execute()`, so unique-slug generation, ScopeGlobs defaulting, PID capture, spawn error handling, and log-file writing — the exact behaviors this PR claims to fix — have zero regression coverage.\n\n**Recommendation:** Add a test that mocks execFile/spawn (or points gsdBinDir/python at stub scripts) and calls execute() to assert: two calls with identical task/slug produce different slugs, ScopeGlobs defaults to [], and the response text contains a non-zero pid.",
+        "description": "No test exercises execute() — the 8 claimed fixes are untested",
+        "normalized": "no test exercises execute the 8 claimed fixes are untested",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:1"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:1",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:1:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Task ID uses Date.now(), collidable under parallel execution",
+        "body_md": "`const taskId = Date.now();` is used as the lane's Task ID. The tool declares `executionMode: \"parallel\"` (line 83), meaning multiple DispatchLane calls can be in flight concurrently; two calls resolving within the same millisecond receive identical Task IDs, which the task panel displays as `#id` per the RESUME doc, causing UI/task-board ambiguity.\n\n**Recommendation:** Derive the Task ID from the already-unique `slug` (e.g. a hash of it) or combine Date.now() with the same random suffix used in uniqueSlug().",
+        "description": "Task ID uses Date.now(), collidable under parallel execution",
+        "normalized": "task id uses datenow collidable under parallel execution",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+        "body_md": "resolveWorktreeRoot (lines 36-46), resolveModel (lines 48-59), and the build-queue invocation each independently construct `execFileAsync(python, [join(gsdBinDir, script), ...args], { timeout })` with their own try/catch and different failure semantics (silent-default, silent-null, loud isError), making error-handling policy inconsistent across near-identical code.\n\n**Recommendation:** Extract a shared `runGsdScript(gsdBinDir, python, script, args, opts)` helper returning `{ ok, stdout, error }`, and have each call site apply a single, consistent policy for reacting to failure.",
+        "description": "Duplicated execFileAsync-python-script invocation pattern across three call sites",
+        "normalized": "duplicated execfileasync python script invocation pattern across three call sites",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:36"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:36",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "dry",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:36:dry",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failure returned to the user as a successful dispatch",
+        "body_md": "spawn() is asynchronous; a missing `python` or missing gsd_impl_lane.py surfaces via the 'error' event after execute() has already returned. `const pid = child.pid || 0` (L173) masks the exact signal that detects this, and the return at L183-191 runs unconditionally. The user is told `Lane dispatched: <slug> (pid 0)` while no process exists; the real error is appended to a log file nothing reads, via a write that may itself fail with EBADF and is swallowed by `.catch(() => {})` (L176).\n\n**Recommendation:** After spawn, `if (child.pid === undefined) return { content: [...], isError: true }`, and await a one-tick race on `child.once('spawn')` vs `child.once('error')` before returning, propagating err.message as isError text.",
+        "description": "Spawn failure returned to the user as a successful dispatch",
+        "normalized": "spawn failure returned to the user as a successful dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:183"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:183",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:183:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Extension registered unconditionally with a behavior-overriding prompt directive",
+        "body_md": "`createGsdLaneExtension({ cwd: sessionCwd })` is added with no availability check or feature flag, while the adjacent subagent extension at L2054 is gated by `isBuiltInSubagentsEnabled`. gsdBinDir defaults to `$HOME/gsd-config/get-shit-done/bin` (gsd-lane-extension.ts:62-65). On any machine without GSD, every session gains a DispatchLane tool whose promptGuidelines[0] says 'never run Edit/Write inline when a lane can do it' (L78). The model obeys, build-queue fails on a nonexistent script, and the user receives a lane-queue error instead of the requested edit — a behavioral regression, not a no-op.\n\n**Recommendation:** Probe `existsSync(join(gsdBinDir, 'gsd_impl_lane.py'))` in createGsdLaneExtension and register no tool when absent, or gate the rpc-manager entry behind an `isGsdLanesEnabled`-style predicate matching the surrounding pattern.",
+        "description": "Extension registered unconditionally with a behavior-overriding prompt directive",
+        "normalized": "extension registered unconditionally with a behavior overriding prompt directive",
+        "file_refs": [
+          "lib/rpc-manager.ts:2056"
+        ],
+        "file_ref": "lib/rpc-manager.ts:2056",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "architecture",
+        "_source": "json",
+        "finding_key": "lib/rpc-manager.ts:2056:architecture",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "No durable PID/exit-code record for detached lane processes",
+        "body_md": "The PID exists only in transient chat text (L185); `child.on('exit', () => { logFd.close() })` ignores the exit code and signal entirely, and nothing is persisted to disk. The machine contract requires managed Windows Python children to retain stdout, stderr, PID, exit code and whole-tree termination evidence — only stdout/stderr are captured. An orphaned detached lane cannot be located or swept, and no caller can ever determine whether the lane succeeded.\n\n**Recommendation:** Write `join(lanesDir, `pid-${slug}.json`)` with `{ pid, slug, startedAt, queuePath }` immediately after spawn, and update it with `{ exitCode, signal, endedAt }` inside the exit handler: `child.on('exit', (code, signal) => { ... })`.",
+        "description": "No durable PID/exit-code record for detached lane processes",
+        "normalized": "no durable pid exit code record for detached lane processes",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:178"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:178",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:178:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Tests cover only registration metadata; execute() is entirely untested",
+        "body_md": "All five tests assert tool name, extension name/hidden, presence of five schema keys, and executionMode. No test invokes execute(), so slug sanitization, the git-failure branch, the build-queue failure return, the emitted lane-params shape, and the spawn arguments have zero coverage — every HIGH finding in this review sits in code no test touches. The suite stays green through all of them.\n\n**Recommendation:** Inject `python`/`gsdBinDir` pointing at a temp-dir stub script, call `tool.execute('id', {...})`, and assert on the written `p-<slug>-params.json`: ScopeGlobs is an array, Base is a 40-char SHA, a traversal slug resolves under lanesDir, and build-queue failure yields `isError: true`.",
+        "description": "Tests cover only registration metadata; execute() is entirely untested",
+        "normalized": "tests cover only registration metadata execute is entirely untested",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:17"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:17",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:17:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+        "body_md": "The test passes `gsdBinDir: '/custom/bin'` then asserts `assert.ok(ext, 'extension should accept custom gsdBinDir')`. createGsdLaneExtension always returns an object literal, so this assertion cannot fail whether gsdBinDir is honored or silently ignored. It reads as coverage of the injection point while verifying nothing — worse than omitting the test.\n\n**Recommendation:** Dispatch against `gsdBinDir: '/definitely/missing'` and assert the returned `isError` text contains that path, proving the value actually reaches the argv construction at L148.",
+        "description": "Tautological test: `uses provided gsdBinDir` asserts only object truthiness",
+        "normalized": "tautological test uses provided gsdbindir asserts only object truthiness",
+        "file_refs": [
+          "lib/gsd-lane-extension.test.mjs:46"
+        ],
+        "file_ref": "lib/gsd-lane-extension.test.mjs:46",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "testing",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.test.mjs:46:testing",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Silent fallback to floating `HEAD` as the lane base commit",
+        "body_md": "If `git rev-parse HEAD` fails (git not on PATH, unborn branch, permission error), `head` becomes the literal string 'HEAD' and is sent as laneParams.Base. Given executionMode 'parallel' and detached background execution, the worktree is then created off whatever HEAD points at whenever the lane starts, which can be several commits past the dispatch point — a nondeterministic base in the authoritative path. The status line also degrades to `Base: HEAD` (L188 `head.slice(0, 8)`), which reads as a plausible short SHA.\n\n**Recommendation:** Treat rev-parse failure as fatal: return `{ content: [...], isError: true }` naming the repo path and the git error, rather than substituting a floating ref.",
+        "description": "Silent fallback to floating `HEAD` as the lane base commit",
+        "normalized": "silent fallback to floating head as the lane base commit",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:105"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:105",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:105:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+        "body_md": "gsd_impl_lane.py is not in the review material, so its `Task` contract is unconfirmed. Two risks hold regardless: two dispatches in the same millisecond emit identical Task IDs with differing slugs, and the stated integration goal ('task panel shows lane progress' via .planning/threads/board.jsonl, which uses small `#id` numbers per RESUME-PI-WEB-UI.md) cannot correlate against a 13-digit epoch value — the panel will show nothing for dispatched lanes.\n\n**Recommendation:** Read the gsd_impl_lane.py params schema; either allocate a real board ID via gsd_board.py, or omit `Task` if it is optional. Do not mint IDs client-side.",
+        "description": "UNVERIFIED-CONTRACT: `Task: Date.now()` is a synthetic ID that cannot join the task board",
+        "normalized": "unverified contract task datenow is a synthetic id that cannot join the task board",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:116"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:116",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:116:integration",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+        "body_md": "`params.write_scope || []` sends an empty array when write_scope is omitted, which is the common case since the parameter is optional and no prompt guideline requires it. An empty glob list and an absent key are different signals: `[]` commonly means 'no path matches, no writes permitted' (fail-closed) while omission means unrestricted. If the producer fails closed, every default lane produces zero commits against `ExpectedCommits: 1` and reports a failed integration.\n\n**Recommendation:** Omit the key when undefined: `...(params.write_scope?.length ? { ScopeGlobs: params.write_scope } : {})`, after confirming the producer's interpretation of a missing key.",
+        "description": "UNVERIFIED-CONTRACT: `ScopeGlobs: []` may fail closed for every default dispatch",
+        "normalized": "unverified contract scopeglobs may fail closed for every default dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:125"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:125",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:125:integration",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+        "body_md": "`Message: params.task` (L123) and `SpecFile: specPath` (L124, whose file content is `# title\\n\\n${params.task}` from L114) carry identical information, and `Title` derives from it a third time (L122). Whichever one the lane consumes, the others are unread duplicates that will diverge the moment either format changes — and no reader of this file can tell which is authoritative.\n\n**Recommendation:** Pick one channel. If the lane reads SpecFile, drop `Message` and the redundant write; if it reads Message, drop the spec-file write at L113-114 entirely (which also removes one accumulating artifact).",
+        "description": "Task text triple-encoded across Message, SpecFile and Title with no precedence",
+        "normalized": "task text triple encoded across message specfile and title with no precedence",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:123"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:123",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "api",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:123:api",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "FileHandle.fd passed to stdio with racy double-close",
+        "body_md": "The 'error' handler writes then closes (L175-177) while the 'exit' handler closes independently (L178-180). Node does not guarantee 'exit' fires after a spawn 'error', and when both fire the write can land after the close, yielding EBADF swallowed by `.catch(() => {})` — so the sole diagnostic for a failed spawn is best-effort. Separately, holding the FileHandle open in the parent for the full lifetime of a multi-hour autonomous lane leaks a parent-side descriptor per dispatch.\n\n**Recommendation:** Close the handle immediately after spawn() returns (the child already holds its own duplicated descriptor) and route spawn errors through the session logger and the tool's isError return instead of the file handle.",
+        "description": "FileHandle.fd passed to stdio with racy double-close",
+        "normalized": "filehandlefd passed to stdio with racy double close",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:175"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:175",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "safety",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:175:safety",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Unbounded dispatch-artifact accumulation inside the target repo",
+        "body_md": "Every dispatch writes four files under `<repo>/.planning/impl-lanes/`: spec-<slug>.md (L113), p-<slug>-params.json (L141), q-<slug>.json (L144), log-<slug>.txt (L158). Nothing deletes them on success, failure, or a retention schedule, and the random slug suffix guarantees re-dispatching the same task adds four more rather than overwriting. These are untracked files in the working tree of the repo the lane is about to commit to, so a permissively-scoped lane can commit its own dispatch metadata — including full task text — into the user's history.\n\n**Recommendation:** Write artifacts under `join(tmpdir(), 'pi-lanes', slug)` (consistent with the worktree-root fallback at L45), or add a retention sweep that prunes completed lanes' files.",
+        "description": "Unbounded dispatch-artifact accumulation inside the target repo",
+        "normalized": "unbounded dispatch artifact accumulation inside the target repo",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:110"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:110",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "debt",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:110:debt",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Three copies of the GSD-script invocation pattern with three different error policies",
+        "body_md": "resolveWorktreeRoot (L37-45), resolveModel (L49-58) and the build-queue call (L146-156) all build `execFileAsync(python, [join(gsdBinDir, '<script>.py'), ...args], { timeout })`. The first two are near-identical 8-line bodies differing only in script name, argv tail and parsing. Each carries an independently written timeout (10_000 / 10_000 / 30_000) and a different error policy (swallow-and-default / swallow-and-null / return isError), so the error contract is a hidden property of each copy rather than a caller decision.\n\n**Recommendation:** Extract `async function runGsd(script, args, opts): Promise<{ ok: true, stdout: string } | { ok: false, error: string }>`; each call site becomes one line plus an explicit decision on the result.",
+        "description": "Three copies of the GSD-script invocation pattern with three different error policies",
+        "normalized": "three copies of the gsd script invocation pattern with three different error policies",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:38"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:38",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "dry",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:38:dry",
+        "occurrences": 1
+      },
+      {
+        "severity": "HIGH",
+        "title": "Spawn failure is reported as a successful dispatch",
+        "body_md": "When spawn fails (e.g. `python` not on PATH), `child.pid` is undefined and the async `error` event fires after the tool has already returned. The code defaults `pid` to 0 and returns the success block (lines 183-199) without `isError`, telling the caller 'Lane dispatched ... running autonomously. Progress is visible in the task panel.' The lane never runs and the agent/user waits indefinitely; the only trace is a 'spawn error' line written to the log after the success response. This contradicts the tool's own contract, demonstrated one line above: `build-queue` failure returns `isError: true` (line 155).\n\n**Recommendation:** After spawn, check `if (child.pid === undefined) { await logFd.close(); return { content: [{ type: 'text', text: `Lane spawn failed for ${slug}: ${python} could not be started` }], details: undefined, isError: true }; }`. Node leaves `pid` undefined synchronously when the process fails to start, so this reliably catches ENOENT/EACCES before returning.",
+        "description": "Spawn failure is reported as a successful dispatch",
+        "normalized": "spawn failure is reported as a successful dispatch",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:173"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:173",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "robustness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:173:robustness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+        "body_md": "resolveModel (lines 48-59) returns raw JSON.parse output typed as {provider, model, effort} without validating the shape. Concrete scenario: `gsd_impl_lane.py resolve-model` prints valid JSON missing keys (e.g. `{\"model\":\"gpt-5\"}` or an error object). The `if (resolved)` guard at line 134 passes, `Provider`/`Model`/`Effort` are set to `undefined` and silently dropped by JSON.stringify (line 142), so the lane runs on consumer-side default routing instead of the resolved one, and the dispatch message at line 191 prints 'Model: undefined (undefined)'. This is a system boundary (subprocess stdout) with no validation.\n\n**Recommendation:** Validate before returning: `if (parsed && typeof parsed.provider === 'string' && typeof parsed.model === 'string' && typeof parsed.effort === 'string') return parsed;` otherwise return null so the existing fallback path applies.",
+        "description": "resolveModel returns unvalidated JSON; missing keys flow into lane params and output",
+        "normalized": "resolvemodel returns unvalidated json missing keys flow into lane params and output",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:54"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:54",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "correctness",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:54:correctness",
+        "occurrences": 1
+      },
+      {
+        "severity": "MEDIUM",
+        "title": "Module specifiers render with a leading space — verify before merge",
+        "body_md": "UNVERIFIED from rendered packet: both imports show `from \" @earendil-works/pi-ai\"` (line 1) and `from \" @earendil-works/pi-coding-agent\"` (line 5) with a space after the opening quote. Other column-0 lines in the same packet render without inserted spaces, so this may be real source text rather than a rendering artifact. If real, both imports fail module resolution at load time: the extension module cannot be imported, which breaks the extension array passed to startRpcSession (lib/rpc-manager.ts:2056) and fails the jiti import in lib/gsd-lane-extension.test.mjs:5 — i.e., the entire feature and its tests are dead on arrival.\n\n**Recommendation:** Open the actual file and confirm the specifiers are exactly \"@earendil-works/pi-ai\" and \"@earendil-works/pi-coding-agent\" with no leading whitespace; fix if present and re-run the test file, which would catch this immediately.",
+        "description": "Module specifiers render with a leading space — verify before merge",
+        "normalized": "module specifiers render with a leading space verify before merge",
+        "file_refs": [
+          "lib/gsd-lane-extension.ts:1"
+        ],
+        "file_ref": "lib/gsd-lane-extension.ts:1",
+        "code_block_count": 0,
+        "fix_markers": 1,
+        "copy_id": "",
+        "lens": null,
+        "richness": 2.0,
+        "category": "integration",
+        "_source": "json",
+        "finding_key": "lib/gsd-lane-extension.ts:1:integration",
+        "occurrences": 1
+      }
+    ],
+    "persistent_keys": [],
+    "resolved_keys": [],
+    "new_keys": [
+      "lib/gsd-lane-extension.ts:104:correctness",
+      "lib/gsd-lane-extension.ts:92:safety",
+      "lib/gsd-lane-extension.ts:96:performance",
+      "lib/gsd-lane-extension.test.mjs:16:testing",
+      "lib/gsd-lane-extension.ts:85:api",
+      "lib/gsd-lane-extension.ts:161:robustness",
+      "lib/gsd-lane-extension.ts:36:robustness",
+      "lib/gsd-lane-extension.ts:116:scalability",
+      "lib/gsd-lane-extension.ts:44:robustness",
+      "lib/gsd-lane-extension.test.mjs:1:testing",
+      "lib/gsd-lane-extension.ts:116:correctness",
+      "lib/gsd-lane-extension.ts:36:dry",
+      "lib/gsd-lane-extension.ts:183:robustness",
+      "lib/rpc-manager.ts:2056:architecture",
+      "lib/gsd-lane-extension.ts:178:robustness",
+      "lib/gsd-lane-extension.test.mjs:17:testing",
+      "lib/gsd-lane-extension.test.mjs:46:testing",
+      "lib/gsd-lane-extension.ts:105:correctness",
+      "lib/gsd-lane-extension.ts:116:integration",
+      "lib/gsd-lane-extension.ts:125:integration",
+      "lib/gsd-lane-extension.ts:123:api",
+      "lib/gsd-lane-extension.ts:175:safety",
+      "lib/gsd-lane-extension.ts:110:debt",
+      "lib/gsd-lane-extension.ts:38:dry",
+      "lib/gsd-lane-extension.ts:173:robustness",
+      "lib/gsd-lane-extension.ts:54:correctness",
+      "lib/gsd-lane-extension.ts:1:integration"
+    ]
+  },
+  "reviewers": {
+    "gpt": {
+      "prompt_variant": "full",
+      "prompt_routing": "default",
+      "prompt_auto_routed": false,
+      "prompt_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-cross-review-prompt.md",
+      "prompt_bytes": 27481,
+      "max_prompt_kb": 70,
+      "condensed_retry": false,
+      "retry_result": "none",
+      "empty_review_retries": 1,
+      "empty_review_retry_attempts": 0,
+      "empty_review_retry_result": "none",
+      "output_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-ar-gpt-r1-cross-review.md",
+      "status": "ok",
+      "dispatcher_pid": 62292,
+      "started_epoch": 1789623357.167247,
+      "started_at": "2026-09-17T05:35:57Z",
+      "timeout_seconds": 3605.0,
+      "pid": 14872,
+      "pid_kind": "child",
+      "pid_started_epoch": 1789623357.7872856,
+      "pid_started_at": "2026-09-17T05:35:57Z",
+      "processes": [
+        {
+          "pid": 48648,
+          "started_epoch": 1789623357.3057432,
+          "started_at": "2026-09-17T05:35:57Z"
+        },
+        {
+          "pid": 14872,
+          "started_epoch": 1789623357.7872856,
+          "started_at": "2026-09-17T05:35:57Z"
+        }
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "finished_epoch": 1789623635.7265916,
+      "elapsed_s": 278.4,
+      "name": "gpt",
+      "outcome": "reviewed",
+      "validity": "VALID_FINDINGS",
+      "wall_s": 278.4,
+      "findings": 8,
+      "error": null,
+      "non_review": 0,
+      "model": "gpt-5.6-sol",
+      "cli": "codex",
+      "effort": "xhigh",
+      "output_bytes": 16088
+    },
+    "sonnet5": {
+      "prompt_variant": "full",
+      "prompt_routing": "default",
+      "prompt_auto_routed": false,
+      "prompt_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-cross-review-prompt.md",
+      "prompt_bytes": 26823,
+      "max_prompt_kb": null,
+      "condensed_retry": false,
+      "retry_result": "none",
+      "empty_review_retries": 1,
+      "empty_review_retry_attempts": 0,
+      "empty_review_retry_result": "none",
+      "output_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-ar-sonnet5-r1-cross-review.md",
+      "status": "ok",
+      "dispatcher_pid": 62292,
+      "started_epoch": 1789623357.540856,
+      "started_at": "2026-09-17T05:35:57Z",
+      "timeout_seconds": 4805,
+      "pid": 36740,
+      "pid_kind": "child",
+      "pid_started_epoch": 1789623358.0671995,
+      "pid_started_at": "2026-09-17T05:35:58Z",
+      "processes": [
+        {
+          "pid": 28512,
+          "started_epoch": 1789623357.7839584,
+          "started_at": "2026-09-17T05:35:57Z"
+        },
+        {
+          "pid": 36740,
+          "started_epoch": 1789623358.0671995,
+          "started_at": "2026-09-17T05:35:58Z"
+        }
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "finished_epoch": 1789623570.7957902,
+      "elapsed_s": 213.0,
+      "name": "sonnet5",
+      "outcome": "reviewed",
+      "validity": "VALID_FINDINGS",
+      "wall_s": 213.0,
+      "findings": 5,
+      "error": null,
+      "non_review": 0,
+      "model": "claude-sonnet-5[1m]",
+      "cli": "claude",
+      "effort": "high",
+      "output_bytes": 13128
+    },
+    "opus5": {
+      "prompt_variant": "full",
+      "prompt_routing": "default",
+      "prompt_auto_routed": false,
+      "prompt_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-cross-review-prompt.md",
+      "prompt_bytes": 26823,
+      "max_prompt_kb": null,
+      "condensed_retry": false,
+      "retry_result": "none",
+      "empty_review_retries": 1,
+      "empty_review_retry_attempts": 0,
+      "empty_review_retry_result": "none",
+      "output_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-ar-opus5-r1-cross-review.md",
+      "status": "ok",
+      "dispatcher_pid": 62292,
+      "started_epoch": 1789623357.291545,
+      "started_at": "2026-09-17T05:35:57Z",
+      "timeout_seconds": 4808,
+      "pid": 77340,
+      "pid_kind": "child",
+      "pid_started_epoch": 1789623360.7918036,
+      "pid_started_at": "2026-09-17T05:36:00Z",
+      "processes": [
+        {
+          "pid": 62976,
+          "started_epoch": 1789623360.5538118,
+          "started_at": "2026-09-17T05:36:00Z"
+        },
+        {
+          "pid": 77340,
+          "started_epoch": 1789623360.7918036,
+          "started_at": "2026-09-17T05:36:00Z"
+        }
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "finished_epoch": 1789623647.114311,
+      "elapsed_s": 286.5,
+      "name": "opus5",
+      "outcome": "reviewed",
+      "validity": "VALID_FINDINGS",
+      "wall_s": 286.5,
+      "findings": 14,
+      "error": null,
+      "non_review": 0,
+      "model": "claude-opus-5[1m]",
+      "cli": "claude",
+      "effort": "high",
+      "output_bytes": 34969
+    },
+    "qwen38": {
+      "prompt_variant": "full",
+      "prompt_routing": "default",
+      "prompt_auto_routed": false,
+      "prompt_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-cross-review-prompt.md",
+      "prompt_bytes": 26823,
+      "max_prompt_kb": null,
+      "condensed_retry": false,
+      "retry_result": "none",
+      "empty_review_retries": 1,
+      "empty_review_retry_attempts": 0,
+      "empty_review_retry_result": "none",
+      "output_file": "C:/Users/bedit/AppData/Local/Temp/gsd-22276a21ee04/gsd-ar-qwen38-r1-cross-review.md",
+      "status": "ok",
+      "dispatcher_pid": 62292,
+      "started_epoch": 1789623357.4089708,
+      "started_at": "2026-09-17T05:35:57Z",
+      "timeout_seconds": 4805,
+      "pid": 72148,
+      "pid_kind": "child",
+      "pid_started_epoch": 1789623357.8777094,
+      "pid_started_at": "2026-09-17T05:35:57Z",
+      "processes": [
+        {
+          "pid": 72148,
+          "started_epoch": 1789623357.8777094,
+          "started_at": "2026-09-17T05:35:57Z"
+        }
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "finished_epoch": 1789623850.2342415,
+      "elapsed_s": 492.5,
+      "name": "qwen38",
+      "outcome": "reviewed",
+      "validity": "VALID_FINDINGS",
+      "wall_s": 492.5,
+      "findings": 7,
+      "error": null,
+      "non_review": 0,
+      "model": "qwen3.8-max",
+      "cli": "qwen-cli",
+      "effort": "high",
+      "verdict_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-22276a21ee04\\ev2-verdicts-qwen38-cross-review.json",
+      "output_bytes": 18152
+    }
+  },
+  "synthesis": {},
+  "scoring": {
+    "enabled": true,
+    "scorer": "evidence-v2",
+    "deadline_seconds": 1500,
+    "reviewers": {
+      "sonnet5": {
+        "_error": "candidate evidence: none of the 5 HIGH/MEDIUM finding locations exist in D:\\Trees\\pi-web (project_root_source=cwd, source_sha=c09e4252d11f0951b4742fcef88a881cb1ca9e03); cited: lib/gsd-lane-extension.test.mjs, lib/gsd-lane-extension.ts; pass --project-root/--source-sha for the reviewed checkout",
+        "ev2_status": "warning",
+        "reason": "candidate evidence: none of the 5 HIGH/MEDIUM finding locations exist in D:\\Trees\\pi-web (project_root_source=cwd, source_sha=c09e4252d11f0951b4742fcef88a881cb1ca9e03); cited: lib/gsd-lane-extension.test.mjs, lib/gsd-lane-extension.ts; pass --project-root/--source-sha for the reviewed checkout",
+        "elapsed_s": 66.9
+      },
+      "gpt": {
+        "_error": "candidate evidence: none of the 8 HIGH/MEDIUM finding locations exist in D:\\Trees\\pi-web (project_root_source=cwd, source_sha=c09e4252d11f0951b4742fcef88a881cb1ca9e03); cited: lib/gsd-lane-extension.test.mjs, lib/gsd-lane-extension.ts; pass --project-root/--source-sha for the reviewed checkout",
+        "ev2_status": "warning",
+        "reason": "candidate evidence: none of the 8 HIGH/MEDIUM finding locations exist in D:\\Trees\\pi-web (project_root_source=cwd, source_sha=c09e4252d11f0951b4742fcef88a881cb1ca9e03); cited: lib/gsd-lane-extension.test.mjs, lib/gsd-lane-extension.ts; pass --project-root/--source-sha for the reviewed checkout",
+        "elapsed_s": 76.7
+      },
+      "opus5": {
+        "_error": "judge confidence not numeric: 'HIGH'; judge confidence not numeric: 'LOW'",
+        "ev2_status": "warning",
+        "reason": "judge confidence not numeric: 'HIGH'; judge confidence not numeric: 'LOW'",
+        "elapsed_s": 211.4
+      },
+      "qwen38": {
+        "ev2_status": "scored",
+        "reason": "",
+        "verdict_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-22276a21ee04\\ev2-verdicts-qwen38-cross-review.json",
+        "scorecard_written": true,
+        "findings_raised": 5,
+        "findings_survived": 0,
+        "elapsed_s": 211.4
+      }
+    }
+  },
+  "roster_provenance": {
+    "config_source": "C:\\Users\\bedit\\.gsd\\defaults.json",
+    "config_path": "C:\\Users\\bedit\\.gsd\\defaults.json",
+    "legacy_fallback": false,
+    "config_error": null
+  },
+  "project_root": "D:\\Trees\\pi-web",
+  "source_sha": "c09e4252d11f0951b4742fcef88a881cb1ca9e03",
+  "project_root_source": "cwd",
+  "staged_patch_sha256": "a7ad2849827f13d00f998509c0a3c0f30224ded3196b8f4f186dc9fa2d9aee97",
+  "_warnings": [
+    "scoring_identity_failed"
+  ],
+  "quorum": {
+    "met": true,
+    "reviewed": 4,
+    "selected": 4,
+    "missing": []
+  },
+  "reviewed_file_blobs": {
+    ".planning/threads/RESUME-PI-WEB-UI.md": "d40e91c64a0dc086bd1677230b95fb98741b9165",
+    "lib/gsd-lane-extension.test.mjs": "8f1e969b0b1b8b102f80e4b158a04d76d9238268",
+    "lib/gsd-lane-extension.ts": "1486386b9ea98f43008726b7fd1429c23601671c",
+    "lib/rpc-manager.ts": "2d033b2844c112a32d37222fff0a9ea40f550be5"
+  }
+}

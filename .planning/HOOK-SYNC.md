@@ -103,6 +103,25 @@ diff <(ls ~/gsd-config/get-shit-done/hooks/*.cjs | xargs -I{} basename {} | sort
   | grep "^<"
 ```
 
+## Fork-Gate Audit (2026-09-17)
+
+All 4 fork-gate rules are COVERED by `gsd_impl_lane.py`. No Pi extension needed.
+
+| Rule | Lane evidence | Assessment |
+|------|---------------|------------|
+| Concurrency cap | `lane_capacity.py:159` — `max_concurrent_streams`, wait-with-lock | Stricter than fork-ledger |
+| Scope isolation | `lane_cmd_run.py:60-63` — mandatory WriteScope, overlap detection | Stricter than require-fork-scope |
+| Commit ownership | `lane_commit.py:295+` — pipeline constructs commit, branch isolation | Stricter than block-fork-push |
+| Model routing | `lane_providers.py:520-542` — routing with demotion, eligibility, tiers | Stricter than fork-capability-floor |
+
+## Consolidated Pi Extensions (created 2026-09-17)
+
+| Extension | Source hooks | Event | Status |
+|-----------|-------------|-------|--------|
+| `gsd-orchestrator-gate.ts` | orchestrator-allowlist + block-orchestrator-ue-planning + delegate-bounded-tasks | `tool_call` | Created |
+| `gsd-failure-gate.ts` | fix-failure-tracker + fix-failure-gate + failure-pattern-detector | `tool_call` + `tool_result` | Created |
+| `gsd-session-init.ts` | gsd-session-selfcheck + task-board-restore + session-lane-sweep + ensure-session-monitor | `session_start` only | Created |
+
 ## Metrics baseline (2026-09-17)
 
 | Metric | Claude (process-per-hook) | Pi target (in-process groups) |
