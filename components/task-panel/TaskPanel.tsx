@@ -155,6 +155,23 @@ function TaskItem({ task, isDead }: { task: BoardTask; isDead?: boolean }) {
           }}
         />
         <span style={{ minWidth: 0, wordBreak: "break-word" }}>
+          {isDead && (
+            <span style={{
+              display: "inline-block",
+              padding: "1px 5px",
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: "var(--font-mono)",
+              background: "rgba(239, 68, 68, 0.2)",
+              color: "#ef4444",
+              lineHeight: 1.5,
+              whiteSpace: "nowrap",
+              marginRight: 4,
+            }}>
+              DEAD
+            </span>
+          )}
           <span style={{ color: "var(--text)", fontSize: 12, fontWeight: 700, marginRight: 3 }}>#{task.id}</span>
           {hasTags && (
             <span style={{
@@ -176,23 +193,6 @@ function TaskItem({ task, isDead }: { task: BoardTask; isDead?: boolean }) {
               {parsed.effort && <Tag label={parsed.effort} color={itemPrefs.tagColorEffort} />}
               {parsed.tasktype && <Tag label={parsed.tasktype} color={itemPrefs.tagColorTasktype} />}
               <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>]</span>
-            </span>
-          )}
-          {isDead && (
-            <span style={{
-              display: "inline-block",
-              padding: "1px 5px",
-              borderRadius: 4,
-              fontSize: 10,
-              fontWeight: 700,
-              fontFamily: "var(--font-mono)",
-              background: "rgba(239, 68, 68, 0.2)",
-              color: "#ef4444",
-              lineHeight: 1.5,
-              whiteSpace: "nowrap",
-              marginRight: 4,
-            }}>
-              DEAD
             </span>
           )}
           {isBlocked && (
