@@ -4,7 +4,7 @@ import test from "node:test";
 import React from "react";
 import ts from "typescript";
 
-const source = await readFile(new URL("./FileViewer.tsx", import.meta.url), "utf8");
+const source = (await readFile(new URL("./FileViewer.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("large source previews bypass the per-line syntax highlighter", () => {
   assert.match(source, /const SOURCE_HIGHLIGHT_MAX_LINES = 1_000;/);

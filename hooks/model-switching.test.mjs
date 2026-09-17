@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./useAgentSession.ts", import.meta.url), "utf8");
+const source = (await readFile(new URL("./useAgentSession.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const loadSessionSource = source.slice(
   source.indexOf("const loadSession = useCallback"),
   source.indexOf("const loadContext = useCallback"),

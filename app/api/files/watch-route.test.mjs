@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./[...path]/route.ts", import.meta.url), "utf8");
+const source = (await readFile(new URL("./[...path]/route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const start = source.indexOf('if (type === "watch")');
 const end = source.indexOf("// type === \"list\"", start);
 assert.notEqual(start, -1, "watch route not found");

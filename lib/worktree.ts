@@ -99,10 +99,16 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
       "--git-common-dir", "--git-dir", "--show-toplevel",
       "--abbrev-ref", "HEAD",
     ]);
-    const [commonDirRaw, gitDirRaw, toplevelRaw, ref] = out.split("\n").map((l) => l.trim());
+    // git < 2.31 echoes --path-format=absolute as a literal line; strip it.
+    const lines = out.split("\n").map((l) => l.trim()).filter((l) => l !== "--path-format=absolute");
+    const [commonDirRaw, gitDirRaw, toplevelRaw, ref] = lines;
+    // git < 2.31 also returns relative paths; resolve against cwd.
+    const absCommonDir = resolve(cwd, commonDirRaw);
+    const absGitDir = resolve(cwd, gitDirRaw);
+    const absToplevel = resolve(cwd, toplevelRaw);
     // Only the first three lines are paths — `ref` is a branch name and must
     // keep its forward slashes (`feature/foo`).
-    const [commonDir, gitDir, toplevel] = [commonDirRaw, gitDirRaw, toplevelRaw].map(toNativePath);
+    const [commonDir, gitDir, toplevel] = [absCommonDir, absGitDir, absToplevel].map(toNativePath);
     // git prints resolved (symlink-free) paths; normalize cwd the same way
     const realCwd = realPathOrSelf(cwd);
     // For a linked worktree, --git-dir differs from --git-common-dir.
@@ -137,7 +143,10 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
 
 /** Main repo root (parent of the shared .git dir), or throws for non-git dirs */
 async function getRepoRoot(cwd: string): Promise<string> {
-  const commonDir = await git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  const raw = await git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  // git < 2.31 echoes --path-format=absolute as a literal line; take the last non-empty line.
+  const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l && l !== "--path-format=absolute");
+  const commonDir = resolve(cwd, lines[lines.length - 1] || ".");
   return realPathOrSelf(dirname(toNativePath(commonDir)));
 }
 

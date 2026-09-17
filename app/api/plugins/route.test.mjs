@@ -35,7 +35,7 @@ test("lists auto-discovered top-level extensions", async () => {
     kind: "extension",
     name: "rtk",
     path: join(agentDir, "extensions", "rtk.ts"),
-    relativePath: "extensions/rtk.ts",
+    relativePath: join("extensions", "rtk.ts"),
     scope: "global",
     enabled: true,
   }]);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./AgentSessionPanel.tsx", import.meta.url), "utf8");
+const source = (await readFile(new URL("./AgentSessionPanel.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("keeps the main session first and makes every agent session selectable", () => {
   const mainRow = source.indexOf("session={rootSession}");

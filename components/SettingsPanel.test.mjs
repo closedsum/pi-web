@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const panelSource = await readFile(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
-const cssSource = await readFile(new URL("../app/settings.css", import.meta.url), "utf8");
-const globalCssSource = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-const shellSource = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
-const sidebarSource = await readFile(new URL("./SessionSidebar.tsx", import.meta.url), "utf8");
-const themeSource = await readFile(new URL("../hooks/useTheme.ts", import.meta.url), "utf8");
-const themeOptionsSource = await readFile(new URL("../lib/theme.ts", import.meta.url), "utf8");
-const enSource = await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8");
-const zhSource = await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8");
-const loginSource = await readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8");
+const panelSource = (await readFile(new URL("./SettingsPanel.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const cssSource = (await readFile(new URL("../app/settings.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const globalCssSource = (await readFile(new URL("../app/globals.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const shellSource = (await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const sidebarSource = (await readFile(new URL("./SessionSidebar.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const themeSource = (await readFile(new URL("../hooks/useTheme.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const themeOptionsSource = (await readFile(new URL("../lib/theme.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const enSource = (await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const zhSource = (await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const loginSource = (await readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("opens one settings panel from direct sidebar shortcuts", () => {
   assert.match(shellSource, /<SettingsPanel/);
@@ -39,14 +39,14 @@ test("restores the settings section and each list detail selection", async () =>
   assert.match(panelSource, /setLastSettingsSection\(nextSection\)/);
   for (const name of ["ModelsConfig", "SkillsConfig", "AgentsConfig", "PluginsConfig"]) {
     assert.match(
-      await readFile(new URL(`./${name}.tsx`, import.meta.url), "utf8"),
+      (await readFile(new URL(`./${name}.tsx`, import.meta.url), "utf8")).replace(/\r\n/g, "\n"),
       /getLastSettingsSelection/,
     );
   }
 });
 
 test("keeps visited settings sections mounted and contains nested Escape handling", async () => {
-  const modelsSource = await readFile(new URL("./ModelsConfig.tsx", import.meta.url), "utf8");
+  const modelsSource = (await readFile(new URL("./ModelsConfig.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
   assert.match(panelSource, /mountedSections\.has\(id\)/);
   assert.match(panelSource, /hidden=\{section !== id\}/);
   assert.match(panelSource, /event\.defaultPrevented/);

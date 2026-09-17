@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
-const hookSource = await readFile(new URL("../hooks/useAgentSession.ts", import.meta.url), "utf8");
+const source = (await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const hookSource = (await readFile(new URL("../hooks/useAgentSession.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("renders temporary notices once at the top right of the chat column", () => {
   const noticeShelfUsages = source.match(/<NoticeShelf notices=\{notices\}/g) ?? [];

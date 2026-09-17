@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createJiti } from "jiti";
 
-const chatWindow = await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
-const chatInput = await readFile(new URL("./ChatInput.tsx", import.meta.url), "utf8");
-const settingsPanel = await readFile(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
-const globals = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-const chatAppearanceHook = await readFile(new URL("../hooks/useChatAppearance.ts", import.meta.url), "utf8");
+const chatWindow = (await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const chatInput = (await readFile(new URL("./ChatInput.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const settingsPanel = (await readFile(new URL("./SettingsPanel.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const globals = (await readFile(new URL("../app/globals.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const chatAppearanceHook = (await readFile(new URL("../hooks/useChatAppearance.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const jiti = createJiti(import.meta.url);
 const { clampChatContentWidth, clampChatContentFontSize } = await jiti.import("../hooks/useChatAppearance.ts");
 

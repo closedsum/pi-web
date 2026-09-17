@@ -48,7 +48,7 @@ test("preserves status line breaks while normalizing horizontal whitespace", () 
 });
 
 test("preserves explicit status lines without wrapping and scrolls long or tall output", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const css = (await readFile(new URL("../app/globals.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
   const statusLineRule = css.match(/\.extension-status-line\s*\{([^}]*)\}/)?.[1] ?? "";
   const statusTextRule = css.match(/\.extension-status-text\s*\{([^}]*)\}/)?.[1] ?? "";
 

@@ -5,7 +5,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { createJiti } from "jiti";
 
-const source = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
+const source = (await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const jiti = createJiti(import.meta.url);
 const draftStore = await jiti.import("../lib/draft-store.ts");
 
@@ -62,7 +62,7 @@ test("New restores the draft after session navigation and workspace auto-restore
     callbackBody("handleNewSession", "hydrateSelectedSession"),
   ].join("\n");
   const parkedKeyHelper = source.slice(source.indexOf("function parkedNewSessionDraftKey"), source.indexOf("export function AppShell"));
-  const hookSource = await readFile(new URL("../hooks/useAgentSession.ts", import.meta.url), "utf8");
+  const hookSource = (await readFile(new URL("../hooks/useAgentSession.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
   const cleanupStart = hookSource.indexOf("    return () => {", hookSource.indexOf("  // Load session on mount"));
   const cleanupEnd = hookSource.indexOf("    // eslint-disable-next-line", cleanupStart);
 

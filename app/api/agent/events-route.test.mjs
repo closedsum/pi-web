@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const agentEventsSource = await readFile(new URL("./[id]/events/route.ts", import.meta.url), "utf8");
-const agentEventStreamSource = await readFile(new URL("../../../lib/agent-event-stream.ts", import.meta.url), "utf8");
+const agentEventsSource = (await readFile(new URL("./[id]/events/route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const agentEventStreamSource = (await readFile(new URL("../../../lib/agent-event-stream.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("agent SSE starts sessions asynchronously and disables response buffering", () => {
   assert.match(agentEventsSource, /createAgentEventStream\(req, id, sessionPromise\)/);

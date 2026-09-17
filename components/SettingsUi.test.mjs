@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const templateSource = await readFile(new URL("./SettingsUi.tsx", import.meta.url), "utf8");
-const cssSource = await readFile(new URL("../app/settings.css", import.meta.url), "utf8");
-const globalCssSource = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-const layoutSource = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
-const enSource = await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8");
-const zhSource = await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8");
+const templateSource = (await readFile(new URL("./SettingsUi.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const cssSource = (await readFile(new URL("../app/settings.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const globalCssSource = (await readFile(new URL("../app/globals.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const layoutSource = (await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const enSource = (await readFile(new URL("../lib/i18n/messages/en.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const zhSource = (await readFile(new URL("../lib/i18n/messages/zh-CN.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const configSources = await Promise.all(
   ["ModelsConfig", "SkillsConfig", "AgentsConfig", "PluginsConfig"].map(async (name) => [
     name,
-    await readFile(new URL(`./${name}.tsx`, import.meta.url), "utf8"),
+    (await readFile(new URL(`./${name}.tsx`, import.meta.url), "utf8")).replace(/\r\n/g, "\n"),
   ]),
 );
 

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
-const mobileHookSource = await readFile(new URL("../hooks/useIsMobile.ts", import.meta.url), "utf8");
+const source = (await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const mobileHookSource = (await readFile(new URL("../hooks/useIsMobile.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("keeps action icons inline in medium mobile sidebars", () => {
   assert.match(mobileHookSource, /NARROW_MOBILE_QUERY = "\(max-width: 480px\)"/);

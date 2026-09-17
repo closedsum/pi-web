@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const panelSource = await readFile(new URL("./ToolDefinitionsPanel.tsx", import.meta.url), "utf8");
-const systemSource = await readFile(new URL("./SystemPromptPanel.tsx", import.meta.url), "utf8");
-const appShellSource = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
+const panelSource = (await readFile(new URL("./ToolDefinitionsPanel.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const systemSource = (await readFile(new URL("./SystemPromptPanel.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const appShellSource = (await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
 test("keeps System and Tools in separate adjacent toolbar actions", () => {
   assert.match(appShellSource, /handleSystemInfoToggle\("system", mobile\)[\s\S]*?handleSystemInfoToggle\("tools", mobile\)/);

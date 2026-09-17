@@ -121,12 +121,11 @@ export function createTerminal(cwd: string, cols: number, rows: number, id: stri
     emit(record, { type: "output", data, offset: record.offset });
   });
   pty.onExit(({ exitCode }) => {
-    if (record.cleanupTimer) clearTimeout(record.cleanupTimer);
-    record.cleanupTimer = null;
     record.exited = true;
     record.exitCode = exitCode;
     emit(record, { type: "exit", exitCode });
-    scheduleCleanup(id, record);
+    // Only schedule cleanup if no timer is already pending (e.g. unclaimed creation).
+    if (!record.cleanupTimer) scheduleCleanup(id, record);
   });
   return id;
 }

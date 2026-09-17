@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("offers compact quoting controls and sends branch questions through the main chat", async () => {
-  const chatSource = await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8");
-  const shellSource = await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8");
+  const chatSource = (await readFile(new URL("./ChatWindow.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+  const shellSource = (await readFile(new URL("./AppShell.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
   assert.match(chatSource, /onPointerUp=\{captureQuotedSelection\}/);
   assert.match(chatSource, /closest<HTMLElement>\("\[data-message-role=/);

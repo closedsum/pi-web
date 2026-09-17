@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createJiti } from "jiti";
 
-const source = await readFile(new URL("./SkillsConfig.tsx", import.meta.url), "utf8");
+const source = (await readFile(new URL("./SkillsConfig.tsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const jiti = createJiti(import.meta.url, {
   jsx: { runtime: "automatic" },
   tsconfigPaths: true,

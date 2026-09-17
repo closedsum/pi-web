@@ -6,7 +6,7 @@ import ts from "typescript";
 
 const source = ts.createSourceFile(
   "useAgentSession.ts",
-  await readFile(new URL("./useAgentSession.ts", import.meta.url), "utf8"),
+  (await readFile(new URL("./useAgentSession.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n"),
   ts.ScriptTarget.Latest,
   true,
 );

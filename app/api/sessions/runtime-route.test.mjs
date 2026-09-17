@@ -6,10 +6,10 @@ import { gunzipSync } from "node:zlib";
 import test from "node:test";
 import { createJiti } from "jiti";
 
-const listRoute = await readFile(new URL("./route.ts", import.meta.url), "utf8");
-const detailRoute = await readFile(new URL("./[id]/route.ts", import.meta.url), "utf8");
-const contextRoute = await readFile(new URL("./[id]/context/route.ts", import.meta.url), "utf8");
-const stateRoute = await readFile(new URL("./[id]/state/route.ts", import.meta.url), "utf8");
+const listRoute = (await readFile(new URL("./route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const detailRoute = (await readFile(new URL("./[id]/route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const contextRoute = (await readFile(new URL("./[id]/context/route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+const stateRoute = (await readFile(new URL("./[id]/state/route.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const jiti = createJiti(import.meta.url, {
   alias: { "@": process.cwd() },
   interopDefault: true,
