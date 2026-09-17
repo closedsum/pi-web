@@ -1094,6 +1094,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
   const resultIsEmpty = resultText === null ? false : (resultText.trim() === "(no output)" || resultText.trim() === "");
   const isError = result?.isError ?? false;
   const subagent = isSubagentToolDetails(result?.details) ? result.details : null;
+  const resultSummary = useMemo(() => getResultSummary(result), [result]);
 
   const inProgress = !result;
   const borderColor = isError ? "rgba(248,113,113,0.6)" : inProgress ? "rgba(59,130,246,0.5)" : "rgba(34,197,94,0.4)";
@@ -1135,8 +1136,13 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
           <span className={inProgress ? "tool-name-active" : undefined} style={{ color: nameColor, fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
             {block.toolName}
           </span>
+          {resultSummary && (
+            <span style={{ color: nameColor, fontFamily: "var(--font-mono)", fontSize: 11, flexShrink: 0, opacity: 0.8 }}>
+              {resultSummary}
+            </span>
+          )}
           <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-            {isStreamingInput ? t("chat.generatingToolInput") : getToolPreview(block)}
+            {isStreamingInput ? t("chat.generatingToolInput") : (resultSummary ? "" : getToolPreview(block))}
           </span>
           {!result ? (
             <ToolElapsedTimer startTimestamp={mountTimeRef.current} />
@@ -1798,6 +1804,25 @@ function previewText(text: string): string {
   return normalized.length > 140 ? `${normalized.slice(0, 140)}...` : normalized;
 }
 
+
+function getResultSummary(result: ToolResultMessage | undefined): string {
+  if (!result) return "";
+  const text = result.content
+    .filter((b): b is { type: "text"; text: string } => b.type === "text")
+    .map((b) => b.text).join("\n");
+  if (!text) return "";
+  try {
+    const json = JSON.parse(text);
+    if (json.planned_args && Array.isArray(json.planned_args) && json.planned_args.length > 0) {
+      const verb = json.planned_args[0];
+      const timing = json.timing;
+      const totalSec = timing && timing.total_ms ? `${(timing.total_ms / 1000).toFixed(1)}s` : "";
+      return `→ ${verb}${totalSec ? ` [${totalSec}]` : ""}`;
+    }
+    if (json.verb) return `→ ${json.verb}`;
+  } catch {}
+  return "";
+}
 
 function getToolPreview(block: ToolCallContent): string {
   const input = block.input;
