@@ -1598,14 +1598,14 @@ export function AppShell() {
         : String(value);
     const costText = cost > 0 ? (cost >= 0.01 ? `$${cost.toFixed(2)}` : `<$0.01`) : null;
 
-    let contextColor = "#16a34a";
+    let contextColor = "rgba(0,255,0,0.95)";
     let desktopContextText: string | null = null;
     let mobileContextText: string | null = null;
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
       if (percent !== null && percent > 90) contextColor = "#ef4444";
       else if (percent !== null && percent > 70) contextColor = "rgba(234,179,8,0.95)";
-      else contextColor = "#16a34a";
+      else contextColor = "rgba(0,255,0,0.95)";
       desktopContextText = percent !== null
         ? `${percent.toFixed(0)}% / ${formatCompact(contextUsage.contextWindow)}`
         : `? / ${formatCompact(contextUsage.contextWindow)}`;
