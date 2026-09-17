@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import type { BoardTask, TaskBoardData } from "@/lib/task-board";
+import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
 
 const STATUS_ORDER: BoardTask["status"][] = ["in_progress", "pending", "completed"];
 const STATUS_LABELS: Record<BoardTask["status"], string> = {
@@ -187,6 +188,7 @@ function TaskItem({ task }: { task: BoardTask }) {
               BLOCKED ({task.blockedBy.map((id) => `#${id}`).join(", ")})
             </span>
           )}
+          <span style={{ color: "var(--text-dim)", fontSize: 10, marginRight: 2 }}>#{task.id}</span>
           {parsed.title}
         </span>
       </button>
@@ -277,10 +279,12 @@ function StatusSection({ status, tasks }: { status: BoardTask["status"]; tasks: 
 }
 
 export function TaskPanel({ cwd }: { cwd: string | null }) {
+  const { prefs } = useLayoutPreferences();
   const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionStartRef = useRef(new Date().toISOString());
+  const pollMs = prefs.taskPollInterval * 1000;
 
   const fetchBoard = useCallback(async () => {
     if (!cwd) return;
@@ -300,11 +304,11 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
 
   useEffect(() => {
     fetchBoard();
-    timerRef.current = setInterval(fetchBoard, POLL_INTERVAL_MS);
+    timerRef.current = setInterval(fetchBoard, pollMs);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetchBoard]);
+  }, [fetchBoard, pollMs]);
 
   const sessionStart = sessionStartRef.current;
   const grouped = new Map<BoardTask["status"], BoardTask[]>();
@@ -313,7 +317,7 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
   if (data) {
     for (const task of data.tasks) {
       if (task.status === "completed") {
-        if (task.completed_at && task.completed_at >= sessionStart) {
+        if (prefs.completedScope === "all" || (task.completed_at && task.completed_at >= sessionStart)) {
           grouped.get("completed")!.push(task);
           sessionCompletedCount++;
         }
@@ -321,6 +325,9 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
         const list = grouped.get(task.status);
         if (list) list.push(task);
       }
+    }
+    for (const status of ["in_progress", "pending"] as const) {
+      grouped.get(status)!.sort((a, b) => a.created_at.localeCompare(b.created_at));
     }
   }
 

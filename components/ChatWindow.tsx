@@ -246,6 +246,9 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
+  const [processDetailsCollapsed] = useState(() => {
+    try { return window.localStorage.getItem("pi-layout:processDetailsCollapsed") !== "false"; } catch { return true; }
+  });
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
   // wrapping handleAgentEventRef because useAgentSession overwrites that ref
@@ -1178,7 +1181,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                       key={`process-group-${entryIds[userIdx] ?? userIdx}`}
                       ref={processRefIdx === undefined ? undefined : (el) => { messageRefs.current[processRefIdx] = el; }}
                     >
-                      <ProcessDetailsGroup messageCount={processViews.length} toolCallCount={processToolCount} defaultExpanded={false} reveal={revealProcess} t={t}>
+                      <ProcessDetailsGroup messageCount={processViews.length} toolCallCount={processToolCount} defaultExpanded={processDetailsCollapsed ? false : !finalAnswerMessage} reveal={revealProcess} t={t}>
                         {processViews}
                       </ProcessDetailsGroup>
                     </div>,

@@ -8,6 +8,7 @@ import { ChatWindow } from "./ChatWindow";
 import type { ChatScrollPosition } from "@/lib/chat-scroll-position";
 import { FileViewer } from "./FileViewer";
 import { TaskPanel } from "./task-panel/TaskPanel";
+import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
 import { TabBar, type Tab } from "./TabBar";
 import { openFileTab, saveFileViewerState } from "./file-tab-state";
 import { SettingsPanel, SettingsSectionIcon } from "./SettingsPanel";
@@ -88,6 +89,7 @@ export function AppShell() {
   useTheme();
   const { locale, t: translate } = useI18n();
   const isMobile = useIsMobile();
+  const { prefs: layoutPrefs } = useLayoutPreferences();
   const isNarrowMobile = useIsNarrowMobile();
   useViewportHeight();
 
@@ -1598,14 +1600,14 @@ export function AppShell() {
         : String(value);
     const costText = cost > 0 ? (cost >= 0.01 ? `$${cost.toFixed(2)}` : `<$0.01`) : null;
 
-    let contextColor = "rgba(0,255,0,0.95)";
+    let contextColor = layoutPrefs.contextBarColor;
     let desktopContextText: string | null = null;
     let mobileContextText: string | null = null;
     if (contextUsage?.contextWindow) {
       const percent = contextUsage.percent;
       if (percent !== null && percent > 90) contextColor = "#ef4444";
       else if (percent !== null && percent > 70) contextColor = "rgba(234,179,8,0.95)";
-      else contextColor = "rgba(0,255,0,0.95)";
+      else contextColor = layoutPrefs.contextBarColor;
       desktopContextText = percent !== null
         ? `${percent.toFixed(0)}% / ${formatCompact(contextUsage.contextWindow)}`
         : `? / ${formatCompact(contextUsage.contextWindow)}`;
@@ -1964,7 +1966,7 @@ export function AppShell() {
       )}
 
       {/* Task panel */}
-      {!isMobile && (
+      {!isMobile && layoutPrefs.taskPanelEnabled && (
         <div
           ref={taskPanelResizer.panelRef}
           id="task-panel"
@@ -1980,7 +1982,7 @@ export function AppShell() {
           <TaskPanel cwd={selectedSession?.cwd ?? activeCwd} />
         </div>
       )}
-      {!isMobile && taskPanelOpen && (
+      {!isMobile && layoutPrefs.taskPanelEnabled && taskPanelOpen && (
         <div
           {...taskPanelResizer.separatorProps}
           aria-controls="task-panel"
@@ -2399,20 +2401,22 @@ export function AppShell() {
               onExtensionWidgetsChange={handleExtensionWidgetsChange}
               onRequestNewSession={() => {
                 const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd ?? "";
-                fetch("/api/sessions")
-                  .then((r) => r.json())
-                  .then((data: { sessions?: Array<{ id: string; cwd?: string }> }) => {
-                    const toDelete = (data.sessions ?? []).filter(
-                      (s) => s.cwd === cwd && !runningSessionIds.has(s.id),
-                    );
-                    return Promise.all(
-                      toDelete.map((s) =>
-                        fetch(`/api/sessions/${encodeURIComponent(s.id)}`, { method: "DELETE" }).catch(() => {}),
-                      ),
-                    );
-                  })
-                  .then(() => setRefreshKey((k) => k + 1))
-                  .catch(() => {});
+                if (layoutPrefs.clearSessionsOnNew) {
+                  fetch("/api/sessions")
+                    .then((r) => r.json())
+                    .then((data: { sessions?: Array<{ id: string; cwd?: string }> }) => {
+                      const toDelete = (data.sessions ?? []).filter(
+                        (s) => s.cwd === cwd && !runningSessionIds.has(s.id),
+                      );
+                      return Promise.all(
+                        toDelete.map((s) =>
+                          fetch(`/api/sessions/${encodeURIComponent(s.id)}`, { method: "DELETE" }).catch(() => {}),
+                        ),
+                      );
+                    })
+                    .then(() => setRefreshKey((k) => k + 1))
+                    .catch(() => {});
+                }
                 handleNewSession(`new-${Date.now()}`, cwd);
               }}
             />

@@ -15,7 +15,7 @@ const DEFAULTS = {
 
 export type LayoutPreferences = typeof DEFAULTS;
 
-function readPref<K extends keyof LayoutPreferences>(key: K): LayoutPreferences[K] {
+export function readPref<K extends keyof LayoutPreferences>(key: K): LayoutPreferences[K] {
   try {
     const stored = window.localStorage.getItem(STORAGE_PREFIX + key);
     if (stored === null) return DEFAULTS[key];
