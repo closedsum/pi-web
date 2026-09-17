@@ -67,7 +67,7 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
   const { locale, setLocale, supportedLocales, t } = useI18n();
   const { preference, setThemePreference } = useTheme();
   const { width: chatContentWidth, setWidth: setChatContentWidth, fontSize, setFontSize } = useChatAppearance();
-  const { prefs: layoutPrefs, setPref: setLayoutPref } = useLayoutPreferences();
+  const { prefs: layoutPrefs, setPref: setLayoutPref, resetAll: resetLayoutPrefs } = useLayoutPreferences();
   const [shellSettings, setShellSettings] = useState<ShellToolSettingsResponse | null>(null);
   const [shellSaving, setShellSaving] = useState(false);
   const [shellError, setShellError] = useState<string | null>(null);
@@ -369,6 +369,15 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
               <option value="#22c55e">Green</option>
               <option value="var(--text-muted)">Muted</option>
             </select>
+          </div>
+          <div className="settings-chat-option settings-layout-reset-row">
+            <button
+              type="button"
+              className="settings-layout-reset"
+              onClick={resetLayoutPrefs}
+            >
+              Reset to defaults
+            </button>
           </div>
         </div>
       </section>

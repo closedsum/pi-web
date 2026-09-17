@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 
 const STORAGE_PREFIX = "pi-layout:";
 
-const DEFAULTS = {
+export const LAYOUT_DEFAULTS = {
   taskPanelEnabled: true,
   taskPollInterval: 5,
   completedScope: "session" as "session" | "all",
@@ -17,17 +17,17 @@ const DEFAULTS = {
   tagColorTasktype: "#facc15",
 };
 
-export type LayoutPreferences = typeof DEFAULTS;
+export type LayoutPreferences = typeof LAYOUT_DEFAULTS;
 
 export function readPref<K extends keyof LayoutPreferences>(key: K): LayoutPreferences[K] {
   try {
     const stored = window.localStorage.getItem(STORAGE_PREFIX + key);
-    if (stored === null) return DEFAULTS[key];
-    if (typeof DEFAULTS[key] === "boolean") return (stored === "true") as LayoutPreferences[K];
-    if (typeof DEFAULTS[key] === "number") return Number(stored) as LayoutPreferences[K];
+    if (stored === null) return LAYOUT_DEFAULTS[key];
+    if (typeof LAYOUT_DEFAULTS[key] === "boolean") return (stored === "true") as LayoutPreferences[K];
+    if (typeof LAYOUT_DEFAULTS[key] === "number") return Number(stored) as LayoutPreferences[K];
     return stored as LayoutPreferences[K];
   } catch {
-    return DEFAULTS[key];
+    return LAYOUT_DEFAULTS[key];
   }
 }
 
@@ -36,11 +36,11 @@ function writePref<K extends keyof LayoutPreferences>(key: K, value: LayoutPrefe
 }
 
 export function useLayoutPreferences() {
-  const [prefs, setPrefs] = useState<LayoutPreferences>(DEFAULTS);
+  const [prefs, setPrefs] = useState<LayoutPreferences>(LAYOUT_DEFAULTS);
 
   useEffect(() => {
-    const loaded: LayoutPreferences = { ...DEFAULTS };
-    for (const key of Object.keys(DEFAULTS) as (keyof LayoutPreferences)[]) {
+    const loaded: LayoutPreferences = { ...LAYOUT_DEFAULTS };
+    for (const key of Object.keys(LAYOUT_DEFAULTS) as (keyof LayoutPreferences)[]) {
       (loaded as Record<string, unknown>)[key] = readPref(key);
     }
     setPrefs(loaded);
@@ -51,5 +51,12 @@ export function useLayoutPreferences() {
     setPrefs((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  return { prefs, setPref };
+  const resetAll = useCallback(() => {
+    for (const key of Object.keys(LAYOUT_DEFAULTS) as (keyof LayoutPreferences)[]) {
+      try { window.localStorage.removeItem(STORAGE_PREFIX + key); } catch {}
+    }
+    setPrefs({ ...LAYOUT_DEFAULTS });
+  }, []);
+
+  return { prefs, setPref, resetAll };
 }

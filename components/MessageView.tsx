@@ -1061,11 +1061,14 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
   return (
     <div
       style={{
-        borderRadius: 7,
+        borderRadius: 5,
         overflow: "hidden",
         fontSize: 12,
-        border: isError ? "1px solid rgba(248,113,113,0.45)" : "1px solid rgba(34,197,94,0.25)",
-        background: isError ? "rgba(248,113,113,0.05)" : "rgba(34,197,94,0.04)",
+        borderLeft: isError ? "2px solid rgba(248,113,113,0.6)" : "2px solid rgba(34,197,94,0.35)",
+        border: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.12)",
+        borderLeftWidth: 2,
+        borderLeftColor: isError ? "rgba(248,113,113,0.6)" : "rgba(34,197,94,0.4)",
+        background: "transparent",
       }}
     >
       {/* ── Tool call header ── */}
@@ -1075,10 +1078,10 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 7,
+            gap: 5,
             flex: 1,
             minWidth: 0,
-            padding: "6px 10px",
+            padding: "3px 8px",
             background: "none",
             border: "none",
             color: "var(--text-muted)",

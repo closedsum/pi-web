@@ -1041,6 +1041,20 @@
   cursor: pointer;
 }
 
+.settings-layout-reset {
+  padding: 5px 14px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.settings-layout-reset-row {
+  padding-top: 8px;
+}
+
 .settings-chat-range-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 28px;
