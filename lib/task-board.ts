@@ -19,18 +19,23 @@ export interface TaskBoardData {
 }
 
 export function parseBoard(lines: string[]): BoardTask[] {
-  const tasks: BoardTask[] = [];
+  const byKey = new Map<string, BoardTask>();
+  const order: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
       const obj = JSON.parse(trimmed);
-      if (obj.subject) tasks.push(obj as BoardTask);
+      if (!obj.subject) continue;
+      const task = obj as BoardTask;
+      const key = `${task.id}\0${task.session_id}`;
+      if (!byKey.has(key)) order.push(key);
+      byKey.set(key, task);
     } catch {
       // skip malformed lines
     }
   }
-  return tasks;
+  return order.map((k) => byKey.get(k)!);
 }
 
 export function countByStatus(tasks: BoardTask[]): TaskBoardData["counts"] {
