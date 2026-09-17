@@ -370,6 +370,20 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
               <option value="var(--text-muted)">Muted</option>
             </select>
           </div>
+          <div className="settings-chat-option settings-chat-range-option">
+            <div className="settings-chat-range-header">
+              <label htmlFor="settings-collapse-patterns">Auto-collapse patterns</label>
+            </div>
+            <input
+              id="settings-collapse-patterns"
+              type="text"
+              className="settings-layout-text-input"
+              value={layoutPrefs.collapsePatterns}
+              onChange={(e) => setLayoutPref("collapsePatterns", e.target.value)}
+              placeholder="gsd-ue-dispatch,UE-ACTION-DISPATCH,..."
+            />
+            <span className="settings-layout-hint">Comma-separated. Messages containing any pattern collapse by default.</span>
+          </div>
           <div className="settings-chat-option settings-layout-reset-row">
             <button
               type="button"

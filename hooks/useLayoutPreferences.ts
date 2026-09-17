@@ -15,6 +15,7 @@ export const LAYOUT_DEFAULTS = {
   tagColorModel: "#a78bfa",
   tagColorEffort: "#60a5fa",
   tagColorTasktype: "#facc15",
+  collapsePatterns: "gsd-ue-dispatch,UE-ACTION-DISPATCH,FORK-LEDGER,SESSION-REMINDER,GAP-ENFORCEMENT,TASK-ROUTING" as string,
 };
 
 export type LayoutPreferences = typeof LAYOUT_DEFAULTS;
@@ -59,4 +60,13 @@ export function useLayoutPreferences() {
   }, []);
 
   return { prefs, setPref, resetAll };
+}
+
+export function parseCollapsePatterns(raw: string): string[] {
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+export function shouldCollapseContent(text: string, patterns: string[]): boolean {
+  if (!text || patterns.length === 0) return false;
+  return patterns.some((p) => text.includes(p));
 }

@@ -1492,6 +1492,17 @@ span.token.table {
   50% { opacity: 0.3; }
 }
 
+@keyframes tool-name-shimmer {
+  0% { opacity: 1; }
+  30% { opacity: 0.5; }
+  60% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+.tool-name-active {
+  animation: tool-name-shimmer 2s ease-in-out infinite;
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

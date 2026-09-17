@@ -15,6 +15,7 @@ import { isThinkingExpandedByDefault, THINKING_EXPANDED_EVENT } from "@/lib/thin
 import { TurnWrittenFiles } from "./TurnWrittenFiles";
 import type { WrittenFile } from "@/lib/turn-written-files";
 import { skillExpansionToCommand } from "@/lib/slash-display";
+import { readPref, parseCollapsePatterns, shouldCollapseContent } from "@/hooks/useLayoutPreferences";
 import type { SubagentToolDetails } from "@/lib/subagent-extension";
 import type {
   AgentMessage,
@@ -348,6 +349,10 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
     ? commandText.slice(commandSeparator + 1)
     : "";
 
+  const collapsePatterns = useMemo(() => parseCollapsePatterns(readPref("collapsePatterns")), []);
+  const autoCollapse = !commandText && shouldCollapseContent(content, collapsePatterns);
+  const [contentCollapsed, setContentCollapsed] = useState(autoCollapse);
+
   const time = formatTime(message.timestamp);
   const canFork = !!entryId && !!onFork;
   const copyTarget = commandText ?? content;
@@ -468,6 +473,38 @@ function UserMessageView({ message, cwd, onOpenFile, entryId, onFork, forking, o
               </div>
               {expanded && (
                 <MarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</MarkdownBody>
+              )}
+            </div>
+          ) : autoCollapse ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+              {imageBlocksNode}
+              <button
+                onClick={() => setContentCollapsed((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: 0,
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-dim)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "calc(12px + var(--chat-font-size-offset, 0px))",
+                  textAlign: "left",
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: contentCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.15s" }}>
+                  <polyline points="2 3.5 5 6.5 8 3.5" />
+                </svg>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {content.split("\n")[0].slice(0, 60) || "hook output"}
+                </span>
+              </button>
+              {!contentCollapsed && (
+                <div style={{ borderLeft: "2px solid var(--border)", paddingLeft: 8, marginTop: 2 }}>
+                  <SafeMarkdownBody className="markdown-user-message" cwd={cwd} onOpenFile={onOpenFile}>{content}</SafeMarkdownBody>
+                </div>
               )}
             </div>
           ) : (
@@ -1068,7 +1105,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
         border: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.12)",
         borderLeftWidth: 2,
         borderLeftColor: isError ? "rgba(248,113,113,0.6)" : "rgba(34,197,94,0.4)",
-        background: "transparent",
+        background: isError ? "rgba(248,113,113,0.04)" : "rgba(34,197,94,0.06)",
       }}
     >
       {/* ── Tool call header ── */}
@@ -1090,7 +1127,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
             textAlign: "left",
           }}
         >
-          <span style={{ color: isError ? "#f87171" : "#16a34a", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+          <span className={!result ? "tool-name-active" : undefined} style={{ color: isError ? "#f87171" : "#16a34a", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
             {block.toolName}
           </span>
           <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
