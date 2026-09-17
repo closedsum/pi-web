@@ -384,6 +384,24 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
             />
             <span className="settings-layout-hint">Comma-separated. Messages containing any pattern collapse by default.</span>
           </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Process header color</span>
+            <select className="settings-layout-select" value={layoutPrefs.processHeaderColor} onChange={(e) => setLayoutPref("processHeaderColor", e.target.value)}>
+              <option value="var(--text-muted)">Muted (default)</option>
+              <option value="#16a34a">Green</option>
+              <option value="#3b82f6">Blue</option>
+              <option value="#a78bfa">Purple</option>
+              <option value="#f59e0b">Orange</option>
+              <option value="var(--text)">Normal text</option>
+            </select>
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Process header font</span>
+            <select className="settings-layout-select" value={layoutPrefs.processHeaderStyle} onChange={(e) => setLayoutPref("processHeaderStyle", e.target.value as "normal" | "mono")}>
+              <option value="normal">Normal</option>
+              <option value="mono">Monospace</option>
+            </select>
+          </div>
           <div className="settings-chat-option settings-layout-reset-row">
             <button
               type="button"

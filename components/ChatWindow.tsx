@@ -196,13 +196,43 @@ function withAssistantBlocks(
   return next;
 }
 
-function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = false, reveal = false, children, t }: { messageCount: number; toolCallCount: number; defaultExpanded?: boolean; reveal?: boolean; children: ReactNode; t: (key: string, params?: Record<string, string | number>) => string }) {
+interface ProcessDetailsProps {
+  messageCount: number;
+  toolCallCount: number;
+  toolNames?: string[];
+  usage?: { input: number; output: number; cost: number };
+  elapsedMs?: number;
+  headerColor?: string;
+  headerFont?: "normal" | "mono";
+  defaultExpanded?: boolean;
+  reveal?: boolean;
+  children: ReactNode;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}
+
+function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, elapsedMs, headerColor, headerFont, defaultExpanded = false, reveal = false, children, t }: ProcessDetailsProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   useLayoutEffect(() => {
     if (reveal) setExpanded(true);
   }, [reveal]);
-  const parts = [t("chat.processDetails"), `${messageCount} ${t(messageCount === 1 ? "chat.message" : "chat.messages")}`];
-  if (toolCallCount > 0) parts.push(`${toolCallCount} ${t(toolCallCount === 1 ? "chat.toolCall" : "chat.toolCalls")}`);
+
+  const mainParts = [t("chat.processDetails")];
+  mainParts.push(`${messageCount} ${t(messageCount === 1 ? "chat.message" : "chat.messages")}`);
+  if (toolCallCount > 0) mainParts.push(`${toolCallCount} ${t(toolCallCount === 1 ? "chat.toolCall" : "chat.toolCalls")}`);
+
+  const toolNameTag = toolNames && toolNames.length > 0
+    ? `[${toolNames.join(", ")}]`
+    : "";
+
+  const usageTag = usage && (usage.input > 0 || usage.output > 0)
+    ? `${usage.input.toLocaleString()} in · ${usage.output.toLocaleString()} out${usage.cost > 0 ? ` · $${usage.cost.toFixed(4)}` : ""}`
+    : "";
+
+  const timeTag = elapsedMs !== undefined && elapsedMs > 0
+    ? elapsedMs >= 60_000
+      ? `${(elapsedMs / 60_000).toFixed(1)}m`
+      : `${(elapsedMs / 1000).toFixed(1)}s`
+    : "";
 
   return (
     <div style={{ marginBottom: 14 }}>
@@ -213,25 +243,42 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = fa
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           width: "auto",
           minHeight: 24,
           padding: "2px 0",
           border: "none",
           background: "transparent",
-          color: "var(--text-muted)",
+          color: headerColor || "var(--text-muted)",
           cursor: "pointer",
           fontSize: 12,
           textAlign: "left",
+          flexWrap: "wrap",
+          fontFamily: headerFont === "mono" ? "var(--font-mono)" : "inherit",
         }}
         title={expanded ? t("chat.collapseProcess") : t("chat.expandProcess")}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
           <polyline points="4 2.5 7.5 6 4 9.5" />
         </svg>
-        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {parts.join(" · ")}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {mainParts.join(" · ")}
         </span>
+        {toolNameTag && (
+          <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+            {toolNameTag}
+          </span>
+        )}
+        {usageTag && (
+          <span style={{ color: "var(--text-dim)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
+            {usageTag}
+          </span>
+        )}
+        {timeTag && (
+          <span style={{ color: "var(--text-dim)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
+            {timeTag}
+          </span>
+        )}
       </button>
       {(expanded || reveal) && (
         <div style={{ marginTop: 8 }}>
@@ -248,6 +295,12 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
   const [processDetailsCollapsed] = useState(() => {
     try { return window.localStorage.getItem("pi-layout:processDetailsCollapsed") !== "false"; } catch { return true; }
+  });
+  const [processHeaderColor] = useState(() => {
+    try { return window.localStorage.getItem("pi-layout:processHeaderColor") || "var(--text-muted)"; } catch { return "var(--text-muted)"; }
+  });
+  const [processHeaderFont] = useState<"normal" | "mono">(() => {
+    try { return (window.localStorage.getItem("pi-layout:processHeaderStyle") || "normal") as "normal" | "mono"; } catch { return "normal"; }
   });
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
@@ -1150,12 +1203,22 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                 let processToolCount = 0;
                 let processRefIdx: number | undefined;
                 let revealProcess = false;
+                const processToolNames: string[] = [];
+                let processUsageIn = 0;
+                let processUsageOut = 0;
+                let processUsageCost = 0;
+                let processFirstTs: number | undefined;
+                let processLastTs: number | undefined;
 
                 for (let processIdx = userIdx + 1; processIdx <= finalAssistantIdx; processIdx++) {
                   const processMessage = messages[processIdx];
                   if (processMessage.role === "custom") {
                     revealProcess ||= Boolean(pendingSearchScroll && pendingSearchScroll.entryId === entryIds[processIdx]);
                     processViews.push(renderMessage(processIdx, { attachRef: false, keyPrefix: "process" }));
+                    if (processMessage.timestamp) {
+                      processFirstTs = processFirstTs === undefined ? processMessage.timestamp : Math.min(processFirstTs, processMessage.timestamp);
+                      processLastTs = processLastTs === undefined ? processMessage.timestamp : Math.max(processLastTs, processMessage.timestamp);
+                    }
                     continue;
                   }
                   if (processMessage.role !== "assistant") continue;
@@ -1165,7 +1228,23 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                   const blocks = getDisplayableAssistantBlocks(message);
                   if (blocks.length === 0) continue;
                   processRefIdx ??= visibleRefIndexByMessage.get(processIdx);
-                  processToolCount += countToolCallBlocks(blocks);
+                  const toolCount = countToolCallBlocks(blocks);
+                  processToolCount += toolCount;
+                  for (const b of blocks) {
+                    if (b.type === "toolCall" && !processToolNames.includes(b.toolName)) {
+                      processToolNames.push(b.toolName);
+                    }
+                  }
+                  const u = (processMessage as AssistantMessage).usage;
+                  if (u) {
+                    processUsageIn += u.input;
+                    processUsageOut += u.output;
+                    processUsageCost += u.cost?.total || 0;
+                  }
+                  if (processMessage.timestamp) {
+                    processFirstTs = processFirstTs === undefined ? processMessage.timestamp : Math.min(processFirstTs, processMessage.timestamp);
+                    processLastTs = processLastTs === undefined ? processMessage.timestamp : Math.max(processLastTs, processMessage.timestamp);
+                  }
                   revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (!searchBlock || blocks.includes(searchBlock)));
                   processViews.push(renderMessage(processIdx, {
                     attachRef: false,
@@ -1181,7 +1260,18 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                       key={`process-group-${entryIds[userIdx] ?? userIdx}`}
                       ref={processRefIdx === undefined ? undefined : (el) => { messageRefs.current[processRefIdx] = el; }}
                     >
-                      <ProcessDetailsGroup messageCount={processViews.length} toolCallCount={processToolCount} defaultExpanded={processDetailsCollapsed ? false : !finalAnswerMessage} reveal={revealProcess} t={t}>
+                      <ProcessDetailsGroup
+                        messageCount={processViews.length}
+                        toolCallCount={processToolCount}
+                        toolNames={processToolNames}
+                        usage={processUsageIn > 0 || processUsageOut > 0 ? { input: processUsageIn, output: processUsageOut, cost: processUsageCost } : undefined}
+                        elapsedMs={processFirstTs !== undefined && processLastTs !== undefined ? processLastTs - processFirstTs : undefined}
+                        headerColor={processHeaderColor}
+                        headerFont={processHeaderFont}
+                        defaultExpanded={processDetailsCollapsed ? false : !finalAnswerMessage}
+                        reveal={revealProcess}
+                        t={t}
+                      >
                         {processViews}
                       </ProcessDetailsGroup>
                     </div>,

@@ -16,6 +16,8 @@ export const LAYOUT_DEFAULTS = {
   tagColorEffort: "#60a5fa",
   tagColorTasktype: "#facc15",
   collapsePatterns: "gsd-ue-dispatch,UE-ACTION-DISPATCH,FORK-LEDGER,SESSION-REMINDER,GAP-ENFORCEMENT,TASK-ROUTING" as string,
+  processHeaderColor: "var(--text-muted)" as string,
+  processHeaderStyle: "normal" as "normal" | "mono",
 };
 
 export type LayoutPreferences = typeof LAYOUT_DEFAULTS;
