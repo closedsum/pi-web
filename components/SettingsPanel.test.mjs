@@ -74,9 +74,13 @@ test("groups chat display controls together without row backgrounds", () => {
     panelSource.indexOf('{t("settings.appearance")}'),
     panelSource.indexOf('{t("settings.chat")}'),
   );
+  const layoutMarker = panelSource.indexOf(">Layout<");
+  const chatSectionEnd = layoutMarker !== -1
+    ? layoutMarker
+    : panelSource.indexOf("{shellSettings?.isWindows");
   const chatSection = panelSource.slice(
     panelSource.indexOf('{t("settings.chat")}'),
-    panelSource.indexOf("{shellSettings?.isWindows"),
+    chatSectionEnd,
   );
 
   assert.doesNotMatch(appearanceSection, /settings-chat-content/);

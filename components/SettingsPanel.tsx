@@ -30,6 +30,7 @@ import { SkillsConfig } from "./SkillsConfig";
 import { AgentsConfig } from "./AgentsConfig";
 import { PluginsConfig } from "./PluginsConfig";
 import { ConfigButton, ConfigSwitch } from "./SettingsUi";
+import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
 
 interface Props {
   cwd: string | null;
@@ -66,6 +67,7 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
   const { locale, setLocale, supportedLocales, t } = useI18n();
   const { preference, setThemePreference } = useTheme();
   const { width: chatContentWidth, setWidth: setChatContentWidth, fontSize, setFontSize } = useChatAppearance();
+  const { prefs: layoutPrefs, setPref: setLayoutPref } = useLayoutPreferences();
   const [shellSettings, setShellSettings] = useState<ShellToolSettingsResponse | null>(null);
   const [shellSaving, setShellSaving] = useState(false);
   const [shellError, setShellError] = useState<string | null>(null);
@@ -264,6 +266,74 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
               label={t("settings.quoteSelection")}
               onChange={onQuoteSelectionChange}
             />
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-general-section">
+        <h3 className="settings-general-heading">Layout</h3>
+        <div className="settings-chat-options">
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Task panel</span>
+            <ConfigSwitch
+              checked={layoutPrefs.taskPanelEnabled}
+              label="Task panel"
+              onChange={(v) => setLayoutPref("taskPanelEnabled", v)}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Clear sessions on /new</span>
+            <ConfigSwitch
+              checked={layoutPrefs.clearSessionsOnNew}
+              label="Clear sessions on /new"
+              onChange={(v) => setLayoutPref("clearSessionsOnNew", v)}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Collapse process details</span>
+            <ConfigSwitch
+              checked={layoutPrefs.processDetailsCollapsed}
+              label="Collapse process details"
+              onChange={(v) => setLayoutPref("processDetailsCollapsed", v)}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Show only session completed</span>
+            <ConfigSwitch
+              checked={layoutPrefs.completedScope === "session"}
+              label="Show only session completed"
+              onChange={(v) => setLayoutPref("completedScope", v ? "session" : "all")}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-range-option">
+            <div className="settings-chat-range-header">
+              <label htmlFor="settings-task-poll">Task poll interval</label>
+              <output htmlFor="settings-task-poll">{layoutPrefs.taskPollInterval}s</output>
+            </div>
+            <input
+              id="settings-task-poll"
+              type="range"
+              min={2}
+              max={30}
+              step={1}
+              value={layoutPrefs.taskPollInterval}
+              onChange={(e) => setLayoutPref("taskPollInterval", Number(e.target.value))}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Context bar color</span>
+            <select
+              id="settings-context-color"
+              className="settings-layout-select"
+              value={layoutPrefs.contextBarColor}
+              onChange={(e) => setLayoutPref("contextBarColor", e.target.value)}
+            >
+              <option value="rgba(0,255,0,0.95)">Bright green</option>
+              <option value="#22c55e">Soft green</option>
+              <option value="#16a34a">Deep green</option>
+              <option value="#3b82f6">Blue</option>
+              <option value="var(--text-muted)">Muted</option>
+            </select>
           </div>
         </div>
       </section>
