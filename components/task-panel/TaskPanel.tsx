@@ -133,7 +133,7 @@ function TaskItem({ task }: { task: BoardTask }) {
           color: "var(--text)",
           cursor: "pointer",
           textAlign: "left",
-          fontSize: 12,
+          fontSize: 13,
           lineHeight: 1.4,
           fontFamily: "inherit",
         }}
@@ -149,6 +149,7 @@ function TaskItem({ task }: { task: BoardTask }) {
           }}
         />
         <span style={{ minWidth: 0, wordBreak: "break-word" }}>
+          <span style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 700, marginRight: 3 }}>#{task.id}</span>
           {hasTags && (
             <span style={{
               display: "inline-flex", gap: 2, marginRight: 4, verticalAlign: "baseline", alignItems: "baseline",
@@ -188,7 +189,6 @@ function TaskItem({ task }: { task: BoardTask }) {
               BLOCKED ({task.blockedBy.map((id) => `#${id}`).join(", ")})
             </span>
           )}
-          <span style={{ color: "var(--text-dim)", fontSize: 10, marginRight: 2 }}>#{task.id}</span>
           {parsed.title}
         </span>
       </button>
