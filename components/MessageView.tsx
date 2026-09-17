@@ -1095,17 +1095,22 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
   const isError = result?.isError ?? false;
   const subagent = isSubagentToolDetails(result?.details) ? result.details : null;
 
+  const inProgress = !result;
+  const borderColor = isError ? "rgba(248,113,113,0.6)" : inProgress ? "rgba(59,130,246,0.5)" : "rgba(34,197,94,0.4)";
+  const borderLight = isError ? "rgba(248,113,113,0.25)" : inProgress ? "rgba(59,130,246,0.15)" : "rgba(34,197,94,0.12)";
+  const bgTint = isError ? "rgba(248,113,113,0.04)" : inProgress ? "rgba(59,130,246,0.05)" : "rgba(34,197,94,0.06)";
+  const nameColor = isError ? "#f87171" : inProgress ? "#3b82f6" : "#16a34a";
+
   return (
     <div
       style={{
         borderRadius: 5,
         overflow: "hidden",
         fontSize: 12,
-        borderLeft: isError ? "2px solid rgba(248,113,113,0.6)" : "2px solid rgba(34,197,94,0.35)",
-        border: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.12)",
+        border: `1px solid ${borderLight}`,
         borderLeftWidth: 2,
-        borderLeftColor: isError ? "rgba(248,113,113,0.6)" : "rgba(34,197,94,0.4)",
-        background: isError ? "rgba(248,113,113,0.04)" : "rgba(34,197,94,0.06)",
+        borderLeftColor: borderColor,
+        background: bgTint,
       }}
     >
       {/* ── Tool call header ── */}
@@ -1127,7 +1132,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
             textAlign: "left",
           }}
         >
-          <span className={!result ? "tool-name-active" : undefined} style={{ color: isError ? "#f87171" : "#16a34a", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+          <span className={inProgress ? "tool-name-active" : undefined} style={{ color: nameColor, fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
             {block.toolName}
           </span>
           <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
@@ -1166,7 +1171,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
             lineHeight: 1.5,
             overflow: "auto",
             background: "var(--bg-subtle)",
-            borderTop: isError ? "1px solid rgba(248,113,113,0.25)" : "1px solid rgba(34,197,94,0.2)",
+            borderTop: `1px solid ${borderLight}`,
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
           }}

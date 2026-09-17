@@ -23,6 +23,7 @@ interface ModelSelectorProps {
   ariaLabel?: string;
   variant?: "toolbar" | "field";
   placement?: "up" | "auto";
+  accentColor?: string;
 }
 
 const MODEL_FILTER_THRESHOLD = 8;
@@ -58,6 +59,7 @@ export function ModelSelector({
   ariaLabel,
   variant = "toolbar",
   placement = "up",
+  accentColor,
 }: ModelSelectorProps) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
@@ -133,7 +135,7 @@ export function ModelSelector({
         border: "none",
         borderRadius: 9,
         background: open ? "var(--bg-hover)" : "none",
-        color: "var(--text-muted)",
+        color: accentColor || "var(--text-muted)",
         cursor: locked ? "not-allowed" : "pointer",
         fontSize: 12,
         opacity: locked ? 0.5 : 1,
@@ -299,6 +301,7 @@ export function ModelSelector({
                       active={option.modelId === value?.modelId && option.provider === value?.provider}
                       label={option.name}
                       onClick={() => choose(option)}
+                      activeColor={accentColor}
                     />
                   ))}
                 </div>
@@ -311,14 +314,14 @@ export function ModelSelector({
   );
 }
 
-function ModelOptionButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function ModelOptionButton({ active, label, onClick, activeColor }: { active: boolean; label: string; onClick: () => void; activeColor?: string }) {
   return (
     <button
       type="button"
       role="option"
       aria-selected={active}
       onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: active ? "var(--bg-selected)" : "none", color: active ? "var(--text)" : "var(--text-muted)", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, textAlign: "left", whiteSpace: "nowrap" }}
+      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: active ? "var(--bg-selected)" : "none", color: active ? (activeColor || "var(--text)") : "var(--text-muted)", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, textAlign: "left", whiteSpace: "nowrap" }}
       onMouseEnter={(event) => { if (!active) event.currentTarget.style.background = "var(--bg-hover)"; }}
       onMouseLeave={(event) => { if (!active) event.currentTarget.style.background = "none"; }}
     >

@@ -204,13 +204,15 @@ interface ProcessDetailsProps {
   elapsedMs?: number;
   headerColor?: string;
   headerFont?: "normal" | "mono";
+  hasError?: boolean;
+  isComplete?: boolean;
   defaultExpanded?: boolean;
   reveal?: boolean;
   children: ReactNode;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, elapsedMs, headerColor, headerFont, defaultExpanded = false, reveal = false, children, t }: ProcessDetailsProps) {
+function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, elapsedMs, headerColor, headerFont, hasError, isComplete, defaultExpanded = false, reveal = false, children, t }: ProcessDetailsProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   useLayoutEffect(() => {
     if (reveal) setExpanded(true);
@@ -222,6 +224,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
 
   const toolNameParts = toolNames && toolNames.length > 0 ? toolNames : [];
   const HIGHLIGHT_TOOLS = new Set(["ue_dispatch", "DispatchLane"]);
+  const statusColor = hasError ? "#f87171" : isComplete ? "#16a34a" : "#3b82f6";
 
   const usageTag = usage && (usage.input > 0 || usage.output > 0)
     ? `${usage.input.toLocaleString()} in · ${usage.output.toLocaleString()} out${usage.cost > 0 ? ` · $${usage.cost.toFixed(4)}` : ""}`
@@ -269,7 +272,7 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
             {toolNameParts.map((name, i) => (
               <span key={name}>
                 {i > 0 && ", "}
-                <span style={HIGHLIGHT_TOOLS.has(name) ? { color: "#16a34a", fontWeight: 700 } : { color: "var(--text-dim)" }}>
+                <span style={HIGHLIGHT_TOOLS.has(name) ? { color: statusColor, fontWeight: 700 } : { color: "var(--text-dim)" }}>
                   {name}
                 </span>
               </span>
@@ -1215,6 +1218,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                 let processRefIdx: number | undefined;
                 let revealProcess = false;
                 const processToolNames: string[] = [];
+                let processHasError = false;
                 let processUsageIn = 0;
                 let processUsageOut = 0;
                 let processUsageCost = 0;
@@ -1245,6 +1249,9 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                     if (b.type === "toolCall" && !processToolNames.includes(b.toolName)) {
                       processToolNames.push(b.toolName);
                     }
+                  }
+                  if ((processMessage as AssistantMessage).stopReason === "error" || (processMessage as AssistantMessage).errorMessage) {
+                    processHasError = true;
                   }
                   const u = (processMessage as AssistantMessage).usage;
                   if (u) {
@@ -1285,6 +1292,8 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                         })()}
                         headerColor={processHeaderColor}
                         headerFont={processHeaderFont}
+                        hasError={processHasError}
+                        isComplete={Boolean(finalAnswerMessage)}
                         defaultExpanded={processDetailsCollapsed ? false : !finalAnswerMessage}
                         reveal={revealProcess}
                         t={t}
