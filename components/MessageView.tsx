@@ -1147,23 +1147,22 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
               {block.toolName}
             </span>
           )}
+          <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+            {isStreamingInput ? t("chat.generatingToolInput") : getToolPreview(block)}
+          </span>
           {resultSummary && (
             <>
+              <span style={{ color: "var(--text-dim)", fontSize: 11, flexShrink: 0 }}>·</span>
               <span style={{ color: "#f59e0b", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
                 {resultSummary.verb}
               </span>
-              {resultSummary.timing && (
-                <span style={{ color: "var(--text-dim)", fontSize: 11, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {resultSummary.timing}
-                </span>
-              )}
             </>
           )}
-          <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-            {isStreamingInput ? t("chat.generatingToolInput") : getToolPreview(block)}
-          </span>
+          <span style={{ flex: 1 }} />
           {!result ? (
             <ToolElapsedTimer startTimestamp={mountTimeRef.current} />
+          ) : resultSummary?.timing ? (
+            <span style={{ fontSize: 11, color: "var(--text-dim)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{resultSummary.timing}</span>
           ) : duration !== undefined ? (
             <span style={{ fontSize: 11, color: "var(--text-dim)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
           ) : null}
@@ -1828,23 +1827,37 @@ interface ResultSummary {
   timing?: string;
 }
 
+function extractJson(text: string): unknown | null {
+  try { return JSON.parse(text); } catch {}
+  const braceStart = text.indexOf("{");
+  if (braceStart === -1) return null;
+  for (let end = text.lastIndexOf("}"); end > braceStart; end = text.lastIndexOf("}", end - 1)) {
+    try { return JSON.parse(text.slice(braceStart, end + 1)); } catch {}
+  }
+  return null;
+}
+
 function getResultSummary(result: ToolResultMessage | undefined): ResultSummary | null {
   if (!result) return null;
   const text = result.content
     .filter((b): b is { type: "text"; text: string } => b.type === "text")
     .map((b) => b.text).join("\n");
   if (!text) return null;
-  try {
-    const json = JSON.parse(text);
-    if (json.planned_args && Array.isArray(json.planned_args) && json.planned_args.length > 0) {
-      const verb = String(json.planned_args[0]);
-      const t = json.timing;
-      const totalSec = t && t.total_ms ? `${(t.total_ms / 1000).toFixed(1)}s` : undefined;
-      return { verb, timing: totalSec };
-    }
-    if (json.verb) return { verb: String(json.verb) };
-  } catch {}
+  const json = extractJson(text) as Record<string, unknown> | null;
+  if (!json || typeof json !== "object") return null;
+  if (json.planned_args && Array.isArray(json.planned_args) && json.planned_args.length > 0) {
+    const verb = String(json.planned_args[0]);
+    const t = json.timing as Record<string, number> | undefined;
+    const totalSec = t && t.total_ms ? `${(t.total_ms / 1000).toFixed(1)}s` : undefined;
+    return { verb, timing: totalSec };
+  }
+  if (typeof json.verb === "string") return { verb: json.verb };
+  if (typeof json.phase === "string" && json.success === false) return { verb: `${json.phase} failed` };
   return null;
+}
+
+function decodeBase64(b64: string): string {
+  try { return typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf-8"); } catch { return b64; }
 }
 
 function getToolPreview(block: ToolCallContent): string {
@@ -1853,7 +1866,8 @@ function getToolPreview(block: ToolCallContent): string {
   const keys = Object.keys(input);
   if (keys.length === 0) return "";
 
-  // Common tool input patterns
+  if ("intent_b64" in input) return decodeBase64(String(input.intent_b64)).slice(0, 120);
+
   if ("command" in input) return String(input.command).slice(0, 120);
   if ("path" in input) return String(input.path).slice(0, 120);
   if ("file_path" in input) return String(input.file_path).slice(0, 120);
