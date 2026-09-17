@@ -1276,7 +1276,13 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                         toolCallCount={processToolCount}
                         toolNames={processToolNames}
                         usage={processUsageIn > 0 || processUsageOut > 0 ? { input: processUsageIn, output: processUsageOut, cost: processUsageCost } : undefined}
-                        elapsedMs={processFirstTs !== undefined && processLastTs !== undefined ? processLastTs - processFirstTs : undefined}
+                        elapsedMs={(() => {
+                          const userTs = messages[userIdx]?.timestamp;
+                          const endTs = processLastTs || (finalAssistant as AssistantMessage).timestamp;
+                          if (userTs && endTs) return endTs - userTs;
+                          if (processFirstTs !== undefined && processLastTs !== undefined) return processLastTs - processFirstTs;
+                          return undefined;
+                        })()}
                         headerColor={processHeaderColor}
                         headerFont={processHeaderFont}
                         defaultExpanded={processDetailsCollapsed ? false : !finalAnswerMessage}

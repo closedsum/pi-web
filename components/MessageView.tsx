@@ -1585,10 +1585,12 @@ function CompactionFileList({ title, files }: { title: string; files: string[] }
 function CustomMessageView({ message, cwd, onOpenFile }: { message: CustomMessage; cwd?: string; onOpenFile?: (filePath: string) => void }) {
   const { t } = useI18n();
   const isHiddenDisplay = message.display === false;
-  const [contentExpanded, setContentExpanded] = useState(!isHiddenDisplay);
+  const text = getMessageText(message.content);
+  const collapsePatterns = useMemo(() => parseCollapsePatterns(readPref("collapsePatterns")), []);
+  const autoCollapse = !isHiddenDisplay && shouldCollapseContent(text, collapsePatterns);
+  const [contentExpanded, setContentExpanded] = useState(!isHiddenDisplay && !autoCollapse);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const text = getMessageText(message.content);
   const images = getMessageImages(message.content);
   const hasDetails = message.details !== undefined;
   const detailsText = hasDetails ? safeJson(message.details) : "";

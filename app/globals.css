@@ -1492,15 +1492,18 @@ span.token.table {
   50% { opacity: 0.3; }
 }
 
-@keyframes tool-name-shimmer {
-  0% { opacity: 1; }
-  30% { opacity: 0.5; }
-  60% { opacity: 1; }
-  100% { opacity: 1; }
+@keyframes tool-gradient-sweep {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .tool-name-active {
-  animation: tool-name-shimmer 2s ease-in-out infinite;
+  background: linear-gradient(90deg, #16a34a 0%, #22d3ee 30%, #a78bfa 50%, #22d3ee 70%, #16a34a 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tool-gradient-sweep 2.4s ease-in-out infinite;
 }
 
 @keyframes spin {
