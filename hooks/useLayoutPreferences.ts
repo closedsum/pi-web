@@ -18,6 +18,8 @@ export const LAYOUT_DEFAULTS = {
   collapsePatterns: "gsd-ue-dispatch,UE-ACTION-DISPATCH,FORK-LEDGER,SESSION-REMINDER,GAP-ENFORCEMENT,TASK-ROUTING" as string,
   processHeaderColor: "var(--text-muted)" as string,
   processHeaderStyle: "normal" as "normal" | "mono",
+  toolAnimationEnabled: true,
+  waveToolNames: "ue_dispatch,DispatchLane" as string,
 };
 
 export type LayoutPreferences = typeof LAYOUT_DEFAULTS;

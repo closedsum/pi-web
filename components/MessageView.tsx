@@ -1097,6 +1097,9 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
   const resultSummary = useMemo(() => getResultSummary(result), [result]);
 
   const inProgress = !result;
+  const animEnabled = readPref("toolAnimationEnabled");
+  const waveTools = useMemo(() => new Set(parseCollapsePatterns(readPref("waveToolNames"))), []);
+  const useWave = animEnabled && inProgress && waveTools.has(block.toolName);
   const borderColor = isError ? "rgba(248,113,113,0.6)" : inProgress ? "rgba(59,130,246,0.5)" : "rgba(34,197,94,0.4)";
   const borderLight = isError ? "rgba(248,113,113,0.25)" : inProgress ? "rgba(59,130,246,0.15)" : "rgba(34,197,94,0.12)";
   const bgTint = isError ? "rgba(248,113,113,0.04)" : inProgress ? "rgba(59,130,246,0.05)" : "rgba(34,197,94,0.06)";
@@ -1133,16 +1136,31 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
             textAlign: "left",
           }}
         >
-          <span className={inProgress ? "tool-name-active" : undefined} style={{ color: nameColor, fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
-            {block.toolName}
-          </span>
-          {resultSummary && (
-            <span style={{ color: nameColor, fontFamily: "var(--font-mono)", fontSize: 11, flexShrink: 0, opacity: 0.8 }}>
-              {resultSummary}
+          {useWave ? (
+            <span className="tool-name-wave" style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+              {block.toolName.split("").map((ch, i) => (
+                <span key={i} style={{ animationDelay: `${i * 0.07}s, ${i * 0.07}s` }}>{ch}</span>
+              ))}
+            </span>
+          ) : (
+            <span className={animEnabled && inProgress ? "tool-name-active" : undefined} style={{ color: nameColor, fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+              {block.toolName}
             </span>
           )}
+          {resultSummary && (
+            <>
+              <span style={{ color: "#f59e0b", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                {resultSummary.verb}
+              </span>
+              {resultSummary.timing && (
+                <span style={{ color: "var(--text-dim)", fontSize: 11, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                  {resultSummary.timing}
+                </span>
+              )}
+            </>
+          )}
           <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-            {isStreamingInput ? t("chat.generatingToolInput") : (resultSummary ? "" : getToolPreview(block))}
+            {isStreamingInput ? t("chat.generatingToolInput") : getToolPreview(block)}
           </span>
           {!result ? (
             <ToolElapsedTimer startTimestamp={mountTimeRef.current} />
@@ -1805,23 +1823,28 @@ function previewText(text: string): string {
 }
 
 
-function getResultSummary(result: ToolResultMessage | undefined): string {
-  if (!result) return "";
+interface ResultSummary {
+  verb: string;
+  timing?: string;
+}
+
+function getResultSummary(result: ToolResultMessage | undefined): ResultSummary | null {
+  if (!result) return null;
   const text = result.content
     .filter((b): b is { type: "text"; text: string } => b.type === "text")
     .map((b) => b.text).join("\n");
-  if (!text) return "";
+  if (!text) return null;
   try {
     const json = JSON.parse(text);
     if (json.planned_args && Array.isArray(json.planned_args) && json.planned_args.length > 0) {
-      const verb = json.planned_args[0];
-      const timing = json.timing;
-      const totalSec = timing && timing.total_ms ? `${(timing.total_ms / 1000).toFixed(1)}s` : "";
-      return `→ ${verb}${totalSec ? ` [${totalSec}]` : ""}`;
+      const verb = String(json.planned_args[0]);
+      const t = json.timing;
+      const totalSec = t && t.total_ms ? `${(t.total_ms / 1000).toFixed(1)}s` : undefined;
+      return { verb, timing: totalSec };
     }
-    if (json.verb) return `→ ${json.verb}`;
+    if (json.verb) return { verb: String(json.verb) };
   } catch {}
-  return "";
+  return null;
 }
 
 function getToolPreview(block: ToolCallContent): string {

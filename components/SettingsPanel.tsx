@@ -402,6 +402,28 @@ function GeneralSettings({ sessionId, onSessionReloaded, quoteSelectionEnabled, 
               <option value="mono">Monospace</option>
             </select>
           </div>
+          <div className="settings-chat-option settings-chat-switch-option">
+            <span>Tool name animation</span>
+            <ConfigSwitch
+              checked={layoutPrefs.toolAnimationEnabled}
+              label="Tool name animation"
+              onChange={(v) => setLayoutPref("toolAnimationEnabled", v)}
+            />
+          </div>
+          <div className="settings-chat-option settings-chat-range-option">
+            <div className="settings-chat-range-header">
+              <label htmlFor="settings-wave-tools">Wave animation tools</label>
+            </div>
+            <input
+              id="settings-wave-tools"
+              type="text"
+              className="settings-layout-text-input"
+              value={layoutPrefs.waveToolNames}
+              onChange={(e) => setLayoutPref("waveToolNames", e.target.value)}
+              placeholder="ue_dispatch,DispatchLane,..."
+            />
+            <span className="settings-layout-hint">Comma-separated. These tools get the wave+color character animation.</span>
+          </div>
           <div className="settings-chat-option settings-layout-reset-row">
             <button
               type="button"

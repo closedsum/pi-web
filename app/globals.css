@@ -1506,6 +1506,27 @@ span.token.table {
   animation: tool-gradient-sweep 2.4s ease-in-out infinite;
 }
 
+@keyframes tool-wave-char {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.tool-name-wave {
+  display: inline-flex !important;
+}
+
+.tool-name-wave > span {
+  display: inline-block;
+  background: linear-gradient(90deg, #3b82f6, #22d3ee, #a78bfa, #3b82f6);
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation:
+    tool-gradient-sweep 2.4s ease-in-out infinite,
+    tool-wave-char 1.2s ease-in-out infinite;
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
