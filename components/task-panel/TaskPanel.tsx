@@ -280,6 +280,7 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
   const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionStartRef = useRef(new Date().toISOString());
 
   const fetchBoard = useCallback(async () => {
     if (!cwd) return;
@@ -305,12 +306,21 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
     };
   }, [fetchBoard]);
 
+  const sessionStart = sessionStartRef.current;
   const grouped = new Map<BoardTask["status"], BoardTask[]>();
   for (const s of STATUS_ORDER) grouped.set(s, []);
+  let sessionCompletedCount = 0;
   if (data) {
     for (const task of data.tasks) {
-      const list = grouped.get(task.status);
-      if (list) list.push(task);
+      if (task.status === "completed") {
+        if (task.completed_at && task.completed_at >= sessionStart) {
+          grouped.get("completed")!.push(task);
+          sessionCompletedCount++;
+        }
+      } else {
+        const list = grouped.get(task.status);
+        if (list) list.push(task);
+      }
     }
   }
 
@@ -343,7 +353,7 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
         </span>
         {data && data.tasks.length > 0 && (
           <span style={{ fontSize: 10, display: "flex", gap: 6, whiteSpace: "nowrap" }}>
-            {data.counts.completed > 0 && <span style={{ color: "#22c55e" }}><b>{data.counts.completed}</b> done</span>}
+            {sessionCompletedCount > 0 && <span style={{ color: "#22c55e" }}><b>{sessionCompletedCount}</b> done</span>}
             {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}><b>{data.counts.in_progress}</b> active</span>}
             {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}><b>{data.counts.pending}</b> pending</span>}
           </span>
