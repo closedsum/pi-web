@@ -274,6 +274,9 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
             {usageTag}
           </span>
         )}
+        {usageTag && timeTag && (
+          <span style={{ color: "var(--text-dim)", fontSize: 11 }}>·</span>
+        )}
         {timeTag && (
           <span style={{ color: "var(--text-dim)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
             {timeTag}
