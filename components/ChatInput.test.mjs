@@ -50,8 +50,8 @@ test("follow-up shortcuts preserve newline, IME, mobile and completion behavior"
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText);
   const cases = [
-    ["Enter steers", {}, {}, "steer"],
-    ["Alt+Enter follows up", { altKey: true }, {}, "followup"],
+    ["Enter queues follow-up", {}, {}, "followup"],
+    ["Alt+Enter queues follow-up", { altKey: true }, {}, "followup"],
     ["idle Alt+Enter sends", { altKey: true }, { isStreaming: false }, "send"],
     ["Shift+Enter inserts a newline", { shiftKey: true }, {}, "native"],
     ["Alt+Shift+Enter keeps native behavior", { altKey: true, shiftKey: true }, {}, "native"],
@@ -64,8 +64,8 @@ test("follow-up shortcuts preserve newline, IME, mobile and completion behavior"
     ["mobile Ctrl+Alt+Enter follows up", { altKey: true, ctrlKey: true }, { isMobile: true }, "followup"],
     ["mobile Cmd+Alt+Enter follows up", { altKey: true, metaKey: true }, { isMobile: true }, "followup"],
     ["mobile modified Enter respects composition grace", { altKey: true, ctrlKey: true }, { isMobile: true, lastCompositionEndAtRef: { current: 950 } }, "prevented"],
-    ["Enter falls back to follow-up", {}, { onSteer: undefined }, "followup"],
-    ["Alt+Enter falls back to steer", { altKey: true }, { onFollowUp: undefined }, "steer"],
+    ["Enter falls back to follow-up when no steer", {}, { onSteer: undefined }, "followup"],
+    ["Alt+Enter falls back to follow-up", { altKey: true }, { onFollowUp: undefined }, "followup"],
     ["slash completion takes priority", { altKey: true }, { slashMenuOpen: true, slashQuery: "help" }, "slash"],
     ["available built-in commands take priority", { altKey: true }, { slashMenuOpen: true, slashQuery: "copy", value: "/copy", displayedSlashCommands: [{ name: "copy", source: "builtin", availableWhileStreaming: true }] }, "send"],
     ["file completion takes priority", { altKey: true }, { atMenuOpen: true, atQuery: {} }, "file"],
@@ -159,15 +159,14 @@ test("cycleListIndex wraps in both directions", () => {
   assert.equal(cycleListIndex(-1, 4, 1), 0);
 });
 
-test("shows the follow-up shortcut in the button tooltip", () => {
+test("shows the send button tooltip during streaming", () => {
   const html = renderToStaticMarkup(
     React.createElement(I18nProvider, null, React.createElement(ChatInput, {
       onSend() {}, onAbort() {}, onFollowUp() {}, isStreaming: true,
     })),
   );
 
-  assert.match(html, /title="Queue this message after the agent finishes \(Alt\/Option\+Enter\)"/);
-  assert.match(html, /aria-keyshortcuts="Alt\+Enter"/);
+  assert.match(html, /title="Send \(queued for next turn\)"/);
 });
 
 test("renders the upstream model error", () => {
