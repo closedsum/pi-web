@@ -1693,22 +1693,18 @@ export function AppShell() {
                 {costText}
               </span>
             )}
-            {mobileContextText && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, color: contextColor, flexShrink: 0 }}>
-                <span style={{
-                  position: "relative", width: 32, height: 5, borderRadius: 3,
-                  background: "var(--bg-hover)", overflow: "hidden", flexShrink: 0,
-                }}>
-                  <span style={{
-                    position: "absolute", top: 0, left: 0, height: "100%", borderRadius: 3,
-                    width: `${Math.min(100, contextUsage?.percent ?? 0)}%`,
-                    background: contextColor,
-                    transition: "width 0.3s ease",
-                  }} />
+            {mobileContextText && (() => {
+              const pct = Math.min(100, contextUsage?.percent ?? 0);
+              const totalBlocks = 8;
+              const filled = Math.round((pct / 100) * totalBlocks);
+              const bar = "█".repeat(filled) + "░".repeat(totalBlocks - filled);
+              return (
+                <span style={{ display: "flex", alignItems: "center", gap: 3, fontWeight: 600, flexShrink: 0 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "-0.5px", color: contextColor, lineHeight: 1 }}>{bar}</span>
+                  <span style={{ color: contextColor }}>{mobileContextText}</span>
                 </span>
-                {mobileContextText}
-              </span>
-            )}
+              );
+            })()}
             {!hasMobileValues && showChat && (
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-dim)" }}>
                 {translate("session.title")}
@@ -1746,22 +1742,18 @@ export function AppShell() {
                 {costText}
               </span>
             )}
-            {desktopContextText && (
-              <span style={{ display: "flex", alignItems: "center", gap: 6, color: contextColor }}>
-                <span style={{
-                  position: "relative", width: 48, height: 6, borderRadius: 3,
-                  background: "var(--bg-hover)", overflow: "hidden", flexShrink: 0,
-                }}>
-                  <span style={{
-                    position: "absolute", top: 0, left: 0, height: "100%", borderRadius: 3,
-                    width: `${Math.min(100, contextUsage?.percent ?? 0)}%`,
-                    background: contextColor,
-                    transition: "width 0.3s ease, background 0.3s ease",
-                  }} />
+            {desktopContextText && (() => {
+              const pct = Math.min(100, contextUsage?.percent ?? 0);
+              const totalBlocks = 12;
+              const filled = Math.round((pct / 100) * totalBlocks);
+              const bar = "█".repeat(filled) + "░".repeat(totalBlocks - filled);
+              return (
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "-0.5px", color: contextColor, lineHeight: 1 }}>{bar}</span>
+                  <span style={{ color: contextColor }}>{desktopContextText}</span>
                 </span>
-                {desktopContextText}
-              </span>
-            )}
+              );
+            })()}
           </>
         )}
       </button>
