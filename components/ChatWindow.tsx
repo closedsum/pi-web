@@ -220,9 +220,8 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
   mainParts.push(`${messageCount} ${t(messageCount === 1 ? "chat.message" : "chat.messages")}`);
   if (toolCallCount > 0) mainParts.push(`${toolCallCount} ${t(toolCallCount === 1 ? "chat.toolCall" : "chat.toolCalls")}`);
 
-  const toolNameTag = toolNames && toolNames.length > 0
-    ? `[${toolNames.join(", ")}]`
-    : "";
+  const toolNameParts = toolNames && toolNames.length > 0 ? toolNames : [];
+  const HIGHLIGHT_TOOLS = new Set(["ue_dispatch", "DispatchLane"]);
 
   const usageTag = usage && (usage.input > 0 || usage.output > 0)
     ? `${usage.input.toLocaleString()} in · ${usage.output.toLocaleString()} out${usage.cost > 0 ? ` · $${usage.cost.toFixed(4)}` : ""}`
@@ -264,9 +263,18 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {mainParts.join(" · ")}
         </span>
-        {toolNameTag && (
-          <span style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
-            {toolNameTag}
+        {toolNameParts.length > 0 && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
+            [
+            {toolNameParts.map((name, i) => (
+              <span key={name}>
+                {i > 0 && ", "}
+                <span style={HIGHLIGHT_TOOLS.has(name) ? { color: "#16a34a", fontWeight: 700 } : { color: "var(--text-dim)" }}>
+                  {name}
+                </span>
+              </span>
+            ))}
+            ]
           </span>
         )}
         {usageTag && (
