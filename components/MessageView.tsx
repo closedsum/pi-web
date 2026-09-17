@@ -1058,7 +1058,7 @@ function isSubagentToolDetails(value: unknown): value is SubagentToolDetails {
 
 const TOOL_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-function ToolElapsedTimer({ startTimestamp }: { startTimestamp: number }) {
+function ToolElapsedTimer({ startTimestamp, accentColor }: { startTimestamp: number; accentColor?: string }) {
   const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - startTimestamp) / 1000));
   const [frame, setFrame] = useState(0);
   useEffect(() => {
@@ -1070,7 +1070,7 @@ function ToolElapsedTimer({ startTimestamp }: { startTimestamp: number }) {
   }, [startTimestamp]);
   const text = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m${elapsed % 60}s`;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#16a34a", flexShrink: 0, fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-mono)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: accentColor || "#16a34a", flexShrink: 0, fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-mono)" }}>
       <span>{TOOL_SPINNER_FRAMES[frame]}</span>
       <span>{text}</span>
     </span>
@@ -1160,11 +1160,11 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
           )}
           <span style={{ flex: 1 }} />
           {!result ? (
-            <ToolElapsedTimer startTimestamp={mountTimeRef.current} />
+            <ToolElapsedTimer startTimestamp={mountTimeRef.current} accentColor={nameColor} />
           ) : resultSummary?.timing ? (
-            <span style={{ fontSize: 11, color: "var(--text-dim)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{resultSummary.timing}</span>
+            <span style={{ fontSize: 11, color: nameColor, flexShrink: 0, fontVariantNumeric: "tabular-nums", opacity: 0.8 }}>{resultSummary.timing}</span>
           ) : duration !== undefined ? (
-            <span style={{ fontSize: 11, color: "var(--text-dim)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{duration}s</span>
+            <span style={{ fontSize: 11, color: nameColor, flexShrink: 0, fontVariantNumeric: "tabular-nums", opacity: 0.8 }}>{duration}s</span>
           ) : null}
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--text-dim)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
             <polyline points="2 3.5 5 6.5 8 3.5" />
