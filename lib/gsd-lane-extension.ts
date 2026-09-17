@@ -20,17 +20,19 @@ export interface GsdLaneExtensionOptions {
   python?: string;
 }
 
-function slugify(text: string): string {
+function sanitizeSlug(text: string): string {
   return text
     .toLowerCase()
+    .replace(/\.\./g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 30);
 }
 
 function uniqueSlug(base: string): string {
+  const safe = sanitizeSlug(base);
   const suffix = randomBytes(3).toString("hex");
-  return base ? `${base}-${suffix}` : `lane-${suffix}`;
+  return safe ? `${safe}-${suffix}` : `lane-${suffix}`;
 }
 
 async function resolveWorktreeRoot(python: string, gsdBinDir: string): Promise<string> {
@@ -52,7 +54,10 @@ async function resolveModel(python: string, gsdBinDir: string): Promise<{ provid
       "resolve-model",
     ], { timeout: 10_000 });
     const parsed = JSON.parse(stdout.trim());
-    return parsed;
+    if (typeof parsed.provider === "string" && typeof parsed.model === "string" && typeof parsed.effort === "string") {
+      return parsed as { provider: string; model: string; effort: string };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -89,8 +94,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           skip_review: Type.Optional(Type.Boolean({ description: "Skip cross-review (for trivial changes only)." })),
         }),
         async execute(_toolCallId, params) {
-          const baseSlug = params.slug || slugify(params.task);
-          const slug = uniqueSlug(baseSlug);
+          const slug = uniqueSlug(sanitizeSlug(params.slug || params.task));
           const repo = resolve(options.cwd);
 
           const worktreeRoot = await resolveWorktreeRoot(python, gsdBinDir);
@@ -101,8 +105,12 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           try {
             const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo, timeout: 5_000 });
             head = stdout.trim();
-          } catch {
-            head = "HEAD";
+            if (!head || !/^[0-9a-f]{7,40}$/.test(head)) {
+              return { content: [{ type: "text", text: `Failed to resolve HEAD in ${repo}: unexpected output "${head}"` }], details: undefined, isError: true };
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Failed to resolve HEAD in ${repo}: ${msg}` }], details: undefined, isError: true };
           }
 
           const resolved = await resolveModel(python, gsdBinDir);
@@ -113,7 +121,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           const specPath = join(lanesDir, `spec-${slug}.md`);
           await writeFile(specPath, `# ${params.title || slug}\n\n${params.task}\n`, "utf-8");
 
-          const taskId = Date.now();
+          const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
           const laneParams: Record<string, unknown> = {
             Slug: slug,
@@ -170,7 +178,12 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             windowsHide: true,
           });
 
-          const pid = child.pid || 0;
+          const pid = child.pid;
+
+          if (!pid) {
+            logFd.close().catch(() => {});
+            return { content: [{ type: "text", text: `Lane spawn failed for ${slug}: process did not start` }], details: undefined, isError: true };
+          }
 
           child.on("error", (err) => {
             logFd.write(`spawn error: ${err.message}\n`).then(() => logFd.close()).catch(() => {});
