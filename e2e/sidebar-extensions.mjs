@@ -4,17 +4,17 @@ export const sidebarExtensionSource = `export default function (pi) {
   pi.registerCommand("e2e-sidebar-widget", {
     handler: async (mode, ctx) => {
       if (mode === "set") {
-        ctx.ui.setWidget("e2e-sidebar", "Task 1: done\\nTask 2: pending\\nTask 3: in progress", {
+        ctx.ui.setWidget("e2e-sidebar", ["Task 1: done", "Task 2: pending", "Task 3: in progress"], {
           placement: "aboveEditor",
         });
         ctx.ui.notify("Widget set");
       } else if (mode === "update") {
-        ctx.ui.setWidget("e2e-sidebar", "Task 1: done\\nTask 2: done\\nTask 3: done", {
+        ctx.ui.setWidget("e2e-sidebar", ["Task 1: done", "Task 2: done", "Task 3: done"], {
           placement: "aboveEditor",
         });
         ctx.ui.notify("Widget updated");
       } else if (mode === "clear") {
-        ctx.ui.removeWidget("e2e-sidebar");
+        ctx.ui.setWidget("e2e-sidebar", undefined);
         ctx.ui.notify("Widget cleared");
       }
     },
@@ -34,7 +34,7 @@ export async function checkSidebarExtensions(page, artifacts) {
   };
 
   // 1. Initially no Extensions section
-  const extensionsHeader = page.getByText("Extensions", { exact: true });
+  const extensionsHeader = page.getByRole("button", { name: /^Extensions/ });
   assert.equal(await extensionsHeader.count(), 0, "Extensions section hidden without widgets");
 
   // 2. Set a widget — Extensions section appears in sidebar
@@ -44,16 +44,11 @@ export async function checkSidebarExtensions(page, artifacts) {
   assert.ok(await extensionsHeader.isVisible(), "Extensions header visible after setWidget");
 
   // 3. Verify widget content is rendered
-  const widgetContent = page.locator(".extension-widget-content");
-  if (await widgetContent.count() > 0) {
-    const text = await widgetContent.first().textContent();
-    assert.ok(text?.includes("Task 1"), "Widget content includes task data");
-  }
+  await page.getByText("Task 1: done", { exact: false }).waitFor({ timeout: 5000 });
 
-  // 4. Verify badge shows count
-  const badge = extensionsHeader.locator("..").locator("span").last();
-  const badgeText = await badge.textContent();
-  assert.match(badgeText ?? "", /1/, "Badge shows widget count");
+  // 4. Verify badge shows count (the button text includes the count span)
+  const headerText = await extensionsHeader.textContent();
+  assert.match(headerText ?? "", /Extensions\s*1/, "Badge shows widget count");
 
   // 5. Screenshot
   await page.screenshot({ path: `${artifacts}/sidebar-extensions-visible.png` });
@@ -61,8 +56,7 @@ export async function checkSidebarExtensions(page, artifacts) {
   // 6. Update widget — content changes (reactivity)
   await sendCommand("update");
   await waitForNotice("Widget updated");
-  // Allow time for update to propagate
-  await page.waitForTimeout(500);
+  await page.getByText("Task 3: done", { exact: false }).waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${artifacts}/sidebar-extensions-updated.png` });
 
   // 7. Clear widget — Extensions section disappears

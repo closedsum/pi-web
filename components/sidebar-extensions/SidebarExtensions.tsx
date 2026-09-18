@@ -13,6 +13,7 @@ interface StorageLike {
 
 const WIDGET_DISPLAY_NAMES: Record<string, string> = {
   "gsd-task": "Checklist",
+  "gsd-tasks": "Checklist",
 };
 
 function widgetDisplayName(key: string): string {
