@@ -56,6 +56,8 @@ export interface SessionStatsInfo {
   };
   cost: number;
   contextUsage?: ContextUsage;
+  /** Average time-to-first-token across assistant messages (ms). */
+  avgFirstMs?: number;
   /** Estimated active time across all entries in the session file. */
   totalActiveMs?: number;
 }

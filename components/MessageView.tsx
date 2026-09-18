@@ -670,7 +670,7 @@ function AssistantMessageView({
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const streamStartRef = useRef<number | null>(null);
-  const streamEndRef = useRef<number | null>(null);
+  const [streamEndTime, setStreamEndTime] = useState<number | null>(null);
   const [tps, setTps] = useState<number | null>(null);
   const blockItemsRef = useRef(blockItems);
   blockItemsRef.current = blockItems;
@@ -787,9 +787,9 @@ function AssistantMessageView({
 
   useEffect(() => {
     if (isStreaming) {
-      streamEndRef.current = null;
-    } else if (streamStartRef.current !== null && streamEndRef.current === null) {
-      streamEndRef.current = Date.now();
+      setStreamEndTime(null);
+    } else if (streamStartRef.current !== null) {
+      setStreamEndTime(Date.now());
     }
   }, [isStreaming]);
 
@@ -876,7 +876,7 @@ function AssistantMessageView({
             return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
           };
           const ttft = message.timestamp && prevTimestamp ? message.timestamp - prevTimestamp : null;
-          const streamMs = streamEndRef.current && streamStartRef.current ? streamEndRef.current - streamStartRef.current : null;
+          const streamMs = streamEndTime && streamStartRef.current ? streamEndTime - streamStartRef.current : null;
           const totalMs = ttft !== null && streamMs !== null ? ttft + streamMs : null;
           const avgTps = message.usage?.output && streamMs ? message.usage.output / (streamMs / 1000) : null;
           return (

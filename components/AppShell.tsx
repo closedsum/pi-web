@@ -1719,6 +1719,17 @@ export function AppShell() {
           </>
         ) : (
           <>
+            {sessionStats?.avgFirstMs !== undefined && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-dim)" }}>
+                {(() => {
+                  const ms = Math.round(sessionStats.avgFirstMs);
+                  if (ms < 1000) return `${ms}ms`;
+                  const sec = Math.round(ms / 1000);
+                  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+                })()}
+                <span style={{ fontSize: 10, opacity: 0.7 }}>avg</span>
+              </span>
+            )}
             {tokens && tokens.input > 0 && (
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

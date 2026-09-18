@@ -95,6 +95,21 @@ export function mergeSessionStats(
   };
 }
 
+export function computeAvgFirstMs(messages: AgentMessage[]): number | undefined {
+  const ttfts: number[] = [];
+  let lastUserTs: number | undefined;
+  for (const msg of messages) {
+    if (msg.role === "user" && msg.timestamp) {
+      lastUserTs = msg.timestamp;
+    } else if (msg.role === "assistant" && msg.timestamp && lastUserTs !== undefined) {
+      ttfts.push(msg.timestamp - lastUserTs);
+      lastUserTs = undefined;
+    }
+  }
+  if (ttfts.length === 0) return undefined;
+  return ttfts.reduce((a, b) => a + b, 0) / ttfts.length;
+}
+
 /**
  * Aggregate usage across ALL entries in a session file.
  *

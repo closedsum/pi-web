@@ -19,7 +19,7 @@ import { clearDraft, rekeyDraft, restoreDraftSubmission } from "@/lib/draft-stor
 import { getPreferredToolPreset, setPreferredToolPreset } from "@/lib/tool-preset-preference";
 import { getPresetFromToolNames, getToolNamesForPreset, type ToolEntry, type ToolPreset } from "@/lib/tool-presets";
 import type { SessionStatsInfo } from "@/lib/pi-types";
-import { mergeSessionStats, type SessionFileStats } from "@/lib/session-stats";
+import { mergeSessionStats, computeAvgFirstMs, type SessionFileStats } from "@/lib/session-stats";
 import { userMessageKey } from "@/lib/prompt-recovery";
 import { AgentEventConnection } from "@/lib/agent-event-connection";
 import { getToolExecutionProgress } from "@/lib/tool-execution-progress";
@@ -457,11 +457,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     const fileStats = data?.stats;
     const stats = mergeSessionStats(fileStats, data?.context.messages ?? [], messages);
     if (stats.tokens.total === 0 && messages.length === 0 && !fileStats) return null;
+    const allMessages = [...(data?.context.messages ?? []), ...messages];
     return {
       sessionFile: data?.filePath || undefined,
       sessionId: sessionIdRef.current ?? session?.id ?? "",
       sessionName: session?.name,
       ...stats,
+      avgFirstMs: computeAvgFirstMs(allMessages),
       totalActiveMs: data?.totalActiveMs,
       ...(contextUsage ? { contextUsage } : {}),
     } satisfies SessionStatsInfo;
