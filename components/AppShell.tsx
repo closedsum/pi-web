@@ -1727,18 +1727,16 @@ export function AppShell() {
             {sessionStats?.avgTps !== undefined && (
               <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-dim)" }}>
                 {sessionStats.avgTps.toFixed(1)} t/s
-                <span style={{ fontSize: 10, opacity: 0.7 }}>avg</span>
               </span>
             )}
             {sessionStats?.avgFirstMs !== undefined && (
               <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-dim)" }}>
-                {(() => {
+                First: {(() => {
                   const ms = Math.round(sessionStats.avgFirstMs);
                   if (ms < 1000) return `${ms}ms`;
                   const sec = Math.round(ms / 1000);
                   return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
                 })()}
-                <span style={{ fontSize: 10, opacity: 0.7 }}>first</span>
               </span>
             )}
             {tokens && tokens.input > 0 && (
