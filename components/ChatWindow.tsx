@@ -307,15 +307,19 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
-  const [processDetailsCollapsed] = useState(() => {
-    try { return window.localStorage.getItem("pi-layout:processDetailsCollapsed") !== "false"; } catch { return true; }
-  });
-  const [processHeaderColor] = useState(() => {
-    try { return window.localStorage.getItem("pi-layout:processHeaderColor") || "var(--text-muted)"; } catch { return "var(--text-muted)"; }
-  });
-  const [processHeaderFont] = useState<"normal" | "mono">(() => {
-    try { return (window.localStorage.getItem("pi-layout:processHeaderStyle") || "normal") as "normal" | "mono"; } catch { return "normal"; }
-  });
+  const [processDetailsCollapsed, setProcessDetailsCollapsed] = useState(true);
+  const [processHeaderColor, setProcessHeaderColor] = useState("var(--text-muted)");
+  const [processHeaderFont, setProcessHeaderFont] = useState<"normal" | "mono">("normal");
+  useEffect(() => {
+    try {
+      const c = window.localStorage.getItem("pi-layout:processDetailsCollapsed");
+      if (c === "false") setProcessDetailsCollapsed(false);
+      const hc = window.localStorage.getItem("pi-layout:processHeaderColor");
+      if (hc) setProcessHeaderColor(hc);
+      const hf = window.localStorage.getItem("pi-layout:processHeaderStyle");
+      if (hf === "mono") setProcessHeaderFont("mono");
+    } catch {}
+  }, []);
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
   // wrapping handleAgentEventRef because useAgentSession overwrites that ref

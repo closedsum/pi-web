@@ -180,9 +180,10 @@ export function AppShell() {
   const [projectTrustError, setProjectTrustError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => !initialNavigation.sidebarCollapsed);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
-  const [taskPanelOpen, setTaskPanelOpen] = useState(() => {
-    try { return window.localStorage.getItem("pi-task-panel-open") !== "false"; } catch { return true; }
-  });
+  const [taskPanelOpen, setTaskPanelOpen] = useState(true);
+  useEffect(() => {
+    try { const v = window.localStorage.getItem("pi-task-panel-open"); if (v === "false") setTaskPanelOpen(false); } catch {}
+  }, []);
   const [taskPanelCollapsed, setTaskPanelCollapsed] = useState(false);
   const [taskCounts, setTaskCounts] = useState({ inProgress: 0, pending: 0, completed: 0 });
   const [mobileToolbarMoreOpen, setMobileToolbarMoreOpen] = useState(false);
