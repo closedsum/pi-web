@@ -2474,6 +2474,7 @@ export function AppShell() {
                     .catch(() => {});
                 }
                 handleNewSession(`new-${Date.now()}`, cwd);
+                requestAnimationFrame(() => chatInputRef.current?.focus());
               }}
             />
           ) : initialCwdStatus === "validating" ? (

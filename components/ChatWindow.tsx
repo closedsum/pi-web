@@ -810,7 +810,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       sessionStats.cost ?? 0,
       sessionStats.totalActiveMs ?? 0,
       sessionAvgTps ?? "",
-      sessionLiveTps ?? "",
     ].join("|")
     : null;
   const sessionStatsRef = useRef(sessionStats);
@@ -1366,7 +1365,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
               );
             })()}
             {streamState.isStreaming && hasStreamingContent && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} toolResults={toolResultsMap} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} onStreamComplete={handleStreamComplete} onLiveTps={handleLiveTps} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} toolResults={toolResultsMap} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} onStreamComplete={handleStreamComplete} onLiveTps={handleLiveTps} prevTimestamp={messages.length > 0 ? messages[messages.length - 1].timestamp : undefined} />
             )}
 
             {agentRunning && !hasStreamingContent && agentPhase && (

@@ -802,8 +802,9 @@ function AssistantMessageView({
       const endTime = Date.now();
       setStreamEndTime(endTime);
       const streamMs = endTime - streamStartRef.current;
-      if (message.usage?.output && streamMs > 0) {
-        onStreamComplete?.({ outputTokens: message.usage.output, streamMs });
+      const tokens = message.usage?.output || Math.round(estimatedTokensRef.current);
+      if (tokens > 0 && streamMs > 0) {
+        onStreamComplete?.({ outputTokens: tokens, streamMs });
       }
     }
   }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -884,7 +885,7 @@ function AssistantMessageView({
       <div style={{
         display: "flex", alignItems: "center", gap: 8, marginTop: 4,
       }}>
-        {!isStreaming && (message.usage || (message.timestamp && prevTimestamp)) && (() => {
+        {!isStreaming && (message.usage || streamEndTime || (message.timestamp && prevTimestamp)) && (() => {
           const fmtMs = (ms: number) => {
             if (ms < 1000) return `${ms}ms`;
             const sec = Math.round(ms / 1000);
@@ -893,7 +894,8 @@ function AssistantMessageView({
           const ttft = message.timestamp && prevTimestamp ? message.timestamp - prevTimestamp : null;
           const streamMs = streamEndTime && streamStartRef.current ? streamEndTime - streamStartRef.current : null;
           const totalMs = ttft !== null && streamMs !== null ? ttft + streamMs : null;
-          const avgTps = message.usage?.output && streamMs ? message.usage.output / (streamMs / 1000) : null;
+          const outputTokens = message.usage?.output || (streamMs ? Math.round(estimatedTokensRef.current) : 0);
+          const avgTps = outputTokens > 0 && streamMs ? outputTokens / (streamMs / 1000) : null;
           return (
             <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
               {[
