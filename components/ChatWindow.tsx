@@ -379,6 +379,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const [sessionLiveTps, setSessionLiveTps] = useState<number | null>(null);
   const pendingStreamTimingRef = useRef<{ streamMs: number; outputTokens: number } | null>(null);
   const [streamTimings, setStreamTimings] = useState<Map<string, { streamMs: number; outputTokens: number }>>(new Map());
+  const [streamCompleteCount, setStreamCompleteCount] = useState(0);
   const handleStreamComplete = useCallback((data: { outputTokens: number; streamMs: number }) => {
     const acc = streamingAccRef.current;
     acc.totalTokens += data.outputTokens;
@@ -386,6 +387,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     acc.count += 1;
     if (acc.totalMs > 0) setSessionAvgTps(acc.totalTokens / (acc.totalMs / 1000));
     pendingStreamTimingRef.current = data;
+    setStreamCompleteCount(c => c + 1);
   }, []);
   const handleLiveTps = useCallback((tps: number | null) => setSessionLiveTps(tps), []);
 
@@ -400,7 +402,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
         break;
       }
     }
-  }, [messages, entryIds]);
+  }, [messages, entryIds, streamCompleteCount]);
 
   // Lift extension widgets to AppShell so they can render in the sidebar.
   useEffect(() => {
