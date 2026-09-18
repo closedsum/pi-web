@@ -15,6 +15,10 @@
     "meta": {
       "color": "#ec4899",
       "prefixes": ["muse"]
+    },
+    "minimax": {
+      "color": "#14b8a6",
+      "prefixes": ["minimax"]
     }
   },
   "fallbackColor": "#a78bfa",
