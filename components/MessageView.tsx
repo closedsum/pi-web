@@ -207,6 +207,7 @@ interface Props {
   writtenFiles?: WrittenFile[];
   onStreamComplete?: (data: { outputTokens: number; streamMs: number }) => void;
   onLiveTps?: (tps: number | null) => void;
+  streamTiming?: { streamMs: number; outputTokens: number };
 }
 
 export function getModelDisplayName(
@@ -274,12 +275,12 @@ function haveSameRelevantToolResults(
   return true;
 }
 
-export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, modelNames, cwd, onOpenFile, onOpenSession, entryId, searchBlock, onFork, forking, onNavigate, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles, onStreamComplete, onLiveTps }: Props) {
+export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, modelNames, cwd, onOpenFile, onOpenSession, entryId, searchBlock, onFork, forking, onNavigate, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles, onStreamComplete, onLiveTps, streamTiming }: Props) {
   if (message.role === "user") {
     return <UserMessageView message={message as UserMessage} cwd={cwd} onOpenFile={onOpenFile} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} onEditContent={onEditContent} />;
   }
   if (message.role === "assistant") {
-    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} searchBlock={searchBlock} writtenFiles={writtenFiles} onStreamComplete={onStreamComplete} onLiveTps={onLiveTps} />;
+    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} searchBlock={searchBlock} writtenFiles={writtenFiles} onStreamComplete={onStreamComplete} onLiveTps={onLiveTps} streamTiming={streamTiming} />;
   }
   if (message.role === "toolResult") {
     // Rendered inline under its toolCall — skip standalone rendering if paired
@@ -649,6 +650,7 @@ function AssistantMessageView({
   writtenFiles,
   onStreamComplete,
   onLiveTps,
+  streamTiming,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -665,6 +667,7 @@ function AssistantMessageView({
   writtenFiles?: WrittenFile[];
   onStreamComplete?: (data: { outputTokens: number; streamMs: number }) => void;
   onLiveTps?: (tps: number | null) => void;
+  streamTiming?: { streamMs: number; outputTokens: number };
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -794,21 +797,18 @@ function AssistantMessageView({
       }
     };
     const id = setInterval(tick, 300);
-    return () => { clearInterval(id); onLiveTps?.(null); };
-  }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (isStreaming) {
-      setStreamEndTime(null);
-    } else if (streamStartRef.current !== null) {
-      const endTime = Date.now();
-      setStreamEndTime(endTime);
-      const streamMs = endTime - streamStartRef.current;
-      const tokens = message.usage?.output || Math.round(lastEstimatedTokensRef.current);
-      if (tokens > 0 && streamMs > 0) {
-        onStreamComplete?.({ outputTokens: tokens, streamMs });
+    return () => {
+      clearInterval(id);
+      onLiveTps?.(null);
+      const start = streamStartRef.current;
+      if (start) {
+        const streamMs = Date.now() - start;
+        const tokens = Math.round(lastEstimatedTokensRef.current);
+        if (tokens > 0 && streamMs > 0) {
+          onStreamComplete?.({ outputTokens: tokens, streamMs });
+        }
       }
-    }
+    };
   }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
@@ -849,7 +849,7 @@ function AssistantMessageView({
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         {message.provider && (
           <span style={{ color: getModelFamilyColor(message.model), fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>
-            {getModelDisplayName(message.provider, message.model, modelNames)}
+            {message.model}
           </span>
         )}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -894,9 +894,11 @@ function AssistantMessageView({
             return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
           };
           const ttft = message.timestamp && prevTimestamp ? message.timestamp - prevTimestamp : null;
-          const streamMs = streamEndTime && streamStartRef.current ? streamEndTime - streamStartRef.current : null;
+          const ownStreamMs = streamEndTime && streamStartRef.current ? streamEndTime - streamStartRef.current : null;
+          const extStreamMs = streamTiming?.streamMs ?? null;
+          const streamMs = ownStreamMs ?? extStreamMs;
           const totalMs = ttft !== null && streamMs !== null ? ttft + streamMs : null;
-          const outputTokens = message.usage?.output || (streamMs ? Math.round(lastEstimatedTokensRef.current) : 0);
+          const outputTokens = message.usage?.output || streamTiming?.outputTokens || (ownStreamMs ? Math.round(lastEstimatedTokensRef.current) : 0);
           const avgTps = outputTokens > 0 && streamMs ? outputTokens / (streamMs / 1000) : null;
           const u = message.usage;
           const parts: React.ReactNode[] = [];

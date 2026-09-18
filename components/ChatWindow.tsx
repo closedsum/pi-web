@@ -377,14 +377,30 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const streamingAccRef = useRef({ totalTokens: 0, totalMs: 0, count: 0 });
   const [sessionAvgTps, setSessionAvgTps] = useState<number | undefined>();
   const [sessionLiveTps, setSessionLiveTps] = useState<number | null>(null);
+  const pendingStreamTimingRef = useRef<{ streamMs: number; outputTokens: number } | null>(null);
+  const [streamTimings, setStreamTimings] = useState<Map<string, { streamMs: number; outputTokens: number }>>(new Map());
   const handleStreamComplete = useCallback((data: { outputTokens: number; streamMs: number }) => {
     const acc = streamingAccRef.current;
     acc.totalTokens += data.outputTokens;
     acc.totalMs += data.streamMs;
     acc.count += 1;
     if (acc.totalMs > 0) setSessionAvgTps(acc.totalTokens / (acc.totalMs / 1000));
+    pendingStreamTimingRef.current = data;
   }, []);
   const handleLiveTps = useCallback((tps: number | null) => setSessionLiveTps(tps), []);
+
+  useEffect(() => {
+    const pending = pendingStreamTimingRef.current;
+    if (!pending) return;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && entryIds[i]) {
+        const eid = entryIds[i];
+        setStreamTimings(prev => { const next = new Map(prev); next.set(eid, pending); return next; });
+        pendingStreamTimingRef.current = null;
+        break;
+      }
+    }
+  }, [messages, entryIds]);
 
   // Lift extension widgets to AppShell so they can render in the sidebar.
   useEffect(() => {
@@ -1183,6 +1199,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                     prevTimestamp={idx > 0 ? (messages[idx - 1] as AgentMessage & { timestamp?: number }).timestamp : undefined}
                     sessionId={session?.id ?? sessionIdRef.current ?? undefined}
                     writtenFiles={options.writtenFiles}
+                    streamTiming={entryIds[idx] ? streamTimings.get(entryIds[idx]) : undefined}
                   />
                 );
                 if (!isVisible || currentRefIdx === undefined) return view;
