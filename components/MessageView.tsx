@@ -1059,7 +1059,7 @@ function isSubagentToolDetails(value: unknown): value is SubagentToolDetails {
 const TOOL_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 function ToolElapsedTimer({ startTimestamp, accentColor }: { startTimestamp: number; accentColor?: string }) {
-  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - startTimestamp) / 1000));
+  const [elapsed, setElapsed] = useState(0);
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     const id = setInterval(() => {

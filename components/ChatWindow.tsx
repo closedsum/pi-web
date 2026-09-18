@@ -1618,7 +1618,8 @@ function ExtensionDialog({
   const { t } = useI18n();
   const [value, setValue] = useState(request.method === "editor" ? request.prefill ?? "" : "");
   const [collapsed, setCollapsed] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
+  useEffect(() => { setNow(Date.now()); }, []);
   const focusFirstOption = useCallback((element: HTMLDivElement | null) => element?.focus(), []);
   const summary = getExtensionDialogSummary(request);
   const remainingSeconds = request.expiresAt === undefined
