@@ -10,8 +10,12 @@ export async function GET(
   try {
     const rpc = getRpcSession(id);
     if (rpc?.isAlive()) {
-      const state = await rpc.send({ type: "get_state" });
-      return NextResponse.json({ running: true, state });
+      try {
+        const state = await rpc.send({ type: "get_state" });
+        return NextResponse.json({ running: true, state });
+      } catch {
+        // RPC session stale — fall through to not-running path
+      }
     }
 
     if (!await resolveSessionPath(id)) {
