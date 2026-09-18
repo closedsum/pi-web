@@ -390,13 +390,15 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     setStreamCompleteCount(c => c + 1);
   }, []);
   const handleLiveTps = useCallback((tps: number | null) => setSessionLiveTps(tps), []);
+  const matchedTimingIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     const pending = pendingStreamTimingRef.current;
     if (!pending) return;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant" && entryIds[i]) {
-        const eid = entryIds[i];
+      const eid = entryIds[i];
+      if (messages[i].role === "assistant" && eid && !matchedTimingIdsRef.current.has(eid)) {
+        matchedTimingIdsRef.current.add(eid);
         setStreamTimings(prev => { const next = new Map(prev); next.set(eid, pending); return next; });
         pendingStreamTimingRef.current = null;
         break;
