@@ -11,6 +11,8 @@ interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
+const HIDDEN_WIDGETS = new Set(["gsd-task", "gsd-tasks"]);
+
 const WIDGET_DISPLAY_NAMES: Record<string, string> = {
   "gsd-task": "Checklist",
   "gsd-tasks": "Checklist",
@@ -28,8 +30,9 @@ export function SidebarExtensions({
   storage?: StorageLike | null;
 }) {
   const [open, setOpen] = useState(() => loadExtensionsOpen(storage ?? undefined));
+  const visibleWidgets = widgets.filter(w => !HIDDEN_WIDGETS.has(w.key));
 
-  if (widgets.length === 0) return null;
+  if (visibleWidgets.length === 0) return null;
 
   return (
     <div
@@ -93,13 +96,13 @@ export function SidebarExtensions({
               marginLeft: 2,
             }}
           >
-            {widgets.length}
+            {visibleWidgets.length}
           </span>
         </button>
       </div>
       {open && (
         <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0 10px 8px" }}>
-          {widgets.map((widget) => (
+          {visibleWidgets.map((widget) => (
             <div key={widget.key} style={{ marginBottom: 8 }}>
               <div
                 style={{
