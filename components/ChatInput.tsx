@@ -56,6 +56,7 @@ interface Props {
   modelScopeWarnings?: string[];
   onModelChange?: (provider: string, modelId: string) => void;
   onModelClear?: () => void;
+  onClearChat?: () => void;
   modelSwitching?: boolean;
   onCompact?: () => void;
   onAbortCompaction?: () => void;
@@ -545,7 +546,7 @@ export function ModelScopeWarningBanner({ warnings }: { warnings?: string[] }) {
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
-  onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, onModelClear, modelSwitching,
+  onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, onModelClear, onClearChat, modelSwitching,
   onCompact, onAbortCompaction, isCompacting, compactError, compactResult, toolPreset, onToolPresetChange,
   thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
   retryInfo, queuedMessages, inputHistory = [], onRecallQueue,
@@ -2276,11 +2277,11 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 isAutoSelection={isAutoModelSelection}
                 accentColor={undefined}
               />
-              {model && onModelClear && !isStreaming && (
+              {onClearChat && !isStreaming && (
                 <button
                   type="button"
-                  title={CLEAR_BUTTON.label}
-                  onClick={() => { onModelClear(); textareaRef.current?.focus(); }}
+                  title="Clear chat and start fresh"
+                  onClick={() => { onClearChat(); textareaRef.current?.focus(); }}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     padding: "5px 12px", border: "none", borderRadius: 8,
