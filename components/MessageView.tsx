@@ -700,6 +700,8 @@ function AssistantMessageView({
   }, [blockItems, isStreaming]);
   const estimatedTokensRef = useRef(estimatedTokens);
   estimatedTokensRef.current = estimatedTokens;
+  const lastEstimatedTokensRef = useRef(0);
+  if (estimatedTokens > 0) lastEstimatedTokensRef.current = estimatedTokens;
 
   // Streaming-based timing for thinking blocks
   const blockStartTimesRef = useRef<Map<number, number>>(new Map());
@@ -802,7 +804,7 @@ function AssistantMessageView({
       const endTime = Date.now();
       setStreamEndTime(endTime);
       const streamMs = endTime - streamStartRef.current;
-      const tokens = message.usage?.output || Math.round(estimatedTokensRef.current);
+      const tokens = message.usage?.output || Math.round(lastEstimatedTokensRef.current);
       if (tokens > 0 && streamMs > 0) {
         onStreamComplete?.({ outputTokens: tokens, streamMs });
       }
@@ -894,16 +896,32 @@ function AssistantMessageView({
           const ttft = message.timestamp && prevTimestamp ? message.timestamp - prevTimestamp : null;
           const streamMs = streamEndTime && streamStartRef.current ? streamEndTime - streamStartRef.current : null;
           const totalMs = ttft !== null && streamMs !== null ? ttft + streamMs : null;
-          const outputTokens = message.usage?.output || (streamMs ? Math.round(estimatedTokensRef.current) : 0);
+          const outputTokens = message.usage?.output || (streamMs ? Math.round(lastEstimatedTokensRef.current) : 0);
           const avgTps = outputTokens > 0 && streamMs ? outputTokens / (streamMs / 1000) : null;
+          const u = message.usage;
+          const parts: React.ReactNode[] = [];
+          if (avgTps !== null) parts.push(`${avgTps.toFixed(1)} t/s`);
+          if (ttft !== null) parts.push(`First: ${fmtMs(ttft)}`);
+          if (totalMs !== null) parts.push(`Total: ${fmtMs(totalMs)}`);
+          if (u?.input) parts.push(
+            <span key="in" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="8.5" x2="5" y2="1.5" /><polyline points="2 4 5 1.5 8 4" /></svg>
+              {u.input.toLocaleString()}
+            </span>
+          );
+          if (u?.output) parts.push(
+            <span key="out" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="1.5" x2="5" y2="8.5" /><polyline points="2 6 5 8.5 8 6" /></svg>
+              {u.output.toLocaleString()}
+            </span>
+          );
+          if (u?.cost?.total) parts.push(`$${u.cost.total.toFixed(4)}`);
           return (
-            <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-              {[
-                avgTps !== null && `${avgTps.toFixed(1)} t/s`,
-                ttft !== null && `First: ${fmtMs(ttft)}`,
-                totalMs !== null && `Total: ${fmtMs(totalMs)}`,
-                message.usage && formatUsage(message.usage),
-              ].filter(Boolean).join(" · ")}
+            <div style={{ fontSize: 11, color: "var(--text-dim)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {parts.map((part, i) => {
+                const sep = i > 0 ? <span style={{ opacity: 0.4 }}>·</span> : null;
+                return <span key={i}>{sep}{part}</span>;
+              })}
             </div>
           );
         })()}
