@@ -397,7 +397,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [wtNewBranch, setWtNewBranch] = useState("");
   const [wtError, setWtError] = useState<string | null>(null);
   const [recentDropdownOpen, setRecentDropdownOpen] = useState(false);
-  const [recentDropdownPos, setRecentDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  const [recentDropdownPos, setRecentDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [recentList, setRecentList] = useState<Array<{ cwd: string; name: string; lastOpened: string }>>([]);
   const recentDropdownRef = useRef<HTMLDivElement>(null);
   const [wtBusy, setWtBusy] = useState(false);
@@ -1076,7 +1076,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
             <div ref={recentDropdownRef} style={{ position: "relative" }}>
               <button
                 type="button"
-                onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setRecentDropdownPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right }); setRecentDropdownOpen((v) => !v); setDropdownOpen(false); setWtDropdownOpen(false); }}
+                onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const left = Math.max(8, Math.min(rect.left, window.innerWidth - 348)); setRecentDropdownPos({ top: rect.bottom + 6, left }); setRecentDropdownOpen((v) => !v); setDropdownOpen(false); setWtDropdownOpen(false); }}
                 title="Recent projects"
                 aria-label="Recent projects"
                 aria-expanded={recentDropdownOpen}
@@ -1099,7 +1099,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
               <AnimatedDropdown
                 open={recentDropdownOpen}
                 style={{
-                  position: "fixed", top: recentDropdownPos?.top ?? 0, right: recentDropdownPos?.right ?? 0, zIndex: 300,
+                  position: "fixed", top: recentDropdownPos?.top ?? 0, left: recentDropdownPos?.left ?? 0, zIndex: 300,
                   minWidth: 240, maxWidth: 340,
                   background: "var(--bg-panel)", border: "1px solid var(--border)",
                   borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.18)",

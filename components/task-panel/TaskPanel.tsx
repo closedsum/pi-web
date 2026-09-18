@@ -300,6 +300,7 @@ export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | nul
   const { prefs } = useLayoutPreferences();
   const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState(Date.now);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionStartRef = useRef(new Date().toISOString());
   const pollMs = prefs.taskPollInterval * 1000;
@@ -314,6 +315,7 @@ export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | nul
       }
       const json = await res.json() as TaskBoardData;
       setData(json);
+      setFetchedAt(Date.now());
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -346,7 +348,7 @@ export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | nul
           sessionCompletedCount++;
         }
       } else {
-        const age = Date.now() - new Date(task.created_at).getTime();
+        const age = fetchedAt - new Date(task.created_at).getTime();
         if (!activeSessions.has(task.session_id) && age > STALE_MS) {
           deadTasks.add(`${task.id}\0${task.session_id}`);
         }

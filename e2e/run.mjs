@@ -12,6 +12,7 @@ import { chromium } from "playwright";
 import { checkExtensionDialogs, extensionSource } from "./extension-dialog.mjs";
 import { checkChatAppearance } from "./chat-appearance.mjs";
 import { checkSidebarExtensions, sidebarExtensionSource } from "./sidebar-extensions.mjs";
+import { checkRecentProjectsDropdown } from "./recent-projects-dropdown.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const mode = process.env.E2E_SERVER_MODE || "dev";
@@ -356,6 +357,7 @@ try {
     }
     await checkExtensionDialogs(page, artifacts, viewport.width);
     if (viewport.width > 600) {
+      await checkRecentProjectsDropdown(page, artifacts);
       await checkSidebarExtensions(page, artifacts);
     }
     if (viewport.width > 600) {

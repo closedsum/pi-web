@@ -56,8 +56,8 @@ test("model-load failures stay visible through bounded retries and clear on reco
   ]) {
     const state = setup(fetchImpl);
     await state.run();
-    assert.deepEqual(state.delays, [2_000, 5_000, 10_000]);
-    assert.deepEqual(state.writes, Array.from({ length: 4 }, () => ["ModelError", expected]));
+    assert.deepEqual(state.delays, [1_000, 2_000, 5_000, 10_000]);
+    assert.deepEqual(state.writes, Array.from({ length: 5 }, () => ["ModelError", expected]));
   }
 
   let attempts = 0;
@@ -72,7 +72,7 @@ test("model-load failures stay visible through bounded retries and clear on reco
   });
   await recovered.run();
   assert.equal(attempts, 2);
-  assert.deepEqual(recovered.delays, [2_000]);
+  assert.deepEqual(recovered.delays, [1_000]);
   assert.deepEqual(recovered.writes.filter(([name]) => name === "ModelError"), [["ModelError", "Failed to fetch"], ["ModelError", null]]);
   assert.ok(recovered.writes.some(([name, value]) => name === "ModelList" && value[0].id === "test"));
   assert.ok(recovered.writes.some(([name, value]) => name === "NewSessionDefaultModel" && value.modelId === "test"));

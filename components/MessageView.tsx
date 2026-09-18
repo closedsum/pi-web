@@ -1080,7 +1080,7 @@ function ToolElapsedTimer({ startTimestamp, accentColor }: { startTimestamp: num
 function ToolCallBlock({ block, result, duration, onOpenSession }: { block: ToolCallContent; result?: ToolResultMessage; duration?: number; onOpenSession?: (sessionId: string) => void }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
-  const mountTimeRef = useRef(Date.now());
+  const [mountTime] = useState(Date.now);
   const inputStr = getToolCallInputText(block);
   const isStreamingInput = block.rawInput !== undefined;
   const isEditTool = isEditToolName(block.toolName);
@@ -1160,7 +1160,7 @@ function ToolCallBlock({ block, result, duration, onOpenSession }: { block: Tool
           )}
           <span style={{ flex: 1 }} />
           {!result ? (
-            <ToolElapsedTimer startTimestamp={mountTimeRef.current} accentColor={nameColor} />
+            <ToolElapsedTimer startTimestamp={mountTime} accentColor={nameColor} />
           ) : resultSummary?.timing ? (
             <span style={{ fontSize: 11, color: nameColor, flexShrink: 0, fontVariantNumeric: "tabular-nums", opacity: 0.8 }}>{resultSummary.timing}</span>
           ) : duration !== undefined ? (

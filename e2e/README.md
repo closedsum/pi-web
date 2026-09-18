@@ -34,6 +34,8 @@ Coverage:
 - Unknown sessions and paths outside the fixture project are rejected.
 - A local extension checks dialog keyboard navigation, Esc cancellation,
   collapse/expand draft preservation, countdown display, and server-side expiry.
+- The Recent Projects dropdown opens within the viewport at both desktop and
+  narrow widths, with stable positioning across open/close cycles.
 
 Model prompts, live model streaming, and agent execution are outside this suite.
 Failures save a screenshot, Playwright trace, and server log under
