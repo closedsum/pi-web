@@ -1719,6 +1719,17 @@ export function AppShell() {
           </>
         ) : (
           <>
+            {sessionStats?.liveTps != null && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, color: (() => { const v = sessionStats.liveTps; return v >= 50 ? "#53b3cb" : v >= 30 ? "#9bc53d" : v >= 15 ? "#f9c22e" : "#e01a4f"; })(), fontWeight: 600 }}>
+                {sessionStats.liveTps.toFixed(1)} t/s
+              </span>
+            )}
+            {sessionStats?.avgTps !== undefined && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-dim)" }}>
+                {sessionStats.avgTps.toFixed(1)} t/s
+                <span style={{ fontSize: 10, opacity: 0.7 }}>avg</span>
+              </span>
+            )}
             {sessionStats?.avgFirstMs !== undefined && (
               <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-dim)" }}>
                 {(() => {
@@ -1727,7 +1738,7 @@ export function AppShell() {
                   const sec = Math.round(ms / 1000);
                   return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
                 })()}
-                <span style={{ fontSize: 10, opacity: 0.7 }}>avg</span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>first</span>
               </span>
             )}
             {tokens && tokens.input > 0 && (

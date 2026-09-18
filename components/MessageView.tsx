@@ -205,6 +205,8 @@ interface Props {
    * final answer text-only.
    */
   writtenFiles?: WrittenFile[];
+  onStreamComplete?: (data: { outputTokens: number; streamMs: number }) => void;
+  onLiveTps?: (tps: number | null) => void;
 }
 
 export function getModelDisplayName(
@@ -272,12 +274,12 @@ function haveSameRelevantToolResults(
   return true;
 }
 
-export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, modelNames, cwd, onOpenFile, onOpenSession, entryId, searchBlock, onFork, forking, onNavigate, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles }: Props) {
+export const MessageView = memo(function MessageView({ message, isStreaming, toolResults, modelNames, cwd, onOpenFile, onOpenSession, entryId, searchBlock, onFork, forking, onNavigate, onEditContent, showTimestamp, prevTimestamp, sessionId, writtenFiles, onStreamComplete, onLiveTps }: Props) {
   if (message.role === "user") {
     return <UserMessageView message={message as UserMessage} cwd={cwd} onOpenFile={onOpenFile} entryId={entryId} onFork={onFork} forking={forking} onNavigate={onNavigate} onEditContent={onEditContent} />;
   }
   if (message.role === "assistant") {
-    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} searchBlock={searchBlock} writtenFiles={writtenFiles} />;
+    return <AssistantMessageView message={message as AssistantMessage} isStreaming={isStreaming} toolResults={toolResults} modelNames={modelNames} cwd={cwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} showTimestamp={showTimestamp} prevTimestamp={prevTimestamp} sessionId={sessionId} entryId={entryId} searchBlock={searchBlock} writtenFiles={writtenFiles} onStreamComplete={onStreamComplete} onLiveTps={onLiveTps} />;
   }
   if (message.role === "toolResult") {
     // Rendered inline under its toolCall — skip standalone rendering if paired
@@ -645,6 +647,8 @@ function AssistantMessageView({
   entryId,
   searchBlock,
   writtenFiles,
+  onStreamComplete,
+  onLiveTps,
 }: {
   message: AssistantMessage;
   isStreaming?: boolean;
@@ -659,6 +663,8 @@ function AssistantMessageView({
   entryId?: string;
   searchBlock?: AssistantContentBlock;
   writtenFiles?: WrittenFile[];
+  onStreamComplete?: (data: { outputTokens: number; streamMs: number }) => void;
+  onLiveTps?: (tps: number | null) => void;
 }) {
   const { t } = useI18n();
   const time = showTimestamp ? formatTime(message.timestamp) : null;
@@ -779,19 +785,28 @@ function AssistantMessageView({
       if (tokens === 0) return;
       if (streamStartRef.current === null) streamStartRef.current = now;
       const elapsed = (now - streamStartRef.current) / 1000;
-      if (elapsed > 0.5) setTps(tokens / elapsed);
+      if (elapsed > 0.5) {
+        const currentTps = tokens / elapsed;
+        setTps(currentTps);
+        onLiveTps?.(currentTps);
+      }
     };
     const id = setInterval(tick, 300);
-    return () => clearInterval(id);
-  }, [isStreaming]);
+    return () => { clearInterval(id); onLiveTps?.(null); };
+  }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isStreaming) {
       setStreamEndTime(null);
     } else if (streamStartRef.current !== null) {
-      setStreamEndTime(Date.now());
+      const endTime = Date.now();
+      setStreamEndTime(endTime);
+      const streamMs = endTime - streamStartRef.current;
+      if (message.usage?.output && streamMs > 0) {
+        onStreamComplete?.({ outputTokens: message.usage.output, streamMs });
+      }
     }
-  }, [isStreaming]);
+  }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
 
@@ -882,9 +897,9 @@ function AssistantMessageView({
           return (
             <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
               {[
+                avgTps !== null && `${avgTps.toFixed(1)} t/s`,
                 ttft !== null && `First: ${fmtMs(ttft)}`,
                 totalMs !== null && `Total: ${fmtMs(totalMs)}`,
-                avgTps !== null && `${avgTps.toFixed(1)} t/s`,
                 message.usage && formatUsage(message.usage),
               ].filter(Boolean).join(" · ")}
             </div>

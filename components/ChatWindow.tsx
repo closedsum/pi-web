@@ -374,6 +374,18 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   });
   const sessionBusy = agentRunning || bashRunning;
 
+  const streamingAccRef = useRef({ totalTokens: 0, totalMs: 0, count: 0 });
+  const [sessionAvgTps, setSessionAvgTps] = useState<number | undefined>();
+  const [sessionLiveTps, setSessionLiveTps] = useState<number | null>(null);
+  const handleStreamComplete = useCallback((data: { outputTokens: number; streamMs: number }) => {
+    const acc = streamingAccRef.current;
+    acc.totalTokens += data.outputTokens;
+    acc.totalMs += data.streamMs;
+    acc.count += 1;
+    if (acc.totalMs > 0) setSessionAvgTps(acc.totalTokens / (acc.totalMs / 1000));
+  }, []);
+  const handleLiveTps = useCallback((tps: number | null) => setSessionLiveTps(tps), []);
+
   // Lift extension widgets to AppShell so they can render in the sidebar.
   useEffect(() => {
     onExtensionWidgetsChange?.(extensionWidgets);
@@ -797,13 +809,20 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       sessionStats.tokens.total,
       sessionStats.cost ?? 0,
       sessionStats.totalActiveMs ?? 0,
+      sessionAvgTps ?? "",
+      sessionLiveTps ?? "",
     ].join("|")
     : null;
   const sessionStatsRef = useRef(sessionStats);
   sessionStatsRef.current = sessionStats;
   useEffect(() => {
-    onSessionStatsChange?.(sessionStatsRef.current);
-  }, [statsKey, onSessionStatsChange]);
+    const stats = sessionStatsRef.current;
+    if (stats) {
+      onSessionStatsChange?.({ ...stats, avgTps: sessionAvgTps, liveTps: sessionLiveTps });
+    } else {
+      onSessionStatsChange?.(null);
+    }
+  }, [statsKey, onSessionStatsChange, sessionAvgTps, sessionLiveTps]);
   useEffect(() => () => { onSessionStatsChange?.(null); }, [onSessionStatsChange]);
 
   // Push context usage up to AppShell as well.
@@ -1347,7 +1366,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
               );
             })()}
             {streamState.isStreaming && hasStreamingContent && streamState.streamingMessage && (
-              <MessageView message={streamState.streamingMessage as AgentMessage} toolResults={toolResultsMap} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
+              <MessageView message={streamState.streamingMessage as AgentMessage} toolResults={toolResultsMap} isStreaming modelNames={modelNames} cwd={messageCwd} onOpenFile={onOpenFile} onOpenSession={onOpenSession} onStreamComplete={handleStreamComplete} onLiveTps={handleLiveTps} />
             )}
 
             {agentRunning && !hasStreamingContent && agentPhase && (

@@ -58,6 +58,10 @@ export interface SessionStatsInfo {
   contextUsage?: ContextUsage;
   /** Average time-to-first-token across assistant messages (ms). */
   avgFirstMs?: number;
+  /** Session average tokens/sec across completed streaming messages. */
+  avgTps?: number;
+  /** Live tokens/sec for the currently streaming message (null when idle). */
+  liveTps?: number | null;
   /** Estimated active time across all entries in the session file. */
   totalActiveMs?: number;
 }
