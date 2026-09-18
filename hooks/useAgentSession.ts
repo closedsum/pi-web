@@ -173,7 +173,7 @@ const EVENT_STREAM_READY_TIMEOUT_MS = 60_000;
 const EVENT_STREAM_RECONNECT_DELAY_MS = 1_000;
 const SESSION_LEASE_RENEW_INTERVAL_MS = 30_000;
 // Retry temporary model-list failures without requiring a page refresh.
-const MODELS_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
+const MODELS_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000];
 const MAX_NOTICES = 5;
 const NOTICE_VISIBLE_MS = 5000;
 const NOTICE_EXIT_ANIMATION_MS = 180;
@@ -1627,6 +1627,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [addNotice, currentModelOverride, isNew, loadSession, setNewSessionModel]);
 
+  const handleModelClear = useCallback(() => {
+    if (isNew) {
+      newSessionModelOverrideRef.current = null;
+      setNewSessionModel(null);
+      return;
+    }
+    if (newSessionDefaultModel) {
+      handleModelChange(newSessionDefaultModel.provider, newSessionDefaultModel.modelId);
+    }
+  }, [isNew, newSessionDefaultModel, handleModelChange]);
+
   const handleCompact = useCallback(async () => {
     const sid = sessionIdRef.current;
     if (!sid || isCompacting) return;
@@ -2186,7 +2197,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     sessionIdRef, scrollContainerRef,
     lastUserMsgRef, pendingScrollToUserRef, initialScrollDoneRef,
     // Actions
-    handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
+    handleSend, handleAbort, handleFork, handleNavigate, handleModelChange, handleModelClear,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     handleRecallQueue,
     handleBuiltinSlashCommand,

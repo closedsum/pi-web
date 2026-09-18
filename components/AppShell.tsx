@@ -183,6 +183,8 @@ export function AppShell() {
   const [taskPanelOpen, setTaskPanelOpen] = useState(() => {
     try { return window.localStorage.getItem("pi-task-panel-open") !== "false"; } catch { return true; }
   });
+  const [taskPanelCollapsed, setTaskPanelCollapsed] = useState(false);
+  const [taskCounts, setTaskCounts] = useState({ inProgress: 0, pending: 0, completed: 0 });
   const [mobileToolbarMoreOpen, setMobileToolbarMoreOpen] = useState(false);
   const [mobileSidebarReady, setMobileSidebarReady] = useState(false);
   const sidebarWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
@@ -1967,22 +1969,53 @@ export function AppShell() {
 
       {/* Task panel */}
       {!isMobile && layoutPrefs.taskPanelEnabled && (
-        <div
-          ref={taskPanelResizer.panelRef}
-          id="task-panel"
-          className={`task-panel-container${taskPanelOpen ? " task-panel-open" : " task-panel-closed"}${taskPanelResizer.isResizing ? " task-panel-resizing" : ""}`}
-          style={{
-            "--task-panel-width": `${taskPanelResizer.width}px`,
-            display: "flex",
-            flexDirection: "column",
-            borderRight: "1px solid var(--border)",
-            background: "var(--bg)",
-          } as React.CSSProperties}
-        >
-          <TaskPanel cwd={selectedSession?.cwd ?? activeCwd} />
-        </div>
+        taskPanelCollapsed ? (
+          <div
+            onClick={() => setTaskPanelCollapsed(false)}
+            style={{
+              width: 36, minWidth: 36, height: "100%",
+              borderRight: "1px solid var(--border)",
+              display: "flex", flexDirection: "column", alignItems: "center",
+              paddingTop: 12, cursor: "pointer",
+              background: "var(--bg-panel)",
+              gap: 8,
+            }}
+            title="Expand task panel"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <span style={{ writingMode: "vertical-rl", textOrientation: "mixed", fontSize: 10, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Tasks</span>
+            <span style={{ writingMode: "vertical-rl", textOrientation: "mixed", fontSize: 10, fontWeight: 500 }}>
+              <span style={{ color: "#3b82f6" }}>{taskCounts.inProgress}</span>
+              <span style={{ color: "var(--text-dim)", margin: "2px 0" }}> + </span>
+              <span style={{ color: "#f59e0b" }}>{taskCounts.pending}</span>
+              <span style={{ color: "var(--text-dim)", margin: "2px 0" }}> + </span>
+              <span style={{ color: "#22c55e" }}>{taskCounts.completed}</span>
+            </span>
+          </div>
+        ) : (
+          <div
+            ref={taskPanelResizer.panelRef}
+            id="task-panel"
+            className={`task-panel-container${taskPanelOpen ? " task-panel-open" : " task-panel-closed"}${taskPanelResizer.isResizing ? " task-panel-resizing" : ""}`}
+            style={{
+              "--task-panel-width": `${taskPanelResizer.width}px`,
+              display: "flex",
+              flexDirection: "column",
+              borderRight: "1px solid var(--border)",
+              background: "var(--bg)",
+            } as React.CSSProperties}
+          >
+            <TaskPanel
+              cwd={selectedSession?.cwd ?? activeCwd}
+              onCollapse={() => setTaskPanelCollapsed(true)}
+              onTaskCounts={setTaskCounts}
+            />
+          </div>
+        )
       )}
-      {!isMobile && layoutPrefs.taskPanelEnabled && taskPanelOpen && (
+      {!isMobile && layoutPrefs.taskPanelEnabled && taskPanelOpen && !taskPanelCollapsed && (
         <div
           {...taskPanelResizer.separatorProps}
           aria-controls="task-panel"

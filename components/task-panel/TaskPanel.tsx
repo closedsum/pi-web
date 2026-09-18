@@ -296,7 +296,7 @@ function StatusSection({ status, tasks, deadKeys }: { status: BoardTask["status"
   );
 }
 
-export function TaskPanel({ cwd }: { cwd: string | null }) {
+export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | null; onCollapse?: () => void; onTaskCounts?: (counts: { inProgress: number; pending: number; completed: number }) => void }) {
   const { prefs } = useLayoutPreferences();
   const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -365,6 +365,11 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
     }
   }
 
+  const ipCount = grouped.get("in_progress")?.length ?? 0;
+  const pCount = grouped.get("pending")?.length ?? 0;
+  const cCount = sessionCompletedCount;
+  useEffect(() => { onTaskCounts?.({ inProgress: ipCount, pending: pCount, completed: cCount }); }, [ipCount, pCount, cCount, onTaskCounts]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div
@@ -398,6 +403,19 @@ export function TaskPanel({ cwd }: { cwd: string | null }) {
             {data.counts.in_progress > 0 && <span style={{ color: "#3b82f6" }}><b>{data.counts.in_progress}</b> active</span>}
             {data.counts.pending > 0 && <span style={{ color: "#f59e0b" }}><b>{data.counts.pending}</b> pending</span>}
           </span>
+        )}
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Collapse panel"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, padding: 0, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", borderRadius: 4, transition: "color 0.12s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
         )}
         <button
           onClick={fetchBoard}
