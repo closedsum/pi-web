@@ -15,6 +15,7 @@ import { isThinkingExpandedByDefault, THINKING_EXPANDED_EVENT } from "@/lib/thin
 import { TurnWrittenFiles } from "./TurnWrittenFiles";
 import type { WrittenFile } from "@/lib/turn-written-files";
 import { skillExpansionToCommand } from "@/lib/slash-display";
+import { getModelFamilyColor } from "@/lib/model-registry";
 import { readPref, parseCollapsePatterns, shouldCollapseContent } from "@/hooks/useLayoutPreferences";
 import type { SubagentToolDetails } from "@/lib/subagent-extension";
 import type {
@@ -805,7 +806,7 @@ function AssistantMessageView({
         }}
       >
         {message.provider && (
-          <span>{getModelDisplayName(message.provider, message.model, modelNames)}</span>
+          <span style={{ color: getModelFamilyColor(message.model), fontWeight: 600 }}>{getModelDisplayName(message.provider, message.model, modelNames)}</span>
         )}
         {isStreaming && (() => {
           const est = Math.round(estimatedTokens);
@@ -869,9 +870,15 @@ function AssistantMessageView({
       <div style={{
         display: "flex", alignItems: "center", gap: 8, marginTop: 4,
       }}>
-        {message.usage && !isStreaming && (
+        {!isStreaming && (message.usage || (message.timestamp && prevTimestamp)) && (
           <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-            {formatUsage(message.usage)}
+            {[
+              message.timestamp && prevTimestamp && (() => {
+                const sec = Math.round((message.timestamp! - prevTimestamp) / 1000);
+                return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+              })(),
+              message.usage && formatUsage(message.usage),
+            ].filter(Boolean).join(" · ")}
           </div>
         )}
         {textContent && !isStreaming && (
