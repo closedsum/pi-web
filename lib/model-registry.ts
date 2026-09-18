@@ -14,6 +14,14 @@ export const MODEL_DISPLAY_MAP: Record<string, string> = config.displayNames;
 
 export const TAG_COLORS = config.tagColors;
 
+export const EFFORT_LEVEL_COLORS: Record<string, string> = config.effortColors;
+
+export const EFFORT_AUTO_GRADIENT = `linear-gradient(90deg, ${config.effortAutoGradient.join(", ")})`;
+
+export const CLEAR_BUTTON = config.clearButton;
+
+export const SEND_BUTTON = config.sendButton;
+
 export function getModelFamily(model: string): string | undefined {
   const m = model.toLowerCase();
   for (const [pattern, family] of FAMILY_PATTERNS) {
@@ -29,4 +37,13 @@ export function getModelFamilyColor(model: string): string {
 
 export function resolveModelDisplayName(model: string): string {
   return MODEL_DISPLAY_MAP[model] ?? model;
+}
+
+export function cleanModelName(name: string): string {
+  return name
+    .replace(/\[[\w]+\]$/g, "")
+    .replace(/-(contributor|preview|latest|experimental|beta)$/i, "")
+    .replace(/-\d{8,}$/, "")
+    .replace(/-[0-9a-f]{8,}$/, "")
+    .trim();
 }

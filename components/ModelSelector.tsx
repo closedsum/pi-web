@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { MODEL_FAMILY_COLORS } from "@/lib/model-registry";
+import { MODEL_FAMILY_COLORS, getModelFamilyColor, EFFORT_LEVEL_COLORS } from "@/lib/model-registry";
 
 export interface ModelSelectorOption {
   provider: string;
@@ -136,7 +136,7 @@ export function ModelSelector({
         border: "none",
         borderRadius: 9,
         background: open ? "var(--bg-hover)" : "none",
-        color: accentColor || "var(--text-muted)",
+        color: accentColor || (value?.modelId ? getModelFamilyColor(value.modelId) : "var(--text-muted)"),
         cursor: locked ? "not-allowed" : "pointer",
         fontSize: 12,
         opacity: locked ? 0.5 : 1,
@@ -183,16 +183,13 @@ export function ModelSelector({
         onMouseEnter={(event) => {
           if (locked) return;
           event.currentTarget.style.background = "var(--bg-hover)";
-          event.currentTarget.style.color = "var(--text)";
         }}
         onMouseLeave={(event) => {
           if (locked) {
             event.currentTarget.style.background = variant === "field" ? "var(--bg-panel)" : "none";
-            event.currentTarget.style.color = variant === "field" ? "var(--text-dim)" : "var(--text-muted)";
             return;
           }
           event.currentTarget.style.background = open ? "var(--bg-hover)" : variant === "field" ? "var(--bg)" : "none";
-          event.currentTarget.style.color = variant === "field" ? "var(--text)" : "var(--text-muted)";
         }}
       >
         {busy ? (
@@ -292,7 +289,7 @@ export function ModelSelector({
               ) : modelsByProvider.map((group, index) => (
                 <div key={group.provider}>
                   {modelsByProvider.length > 1 && (
-                    <div style={{ padding: "6px 12px 4px", borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none", color: MODEL_FAMILY_COLORS[group.provider.toLowerCase()] ?? "var(--text-dim)", fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: "uppercase" }}>
+                    <div style={{ padding: "6px 12px 4px", borderTop: index > 0 || onClear ? "1px solid var(--border)" : "none", color: getModelFamilyColor(group.options[0]?.modelId ?? group.provider), fontSize: 10, fontWeight: 600, letterSpacing: 0, textTransform: "uppercase" }}>
                       {group.provider}
                     </div>
                   )}
@@ -303,7 +300,7 @@ export function ModelSelector({
                       label={option.name}
                       onClick={() => choose(option)}
                       activeColor={accentColor}
-                      providerColor={MODEL_FAMILY_COLORS[option.provider?.toLowerCase()] ?? undefined}
+                      providerColor={getModelFamilyColor(option.modelId)}
                     />
                   ))}
                 </div>

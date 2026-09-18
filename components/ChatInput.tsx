@@ -28,7 +28,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { useChatAppearance } from "@/hooks/useChatAppearance";
 import type { ToolPreset } from "@/lib/tool-presets";
 import { ModelSelector, type ModelSelectorOption } from "./ModelSelector";
-import { readPref } from "@/hooks/useLayoutPreferences";
+import { EFFORT_LEVEL_COLORS, EFFORT_AUTO_GRADIENT, CLEAR_BUTTON, SEND_BUTTON, TAG_COLORS, cleanModelName } from "@/lib/model-registry";
 
 export { filterModelOptions } from "./ModelSelector";
 
@@ -55,6 +55,7 @@ interface Props {
   /** Diagnostics from resolving `enabledModels`, e.g. a pattern that matched nothing. */
   modelScopeWarnings?: string[];
   onModelChange?: (provider: string, modelId: string) => void;
+  onModelClear?: () => void;
   modelSwitching?: boolean;
   onCompact?: () => void;
   onAbortCompaction?: () => void;
@@ -544,7 +545,7 @@ export function ModelScopeWarningBanner({ warnings }: { warnings?: string[] }) {
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
-  onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, modelSwitching,
+  onSend, onAbort, onSteer, onFollowUp, isStreaming, model, isAutoModelSelection, modelNames, modelList, modelError, modelScopeWarnings, onModelChange, onModelClear, modelSwitching,
   onCompact, onAbortCompaction, isCompacting, compactError, compactResult, toolPreset, onToolPresetChange,
   thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
   retryInfo, queuedMessages, inputHistory = [], onRecallQueue,
@@ -559,8 +560,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const { t } = useI18n();
   const { fontSize } = useChatAppearance();
   const isMobile = useIsMobile();
-  const tagColorModel = readPref("tagColorModel");
-  const tagColorEffort = readPref("tagColorEffort");
+  const tagColorEffort = TAG_COLORS.effort;
   const [value, setValue] = useState(() => (draftKey ? getDraft(draftKey)?.value ?? "" : ""));
   const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
   const [thinkingDropdownOpen, setThinkingDropdownOpen] = useState(false);
@@ -1513,12 +1513,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   // Build model options: prefer modelList (has provider info), fallback to modelNames
   const modelOptions: ModelSelectorOption[] = (() => {
     if (modelList && modelList.length > 0) {
-      return modelList.map((m) => ({ provider: m.provider, modelId: m.id, name: m.name }));
+      return modelList.map((m) => ({ provider: m.provider, modelId: m.id, name: cleanModelName(m.id) }));
     }
     return Object.entries(modelNames ?? {}).map(([modelId, name]) => ({
       provider: model?.provider ?? "unknown",
       modelId,
-      name,
+      name: cleanModelName(modelId),
     }));
   })();
 
@@ -1528,11 +1528,9 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   const compactResultText = compactResult
     ? `${compactResult.reason && compactResult.reason !== "manual" ? `${compactResult.reason[0].toUpperCase()}${compactResult.reason.slice(1)} ` : t("chat.compacted")} ${formatTokenCount(compactResult.tokensBefore)} -> ${formatTokenCount(compactResult.estimatedTokensAfter)} tokens (${t("chat.tokensSaved", { saved: formatTokenCount(compactSavedTokens) })})`
     : null;
-  const thinkingDisplayLabel = (() => {
-    const lvl = thinkingLevel ?? "auto";
-    if (lvl === "auto" || !thinkingLevelMap) return lvl;
-    return thinkingLevelMap[lvl] ?? lvl;
-  })();
+  const activeEffortLevel = thinkingLevel ?? "auto";
+  const thinkingDisplayLabel = activeEffortLevel;
+  const activeEffortColor = EFFORT_LEVEL_COLORS[activeEffortLevel] ?? tagColorEffort;
   const rawToolPresetLabel = Object.entries(TOOL_PRESET_MAP).find(([, v]) => v === (toolPreset ?? "default"))?.[0] ?? "default";
   const toolPresetLabel = rawToolPresetLabel === "chat-only" ? t("chat.chatOnly") : rawToolPresetLabel;
 
@@ -2192,22 +2190,22 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             </div>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!value.trim() && !attachedImages.length}
+              onClick={() => { if (value.trim() || attachedImages.length) handleSend(); }}
               style={{
                 flexShrink: 0,
                 alignSelf: "flex-end",
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "7px 14px",
-                background: (value.trim() || attachedImages.length) ? "var(--accent)" : "var(--bg-panel)",
+                background: SEND_BUTTON.background,
                 border: "none",
                 borderRadius: 8,
-                color: (value.trim() || attachedImages.length) ? "var(--accent-contrast)" : "var(--text-dim)",
-                cursor: (value.trim() || attachedImages.length) ? "pointer" : "not-allowed",
+                color: SEND_BUTTON.color,
+                cursor: (value.trim() || attachedImages.length) ? "pointer" : "default",
+                opacity: (value.trim() || attachedImages.length) ? 1 : SEND_BUTTON.disabledOpacity,
                 fontSize: 13,
                 fontWeight: 600,
                 letterSpacing: "-0.01em",
-                boxShadow: (value.trim() || attachedImages.length) ? "0 1px 3px color-mix(in srgb, var(--accent) 25%, transparent)" : "none",
+                boxShadow: (value.trim() || attachedImages.length) ? `0 1px 3px rgba(0,0,0,0.15)` : "none",
                 transition: "background 0.15s, box-shadow 0.15s",
               }}
             >
@@ -2268,7 +2266,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
               </svg>
             </button>
             {/* Model selector - visible always, disabled while the session or switch is busy */}
-            {(modelOptions.length > 0 || model || modelError) && onModelChange && (
+            {(modelOptions.length > 0 || model || modelError) && onModelChange && (<>
               <ModelSelector
                 options={modelOptions}
                 value={model}
@@ -2276,9 +2274,26 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                 disabled={isStreaming}
                 busy={modelSwitching}
                 isAutoSelection={isAutoModelSelection}
-                accentColor={tagColorModel}
+                accentColor={undefined}
               />
-            )}
+              {model && onModelClear && !isStreaming && (
+                <button
+                  type="button"
+                  title={CLEAR_BUTTON.label}
+                  onClick={() => { onModelClear(); textareaRef.current?.focus(); }}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "5px 12px", border: "none", borderRadius: 8,
+                    background: CLEAR_BUTTON.background, color: CLEAR_BUTTON.color,
+                    cursor: "pointer", fontSize: 11, fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                    transition: "background 0.15s, box-shadow 0.15s",
+                  }}
+                >
+                  {CLEAR_BUTTON.label}
+                </button>
+              )}
+            </>)}
           </div>
 
           {/* spacer */}
@@ -2393,7 +2408,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     <line x1="7" y1="18" x2="12" y2="18" />
                     <line x1="8" y1="21" x2="11" y2="21" />
                   </svg>
-                  {(!isMobile || controlsMenuOpen) && <span style={{ whiteSpace: "nowrap", color: tagColorEffort }}>{thinkingDisplayLabel}</span>}
+                  {(!isMobile || controlsMenuOpen) && <span style={{ whiteSpace: "nowrap", ...(activeEffortLevel === "auto" ? { backgroundImage: EFFORT_AUTO_GRADIENT, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundSize: "200% 100%", animation: "effortRainbow 3s linear infinite" } : { color: activeEffortColor }) }}>{thinkingDisplayLabel}</span>}
                 </button>
                 {thinkingDropdownOpen && (
                   <div style={{
@@ -2410,9 +2425,8 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     }).map((lvl) => {
                       const isActive = (thinkingLevel ?? "auto") === lvl;
                        const desc = t(THINKING_LEVEL_DESC_KEYS[lvl]);
-                      const mappedVal = (lvl !== "auto" && thinkingLevelMap) ? thinkingLevelMap[lvl] : undefined;
-                      const displayLabel = (mappedVal != null && mappedVal !== lvl) ? mappedVal : lvl;
-                      const showOriginal = mappedVal != null && mappedVal !== lvl;
+                      const lvlColor = EFFORT_LEVEL_COLORS[lvl] ?? tagColorEffort;
+                      const isAuto = lvl === "auto";
                       return (
                         <button
                           key={lvl}
@@ -2422,20 +2436,20 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                             width: "100%", padding: "7px 12px",
                             background: isActive ? "var(--bg-selected)" : "none",
                             border: "none",
-                            color: isActive ? tagColorEffort : "var(--text-muted)",
+                            color: isAuto ? undefined : lvlColor,
                             cursor: "pointer", fontSize: 12, textAlign: "left",
                             fontWeight: isActive ? 600 : 400,
                             whiteSpace: "nowrap",
+                            ...(isAuto ? { backgroundImage: EFFORT_AUTO_GRADIENT, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundSize: "200% 100%", animation: "effortRainbow 3s linear infinite" } : {}),
                           }}
-                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = isAuto ? "none" : "var(--bg-hover)"; }}
                           onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "none"; }}
                         >
                           {isActive
                             ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="1.5 5 4 7.5 8.5 2.5" /></svg>
                             : <span style={{ width: 10, flexShrink: 0 }} />}
                           <span style={{ flex: 1 }}>
-                            {displayLabel}
-                            {showOriginal && <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginLeft: 5 }}>({lvl})</span>}
+                            {lvl}
                           </span>
                           <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 8 }}>{desc}</span>
                         </button>
