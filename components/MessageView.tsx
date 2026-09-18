@@ -670,6 +670,7 @@ function AssistantMessageView({
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const streamStartRef = useRef<number | null>(null);
+  const streamEndRef = useRef<number | null>(null);
   const [tps, setTps] = useState<number | null>(null);
   const blockItemsRef = useRef(blockItems);
   blockItemsRef.current = blockItems;
@@ -784,6 +785,14 @@ function AssistantMessageView({
     return () => clearInterval(id);
   }, [isStreaming]);
 
+  useEffect(() => {
+    if (isStreaming) {
+      streamEndRef.current = null;
+    } else if (streamStartRef.current !== null && streamEndRef.current === null) {
+      streamEndRef.current = Date.now();
+    }
+  }, [isStreaming]);
+
   if (blocks.length === 0 && !isStreaming && !providerError) return null;
 
   return (
@@ -860,19 +869,27 @@ function AssistantMessageView({
       <div style={{
         display: "flex", alignItems: "center", gap: 8, marginTop: 4,
       }}>
-        {!isStreaming && (message.usage || (message.timestamp && prevTimestamp)) && (
-          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-            {[
-              message.timestamp && prevTimestamp && (() => {
-                const ms = message.timestamp! - prevTimestamp;
-                if (ms < 1000) return `${ms}ms`;
-                const sec = Math.round(ms / 1000);
-                return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
-              })(),
-              message.usage && formatUsage(message.usage),
-            ].filter(Boolean).join(" · ")}
-          </div>
-        )}
+        {!isStreaming && (message.usage || (message.timestamp && prevTimestamp)) && (() => {
+          const fmtMs = (ms: number) => {
+            if (ms < 1000) return `${ms}ms`;
+            const sec = Math.round(ms / 1000);
+            return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+          };
+          const ttft = message.timestamp && prevTimestamp ? message.timestamp - prevTimestamp : null;
+          const streamMs = streamEndRef.current && streamStartRef.current ? streamEndRef.current - streamStartRef.current : null;
+          const totalMs = ttft !== null && streamMs !== null ? ttft + streamMs : null;
+          const avgTps = message.usage?.output && streamMs ? message.usage.output / (streamMs / 1000) : null;
+          return (
+            <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+              {[
+                ttft !== null && `First: ${fmtMs(ttft)}`,
+                totalMs !== null && `Total: ${fmtMs(totalMs)}`,
+                avgTps !== null && `${avgTps.toFixed(1)} t/s`,
+                message.usage && formatUsage(message.usage),
+              ].filter(Boolean).join(" · ")}
+            </div>
+          );
+        })()}
         {textContent && !isStreaming && (
           <button
             onClick={copyContent}
