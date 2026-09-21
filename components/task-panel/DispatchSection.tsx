@@ -193,7 +193,8 @@ function DispatchItemRow({ item }: { item: DispatchItem }) {
 export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: number }) {
   const [data, setData] = useState<DispatchStatusData | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionStartRef = useRef(new Date().toISOString());
+  const trackedRef = useRef<Set<string>>(new Set());
+  const baselineRef = useRef<boolean>(false);
 
   const fetchDispatches = useCallback(async () => {
     if (!cwd) return;
@@ -201,6 +202,20 @@ export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: n
       const res = await fetch(`/api/dispatch-status?cwd=${encodeURIComponent(cwd)}`);
       if (!res.ok) return;
       const json = await res.json() as DispatchStatusData;
+      if (!baselineRef.current) {
+        baselineRef.current = true;
+        for (const d of json.dispatches) {
+          if (d.displayCategory === "active") {
+            trackedRef.current.add(`${d.source}-${d.id}`);
+          }
+        }
+      } else {
+        for (const d of json.dispatches) {
+          const key = `${d.source}-${d.id}`;
+          if (!trackedRef.current.has(key) && d.displayCategory !== "active") continue;
+          trackedRef.current.add(key);
+        }
+      }
       setData(json);
     } catch {
       // ignore fetch errors
@@ -215,7 +230,8 @@ export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: n
     };
   }, [fetchDispatches, pollMs]);
 
-  const sessionDispatches = (data?.dispatches ?? []).filter((d) => d.startedAt >= sessionStartRef.current);
+  const tracked = trackedRef.current;
+  const sessionDispatches = (data?.dispatches ?? []).filter((d) => tracked.has(`${d.source}-${d.id}`));
 
   if (sessionDispatches.length === 0) return null;
 
