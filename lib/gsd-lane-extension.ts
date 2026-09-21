@@ -74,7 +74,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
     name: GSD_LANE_EXTENSION_NAME,
     hidden: true,
     factory: (pi) => {
-      const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane"]);
+      const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "ue_dispatch"]);
       const MAX_BLOCKS_PER_TURN = 3;
       let blocksThisTurn = 0;
 
