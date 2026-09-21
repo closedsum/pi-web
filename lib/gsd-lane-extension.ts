@@ -4,7 +4,7 @@ import {
   type InlineExtension,
 } from "@earendil-works/pi-coding-agent";
 import { execFile, spawn } from "node:child_process";
-import { writeFile, mkdir, open } from "node:fs/promises";
+import { writeFile, mkdir, open, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -28,7 +28,8 @@ export function classifyDispatchFailure(error: string): DispatchFailureClass {
   if (OWNERSHIP_PATTERNS.some((p) => lower.includes(p))) return "ownership";
   if (lower.includes("spawn") || lower.includes("enoent") || lower.includes("not found") ||
       lower.includes("queue build failed") || lower.includes("did not start") ||
-      lower.includes("failed to resolve head")) {
+      lower.includes("failed to resolve head") || lower.includes("plan validation failed") ||
+      lower.includes("spec missing sections")) {
     return "infra";
   }
   return "unknown";
@@ -300,13 +301,20 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           child.on("exit", (code) => {
             logFd.close().catch(() => {});
             if (code !== 0 && code !== null) {
-              const msg = `Lane ${slug} exited with code ${code}`;
-              recordFailure(msg, slug);
-              pi.sendMessage({
-                customType: "gsd-lane-lifecycle",
-                content: `Lane failed: ${slug} (exit code ${code})\nLog: ${logPath}\nAnalyze the failure and decide whether to retry or inform the user.`,
-                display: true,
-              }, { triggerTurn: true });
+              const manifestPath = join(lanesDir, `p-${slug}.json`);
+              readFile(manifestPath, "utf-8").then((raw) => {
+                const data = JSON.parse(raw);
+                return (data._error as string) || "";
+              }).catch(() => "").then((manifestError) => {
+                const reason = manifestError || `exit code ${code}`;
+                const msg = `Lane ${slug} failed: ${reason}`;
+                recordFailure(msg, slug);
+                pi.sendMessage({
+                  customType: "gsd-lane-lifecycle",
+                  content: `Lane failed: ${slug}\nReason: ${reason}\nLog: ${logPath}\nAnalyze the failure and decide whether to retry or inform the user.`,
+                  display: true,
+                }, { triggerTurn: true });
+              });
             }
           });
           child.unref();
