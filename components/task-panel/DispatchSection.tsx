@@ -170,6 +170,20 @@ function DispatchItemRow({ item }: { item: DispatchItem }) {
               ))}
             </div>
           )}
+          {item.events && item.events.length > 0 && (
+            <div style={{ marginTop: 4, borderLeft: "2px solid var(--border)", paddingLeft: 6 }}>
+              {item.events.map((ev) => (
+                <div key={ev.seq} style={{ display: "flex", gap: 6, fontSize: 10, color: "var(--text-dim)", lineHeight: 1.6 }}>
+                  <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+                    {new Date(ev.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </span>
+                  <span style={{ color: ev.type.includes("fail") ? "#ef4444" : "var(--text-dim)" }}>
+                    {ev.phase || ev.type}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

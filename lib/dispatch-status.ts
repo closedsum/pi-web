@@ -15,6 +15,7 @@ export interface DispatchItem {
   pid?: number;
   error?: string;
   steps?: Array<{ label: string; done: boolean }>;
+  events?: Array<{ seq: number; ts: string; type: string; phase: string }>;
 }
 
 export interface DispatchStatusData {
@@ -39,6 +40,27 @@ function toDisplayCategory(status: string): DisplayCategory {
   return CATEGORY_MAP[status] ?? "active";
 }
 
+function readLaneEvents(lanesDir: string, slug: string): Array<{ seq: number; ts: string; type: string; phase: string }> {
+  const eventsPath = path.join(lanesDir, slug, "events.jsonl");
+  try {
+    const raw = fs.readFileSync(eventsPath, "utf-8");
+    const events: Array<{ seq: number; ts: string; type: string; phase: string }> = [];
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const ev = JSON.parse(trimmed);
+        if (typeof ev.seq === "number" && ev.type) {
+          events.push({ seq: ev.seq, ts: ev.ts || "", type: ev.type, phase: ev.phase || "" });
+        }
+      } catch { /* skip malformed lines */ }
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 function readLaneManifests(cwd: string): DispatchItem[] {
   const lanesDir = path.join(cwd, ".planning", "impl-lanes");
   let entries: string[];
@@ -59,6 +81,7 @@ function readLaneManifests(cwd: string): DispatchItem[] {
       if (data.type !== "pipeline" || !data.slug) continue;
 
       const status = data.status || "unknown";
+      const events = readLaneEvents(lanesDir, data.slug);
       manifests.push({
         id: data.slug,
         title: data.title || data.slug,
@@ -70,6 +93,7 @@ function readLaneManifests(cwd: string): DispatchItem[] {
         finishedAt: data.end,
         pid: data.pid,
         error: data._error,
+        events: events.length > 0 ? events : undefined,
       });
     } catch {
       // skip malformed files
