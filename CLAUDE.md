@@ -48,6 +48,18 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags |
 | `components/ModelSelector.tsx` | Model dropdown with per-provider color coding |
 
+## Orchestrator Mode
+
+`lib/gsd-lane-extension.ts` enforces orchestrator mode via `pi.on("tool_call")` allow-list gate. The model can only use read-only tools + dispatch tools. All other tools (bash, powershell, write, edit) are blocked mid-turn.
+
+**Dispatch tool contract** — any tool that dispatches long-running work must:
+1. **Fire-and-forget:** spawn the process detached, return within 1s
+2. **Single call:** one dispatch per request — no decompose→dispatch→verify chains
+3. **Allow-listed:** added to `ORCH_ALLOW` in `gsd-lane-extension.ts`
+4. **Prompt guideline:** includes "call once, dispatcher handles everything internally"
+
+Current dispatch tools: `DispatchLane`, `ue_dispatch`
+
 ## Architecture
 
 - **Host vs Project:** Pi Web's runtime environment is separate from the project command environment (see `CONTEXT.md`)
