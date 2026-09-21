@@ -32,7 +32,7 @@ import {
   createSubagentExtension,
   preferPiWebSubagentExtension,
 } from "./subagent-extension";
-import { createGsdLaneExtension } from "./gsd-lane-extension";
+import { createGsdLaneExtension, ORCH_ALLOW } from "./gsd-lane-extension";
 import {
   listSubagentProfiles,
   readSubagentRun,
@@ -439,6 +439,15 @@ export class AgentSessionWrapper {
 
   setActiveToolSelection(toolNames: string[]): void {
     this.inner.setActiveToolsByName(withExtensionTools(this.inner, toolNames));
+    this.applyExactSystemPrompt();
+  }
+
+  setOrchestratorMode(enabled: boolean): void {
+    if (enabled) {
+      this.inner.setActiveToolsByName([...ORCH_ALLOW]);
+    } else {
+      this.inner.setActiveToolsByName(withExtensionTools(this.inner, this.inner.getActiveToolNames()));
+    }
     this.applyExactSystemPrompt();
   }
 
@@ -941,6 +950,12 @@ export class AgentSessionWrapper {
         const toolNames = command.toolNames as string[];
         this.setActiveToolSelection(toolNames);
         return null;
+      }
+
+      case "set_orchestrator_mode": {
+        const enabled = command.enabled as boolean;
+        this.setOrchestratorMode(enabled);
+        return { orchestratorMode: enabled };
       }
 
       case "reload": {

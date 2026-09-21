@@ -21,6 +21,8 @@ const OWNERSHIP_PATTERNS = [
   "scope conflict", "already has a running lane", "already running",
 ];
 
+export const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "ue_dispatch"]);
+
 export function classifyDispatchFailure(error: string): DispatchFailureClass {
   const lower = error.toLowerCase();
   if (OWNERSHIP_PATTERNS.some((p) => lower.includes(p))) return "ownership";
@@ -92,7 +94,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
     name: GSD_LANE_EXTENSION_NAME,
     hidden: true,
     factory: (pi) => {
-      const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "ue_dispatch"]);
+      // ORCH_ALLOW is module-level (exported for rpc-manager prompt boundary)
       const MAX_BLOCKS_PER_TURN = 3;
       let blocksThisTurn = 0;
       let mode: "orchestrator" | "inline" = "orchestrator";
