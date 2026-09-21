@@ -2030,6 +2030,7 @@ export function AppShell() {
           >
             <TaskPanel
               cwd={selectedSession?.cwd ?? activeCwd}
+              sessionId={selectedSession?.id}
               onCollapse={() => setTaskPanelCollapsed(true)}
               onTaskCounts={setTaskCounts}
             />

@@ -297,7 +297,7 @@ function StatusSection({ status, tasks, deadKeys }: { status: BoardTask["status"
   );
 }
 
-export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | null; onCollapse?: () => void; onTaskCounts?: (counts: { inProgress: number; pending: number; completed: number }) => void }) {
+export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: string | null; sessionId?: string; onCollapse?: () => void; onTaskCounts?: (counts: { inProgress: number; pending: number; completed: number }) => void }) {
   const { prefs } = useLayoutPreferences();
   const [data, setData] = useState<TaskBoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -466,7 +466,7 @@ export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | nul
         {data && STATUS_ORDER.map((status) => (
           <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} deadKeys={deadTasks} />
         ))}
-        <DispatchSection cwd={cwd} pollMs={pollMs} />
+        <DispatchSection key={sessionId ?? ""} cwd={cwd} pollMs={pollMs} />
       </div>
     </div>
   );
