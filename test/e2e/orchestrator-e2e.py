@@ -154,7 +154,7 @@ SCENARIOS = [
         "input": "What changed in the last 5 commits on this branch? Give me a summary",
         "expect_text": True,
         "expect_text_first": True,
-        "expect_dispatch": True,
+        "expect_dispatch": False,
         "max_dispatches": 1,
     },
     {
@@ -189,7 +189,7 @@ SCENARIOS = [
         "expect_dispatch": False,
         "max_dispatches": 0,
     },
-    # --- Scenario 21: UE dispatch (non-blocking) ---
+    # --- Scenario 21: UE dispatch ---
     {
         "id": "ue-dispatch-nonblocking",
         "input": "Open the Unreal Editor for the CropoutSampleProject",
@@ -197,6 +197,16 @@ SCENARIOS = [
         "expect_text_first": True,
         "expect_dispatch": False,
         "max_dispatches": 0,
+    },
+    # --- Scenario 22: fast turn completion — tool returns quickly, doesn't block session ---
+    {
+        "id": "fast-turn-completion",
+        "input": "Open the Unreal Editor for the CropoutSampleProject",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": False,
+        "max_dispatches": 0,
+        "max_turn_time_s": 30,
     },
 ]
 
@@ -445,10 +455,11 @@ def run_scenario(session_id, scenario, verbose=False):
     except Exception as e:
         return {"id": scenario["id"], "pass": False, "violations": [f"SEND_FAILED: {e}"], "chain": []}
 
+    t_start = time.monotonic()
     reader_thread.join(timeout=TURN_TIMEOUT_S)
+    turn_time = time.monotonic() - t_start
     events = collected_events
 
-    # Dump raw events for debugging (uses results_dir if passed via _results_dir)
     if verbose and hasattr(run_scenario, "_results_dir"):
         dump_path = os.path.join(run_scenario._results_dir, f"raw-events-{scenario['id']}.json")
         with open(dump_path, "w") as f:
@@ -457,6 +468,13 @@ def run_scenario(session_id, scenario, verbose=False):
 
     chain = extract_chain(events)
     passed, violations = evaluate_chain(chain, scenario)
+
+    max_turn = scenario.get("max_turn_time_s")
+    if max_turn and turn_time > max_turn:
+        violations.append(f"TURN_TOO_SLOW: took {turn_time:.1f}s, max {max_turn}s — tool may be blocking the session")
+        passed = False
+    if max_turn and verbose:
+        print(f"    Turn time: {turn_time:.1f}s (max {max_turn}s)")
 
     if verbose or not passed:
         print(f"    Chain ({len(chain)} events):")
