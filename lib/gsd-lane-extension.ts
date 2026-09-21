@@ -131,6 +131,11 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           error,
           timestamp: new Date().toISOString(),
         });
+        pi.sendMessage({
+          customType: "gsd-lane-lifecycle",
+          content: `Lane failed: ${slug} [${failureClass}]\n${error}`,
+          display: true,
+        }, { triggerTurn: false });
         if (failureClass === "infra") {
           mode = "inline";
           autoFlipped = true;
@@ -296,6 +301,13 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             logFd.close().catch(() => {});
           });
           child.unref();
+
+          const title = params.title || params.task.split(/[.\n]/)[0].slice(0, 80);
+          pi.sendMessage({
+            customType: "gsd-lane-lifecycle",
+            content: `Lane dispatched: ${slug}\n${title}`,
+            display: true,
+          }, { triggerTurn: false });
 
           return {
             content: [{
