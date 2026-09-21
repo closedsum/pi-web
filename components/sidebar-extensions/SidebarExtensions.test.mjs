@@ -121,10 +121,9 @@ describe("SidebarExtensions", () => {
   });
 
   describe("display name mapping", () => {
-    it("maps gsd-task to Checklist in heading", () => {
+    it("gsd-task is hidden (shown in TaskPanel instead)", () => {
       const html = render({ widgets: [makeWidget("gsd-task", 2)] });
-      assert.match(html, /Checklist/, "gsd-task should display as Checklist");
-      assert.doesNotMatch(html, /letter-spacing[^>]*>gsd-task</, "heading should not show raw key");
+      assert.equal(html, "", "gsd-task is in HIDDEN_WIDGETS and should not render");
     });
 
     it("shows raw key when no mapping exists", () => {
