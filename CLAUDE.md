@@ -45,7 +45,9 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `lib/task-board.ts` | Reads `.planning/threads/board.jsonl` task board data |
 | `lib/model-catalog.ts` | Provider model catalog (discovery, presets) |
 | `lib/model-scope.ts` | Resolves visible models from `enabledModels` whitelist |
+| `lib/dispatch-status.ts` | Reads lane pipeline manifests and UE dispatch progress into unified `DispatchItem[]` |
 | `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags |
+| `components/task-panel/DispatchSection.tsx` | Lanes section in TaskPanel — active/terminal dispatches |
 | `components/ModelSelector.tsx` | Model dropdown with per-provider color coding |
 
 ## Orchestrator Mode
@@ -66,3 +68,11 @@ Current dispatch tools: `DispatchLane`, `ue_dispatch`
 - **Extensions:** Plugin system via `lib/sidebar-extensions/` and RPC manager
 - **Settings:** User prefs in `~/.pi/agent/settings.json`, layout prefs in localStorage via `hooks/useLayoutPreferences.ts`
 - **Models:** Configured in `~/.pi/agent/models.json`, filtered by `enabledModels` in settings
+
+## Subordinate Docs
+
+| Topic | File |
+|-------|------|
+| **Doc Chain Index** | [`docs/INDEX.md`](docs/INDEX.md) — full doc tree: UI framework, extensions, settings, test matrix, ADRs |
+| **Host vs Project** | [`CONTEXT.md`](CONTEXT.md) — runtime isolation between web server and project commands |
+| **Dev Notes** | [`AGENTS.md`](AGENTS.md) — development quick-start and agent configuration |

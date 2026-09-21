@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import type { BoardTask, TaskBoardData } from "@/lib/task-board";
 import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
+import { DispatchSection } from "./DispatchSection";
 import { resolveModelDisplayName, getModelFamilyColor } from "@/lib/model-registry";
 
 const STATUS_ORDER: BoardTask["status"][] = ["in_progress", "pending", "completed"];
@@ -465,6 +466,7 @@ export function TaskPanel({ cwd, onCollapse, onTaskCounts }: { cwd: string | nul
         {data && STATUS_ORDER.map((status) => (
           <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} deadKeys={deadTasks} />
         ))}
+        <DispatchSection cwd={cwd} pollMs={pollMs} />
       </div>
     </div>
   );
