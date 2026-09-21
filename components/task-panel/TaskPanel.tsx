@@ -466,7 +466,7 @@ export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: s
         {data && STATUS_ORDER.map((status) => (
           <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} deadKeys={deadTasks} />
         ))}
-        <DispatchSection key={sessionId ?? ""} cwd={cwd} pollMs={pollMs} />
+        <DispatchSection key={`${cwd ?? ""}:${sessionId ?? ""}`} cwd={cwd} pollMs={pollMs} />
       </div>
     </div>
   );
