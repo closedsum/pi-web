@@ -1374,7 +1374,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
       if (sendShortcut) {
         e.preventDefault();
         if (isStreaming && (onSteer || onFollowUp)) {
-          sendQueued("followup");
+          sendQueued("steer");
         } else {
           handleSend();
         }
@@ -2171,7 +2171,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, alignSelf: "flex-end" }}>
               {(onFollowUp || onSteer) && (
                 <button
-                  onClick={() => sendQueued("followup")}
+                  onClick={() => sendQueued("steer")}
                   disabled={!canQueueStreamingMessage}
                   title="Send (queued for next turn)"
                   style={{
