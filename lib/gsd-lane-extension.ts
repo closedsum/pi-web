@@ -74,16 +74,52 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
     name: GSD_LANE_EXTENSION_NAME,
     hidden: true,
     factory: (pi) => {
+      const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane"]);
+      const MAX_BLOCKS_PER_TURN = 3;
+      let blocksThisTurn = 0;
+
+      // Hard mid-turn gate: block any tool not in the orchestrator allow-list.
+      // setActiveToolsByName is prompt-boundary-scoped (takes effect at next
+      // prompt, agent-session.js:657); this hook enforces mid-turn.
+      pi.on("tool_call", (ev: { toolName: string }) => {
+        if (ORCH_ALLOW.has(ev.toolName)) return undefined;
+        blocksThisTurn++;
+        const terminate = blocksThisTurn >= MAX_BLOCKS_PER_TURN;
+        return {
+          block: true,
+          terminate,
+          reason: `'${ev.toolName}' is unavailable in orchestrator mode. Delegate with DispatchLane or reply to the user with your analysis.${terminate ? " Tool budget exhausted — respond now." : ""}`,
+        };
+      });
+
+      let dispatchCountThisTurn = 0;
+      let lastTurnTimestamp = 0;
+      const TURN_WINDOW_MS = 10_000;
+      const MAX_DISPATCHES_PER_TURN = 2;
+
+      function checkTurnGuard(): string | null {
+        const now = Date.now();
+        if (now - lastTurnTimestamp > TURN_WINDOW_MS) {
+          dispatchCountThisTurn = 0;
+          lastTurnTimestamp = now;
+        }
+        dispatchCountThisTurn++;
+        if (dispatchCountThisTurn > MAX_DISPATCHES_PER_TURN) {
+          return `Dispatch limit reached (${MAX_DISPATCHES_PER_TURN} per turn). Stop and respond to the user with your analysis. Do not call DispatchLane again this turn.`;
+        }
+        return null;
+      }
+
       pi.registerTool(defineTool({
         name: "DispatchLane",
         label: "Dispatch Lane",
-        description: "Dispatch an implementation task to a GSD lane that runs autonomously in an isolated worktree. The lane handles implementation, cross-review, fix rounds, and integration. Use this for any task that modifies code — it keeps the chat responsive while work runs in the background. The task panel shows lane progress.",
+        description: "Dispatch an implementation task to an autonomous lane. You are an orchestrator — you must NEVER implement changes directly (no edit/write/bash/powershell). Instead, describe the task and call this tool. The lane handles implementation, cross-review, fix rounds, and integration in an isolated worktree.",
         promptSnippet: "Dispatch implementation work to an autonomous GSD lane",
         promptGuidelines: [
-          "Use DispatchLane for any task that will edit files — never run Edit/Write inline when a lane can do it.",
-          "Provide a clear, specific task description. The lane agent receives only this text.",
-          "Include file paths and scope when you know them.",
-          "The lane runs autonomously: implement → review → fix → integrate.",
+          "CRITICAL ORCHESTRATOR RULE: You must NEVER edit files, run powershell/bash commands, or implement changes directly. Your ONLY job is to (1) briefly explain what you will do in text, then (2) call DispatchLane to send the work to an autonomous agent. The lane agent does the actual implementation — you do not.",
+          "ALWAYS include a text response BEFORE calling DispatchLane. Example: 'I'll fix the PIE polling to bind to the editor PID.' then call DispatchLane with the task details.",
+          "For pure questions (what does X do, explain Y, status check): answer directly in text. Do NOT call DispatchLane for questions.",
+          "Call DispatchLane exactly once per request. Never chain multiple dispatches. The lane runs autonomously: implement → review → fix → integrate.",
         ],
         executionMode: "parallel",
         parameters: Type.Object({
@@ -94,6 +130,11 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           skip_review: Type.Optional(Type.Boolean({ description: "Skip cross-review (for trivial changes only)." })),
         }),
         async execute(_toolCallId, params) {
+          const guardMessage = checkTurnGuard();
+          if (guardMessage) {
+            return { content: [{ type: "text", text: guardMessage }], details: undefined, isError: true };
+          }
+
           const slug = uniqueSlug(sanitizeSlug(params.slug || params.task));
           const repo = resolve(options.cwd);
 
