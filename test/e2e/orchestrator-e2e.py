@@ -67,6 +67,47 @@ SCENARIOS = [
         "expect_dispatch": True,
         "max_dispatches": 1,
     },
+    # --- Scenarios 6-10: real-world Opus-like work patterns ---
+    {
+        "id": "refactor-request",
+        "input": "Refactor the session idle timeout logic in rpc-manager.ts — extract it into its own module so it can be unit tested independently",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": True,
+        "max_dispatches": 1,
+    },
+    {
+        "id": "error-diagnosis",
+        "input": "I'm getting 'EADDRINUSE port 30141' when starting the dev server. What's causing it and how do I fix it?",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": False,
+        "max_dispatches": 0,
+    },
+    {
+        "id": "code-explanation",
+        "input": "Walk me through how the agent event stream works — from the SSE endpoint to the browser. What are the key files and data flow?",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": False,
+        "max_dispatches": 0,
+    },
+    {
+        "id": "multi-file-change",
+        "input": "Add a new 'deepseek' model family to the model registry — needs entries in model-display.json, a color, and the prefix pattern in model-registry.ts",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": True,
+        "max_dispatches": 1,
+    },
+    {
+        "id": "followup-correction",
+        "input": "Actually, don't change the timeout to 5 minutes — keep it at 10 but add a config option in settings.json so users can override it",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": True,
+        "max_dispatches": 1,
+    },
 ]
 
 
@@ -317,11 +358,9 @@ def run_scenario(session_id, scenario, verbose=False):
     reader_thread.join(timeout=TURN_TIMEOUT_S)
     events = collected_events
 
-    # Dump raw events for debugging
-    if verbose:
-        dump_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-        os.makedirs(dump_dir, exist_ok=True)
-        dump_path = os.path.join(dump_dir, f"raw-events-{scenario['id']}.json")
+    # Dump raw events for debugging (uses results_dir if passed via _results_dir)
+    if verbose and hasattr(run_scenario, "_results_dir"):
+        dump_path = os.path.join(run_scenario._results_dir, f"raw-events-{scenario['id']}.json")
         with open(dump_path, "w") as f:
             json.dump(events[:50], f, indent=2)
         print(f"    Raw events ({len(events)}) dumped to {dump_path}")
@@ -344,6 +383,20 @@ def run_scenario(session_id, scenario, verbose=False):
     return {"id": scenario["id"], "pass": passed, "violations": violations, "chain": chain}
 
 
+def get_results_dir(provider, model_id, effort):
+    """Return a timestamped results directory for this run."""
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+    ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+    return os.path.join(base, f"{provider}-{model_id}-{effort}-{ts}")
+
+
+def cleanup_results(results_dir):
+    """Remove a results directory if it exists."""
+    import shutil
+    if os.path.isdir(results_dir):
+        shutil.rmtree(results_dir, ignore_errors=True)
+
+
 def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
     """Run all scenarios against the specified model."""
     print(f"\n{'='*60}")
@@ -357,6 +410,12 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
         if not scenarios:
             print(f"Unknown scenario: {scenario_filter}")
             return 1
+
+    results_dir = get_results_dir(provider, model_id, effort)
+    cleanup_results(results_dir)
+    os.makedirs(results_dir, exist_ok=True)
+    run_scenario._results_dir = results_dir
+    print(f"Results dir: {results_dir}\n")
 
     results = []
     for scenario in scenarios:
@@ -375,7 +434,6 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
         print()
         results.append(result)
 
-    # Summary
     passed = sum(1 for r in results if r["pass"])
     total = len(results)
     print(f"{'='*60}")
@@ -384,10 +442,7 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
         print(f"Failed: {', '.join(r['id'] for r in results if not r['pass'])}")
     print(f"{'='*60}\n")
 
-    # Write results to file
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-    os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, f"orchestrator-{provider}-{model_id}-{effort}.json")
+    out_file = os.path.join(results_dir, "summary.json")
     with open(out_file, "w") as f:
         json.dump({
             "provider": provider,
@@ -398,6 +453,10 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
             "summary": {"passed": passed, "total": total},
         }, f, indent=2)
     print(f"Results written to {out_file}")
+
+    if passed == total:
+        cleanup_results(results_dir)
+        print("All passed — artifacts cleaned up.")
 
     return 0 if passed == total else 1
 

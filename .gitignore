@@ -45,3 +45,6 @@ e2e_*.mjs
 
 # local launcher shortcuts
 *.bat
+
+# e2e test artifacts
+test/e2e/results/
