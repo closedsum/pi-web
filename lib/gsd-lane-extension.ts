@@ -297,8 +297,17 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           child.on("error", (err) => {
             logFd.write(`spawn error: ${err.message}\n`).then(() => logFd.close()).catch(() => {});
           });
-          child.on("exit", () => {
+          child.on("exit", (code) => {
             logFd.close().catch(() => {});
+            if (code !== 0 && code !== null) {
+              const msg = `Lane ${slug} exited with code ${code}`;
+              recordFailure(msg, slug);
+              pi.sendMessage({
+                customType: "gsd-lane-lifecycle",
+                content: `Lane failed: ${slug} (exit code ${code})\nLog: ${logPath}\nAnalyze the failure and decide whether to retry or inform the user.`,
+                display: true,
+              }, { triggerTurn: true });
+            }
           });
           child.unref();
 
