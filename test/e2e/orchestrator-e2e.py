@@ -189,6 +189,15 @@ SCENARIOS = [
         "expect_dispatch": False,
         "max_dispatches": 0,
     },
+    # --- Scenario 21: UE dispatch (non-blocking) ---
+    {
+        "id": "ue-dispatch-nonblocking",
+        "input": "Open the Unreal Editor for the CropoutSampleProject",
+        "expect_text": True,
+        "expect_text_first": True,
+        "expect_dispatch": False,
+        "max_dispatches": 0,
+    },
 ]
 
 
