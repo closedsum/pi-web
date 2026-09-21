@@ -77,13 +77,25 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "ue_dispatch"]);
       const MAX_BLOCKS_PER_TURN = 3;
       let blocksThisTurn = 0;
+      let mode: "orchestrator" | "inline" = "orchestrator";
+
+      const MODE_ENTRY_TYPE = "gsd-orchestrator-mode";
+
+      pi.on("session_start", (_ev, ctx) => {
+        const entries = ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: Record<string, unknown> }>;
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const e = entries[i];
+          if (e.type === "custom" && e.customType === MODE_ENTRY_TYPE && e.data?.mode) {
+            mode = e.data.mode === "inline" ? "inline" : "orchestrator";
+            return;
+          }
+        }
+      });
 
       pi.on("turn_start", () => { blocksThisTurn = 0; });
 
-      // Hard mid-turn gate: block any tool not in the orchestrator allow-list.
-      // setActiveToolsByName is prompt-boundary-scoped (takes effect at next
-      // prompt, agent-session.js:657); this hook enforces mid-turn.
       pi.on("tool_call", (ev: { toolName: string }) => {
+        if (mode !== "orchestrator") return undefined;
         if (ORCH_ALLOW.has(ev.toolName)) return undefined;
         blocksThisTurn++;
         const terminate = blocksThisTurn >= MAX_BLOCKS_PER_TURN;
