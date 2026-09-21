@@ -14,6 +14,24 @@ const execFileAsync = promisify(execFile);
 
 export const GSD_LANE_EXTENSION_NAME = "pi-web-gsd-lanes";
 
+export type DispatchFailureClass = "infra" | "ownership" | "unknown";
+
+const OWNERSHIP_PATTERNS = [
+  "already a worktree", "already checked out",
+  "scope conflict", "already has a running lane", "already running",
+];
+
+export function classifyDispatchFailure(error: string): DispatchFailureClass {
+  const lower = error.toLowerCase();
+  if (OWNERSHIP_PATTERNS.some((p) => lower.includes(p))) return "ownership";
+  if (lower.includes("spawn") || lower.includes("enoent") || lower.includes("not found") ||
+      lower.includes("queue build failed") || lower.includes("did not start") ||
+      lower.includes("failed to resolve head")) {
+    return "infra";
+  }
+  return "unknown";
+}
+
 export interface GsdLaneExtensionOptions {
   cwd: string;
   gsdBinDir?: string;
@@ -80,6 +98,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       let mode: "orchestrator" | "inline" = "orchestrator";
 
       const MODE_ENTRY_TYPE = "gsd-orchestrator-mode";
+      const FAILURE_ENTRY_TYPE = "gsd-dispatch-failure";
+      let autoFlipped = false;
 
       pi.on("session_start", (_ev, ctx) => {
         const entries = ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: Record<string, unknown> }>;
@@ -93,6 +113,27 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       });
 
       pi.on("turn_start", () => { blocksThisTurn = 0; });
+
+      pi.on("turn_end", () => {
+        if (autoFlipped) {
+          mode = "orchestrator";
+          autoFlipped = false;
+        }
+      });
+
+      function recordFailure(error: string, slug: string) {
+        const failureClass = classifyDispatchFailure(error);
+        pi.appendEntry(FAILURE_ENTRY_TYPE, {
+          slug,
+          class: failureClass,
+          error,
+          timestamp: new Date().toISOString(),
+        });
+        if (failureClass === "infra") {
+          mode = "inline";
+          autoFlipped = true;
+        }
+      }
 
       pi.on("tool_call", (ev: { toolName: string }) => {
         if (mode !== "orchestrator") return undefined;
@@ -161,11 +202,14 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo, timeout: 5_000 });
             head = stdout.trim();
             if (!head || !/^[0-9a-f]{7,40}$/.test(head)) {
-              return { content: [{ type: "text", text: `Failed to resolve HEAD in ${repo}: unexpected output "${head}"` }], details: undefined, isError: true };
+              const msg = `Failed to resolve HEAD in ${repo}: unexpected output "${head}"`;
+              recordFailure(msg, slug);
+              return { content: [{ type: "text", text: msg }], details: undefined, isError: true };
             }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            return { content: [{ type: "text", text: `Failed to resolve HEAD in ${repo}: ${msg}` }], details: undefined, isError: true };
+            const msg = `Failed to resolve HEAD in ${repo}: ${err instanceof Error ? err.message : String(err)}`;
+            recordFailure(msg, slug);
+            return { content: [{ type: "text", text: msg }], details: undefined, isError: true };
           }
 
           const resolved = await resolveModel(python, gsdBinDir);
@@ -214,8 +258,9 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
               "--params-file", paramsPath,
             ], { cwd: repo, timeout: 30_000 });
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            return { content: [{ type: "text", text: `Lane queue build failed for ${slug}: ${msg}` }], details: undefined, isError: true };
+            const msg = `Lane queue build failed for ${slug}: ${err instanceof Error ? err.message : String(err)}`;
+            recordFailure(msg, slug);
+            return { content: [{ type: "text", text: msg }], details: undefined, isError: true };
           }
 
           const logPath = join(lanesDir, `log-${slug}.txt`);
@@ -237,7 +282,9 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
 
           if (!pid) {
             logFd.close().catch(() => {});
-            return { content: [{ type: "text", text: `Lane spawn failed for ${slug}: process did not start` }], details: undefined, isError: true };
+            const msg = `Lane spawn failed for ${slug}: process did not start`;
+            recordFailure(msg, slug);
+            return { content: [{ type: "text", text: msg }], details: undefined, isError: true };
           }
 
           child.on("error", (err) => {
