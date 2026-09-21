@@ -78,6 +78,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       const MAX_BLOCKS_PER_TURN = 3;
       let blocksThisTurn = 0;
 
+      pi.on("turn_start", () => { blocksThisTurn = 0; });
+
       // Hard mid-turn gate: block any tool not in the orchestrator allow-list.
       // setActiveToolsByName is prompt-boundary-scoped (takes effect at next
       // prompt, agent-session.js:657); this hook enforces mid-turn.
