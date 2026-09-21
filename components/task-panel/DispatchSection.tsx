@@ -179,6 +179,7 @@ function DispatchItemRow({ item }: { item: DispatchItem }) {
 export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: number }) {
   const [data, setData] = useState<DispatchStatusData | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionStartRef = useRef(new Date().toISOString());
 
   const fetchDispatches = useCallback(async () => {
     if (!cwd) return;
@@ -200,10 +201,12 @@ export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: n
     };
   }, [fetchDispatches, pollMs]);
 
-  if (!data || data.dispatches.length === 0) return null;
+  const sessionDispatches = (data?.dispatches ?? []).filter((d) => d.startedAt >= sessionStartRef.current);
 
-  const active = data.dispatches.filter((d) => d.displayCategory === "active");
-  const terminal = data.dispatches.filter((d) => d.displayCategory !== "active");
+  if (sessionDispatches.length === 0) return null;
+
+  const active = sessionDispatches.filter((d) => d.displayCategory === "active");
+  const terminal = sessionDispatches.filter((d) => d.displayCategory !== "active");
 
   return (
     <div style={{ marginTop: 4 }}>
@@ -220,7 +223,7 @@ export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: n
       }}>
         Lanes
         <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-          {data.dispatches.length}
+          {sessionDispatches.length}
         </span>
         {active.length > 0 && (
           <span style={{ fontSize: 10, color: "#3b82f6", fontWeight: 700 }}>
