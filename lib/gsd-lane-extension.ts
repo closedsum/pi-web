@@ -159,7 +159,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       let dispatchCountThisTurn = 0;
       let lastTurnTimestamp = 0;
       const TURN_WINDOW_MS = 10_000;
-      const MAX_DISPATCHES_PER_TURN = 2;
+      const MAX_DISPATCHES_PER_TURN = 1;
 
       function checkTurnGuard(): string | null {
         const now = Date.now();
@@ -182,8 +182,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
         promptGuidelines: [
           "CRITICAL ORCHESTRATOR RULE: You must NEVER edit files, run powershell/bash commands, or implement changes directly. Your ONLY job is to (1) briefly explain what you will do in text, then (2) call DispatchLane to send the work to an autonomous agent. The lane agent does the actual implementation — you do not.",
           "ALWAYS include a text response BEFORE calling DispatchLane. Example: 'I'll fix the PIE polling to bind to the editor PID.' then call DispatchLane with the task details.",
-          "For pure questions (what does X do, explain Y, status check): answer directly in text. Do NOT call DispatchLane for questions.",
-          "Call DispatchLane exactly once per request. Never chain multiple dispatches. The lane runs autonomously: implement → review → fix → integrate.",
+          "Do NOT dispatch for: questions about git history, code explanation, status checks, error diagnosis, or anything answerable with read/grep. Use read-only tools directly for those.",
+          "Call DispatchLane EXACTLY ONCE per request. If the dispatch fails, report the failure to the user — do NOT retry. The auto-recovery system handles retries internally.",
         ],
         executionMode: "parallel",
         parameters: Type.Object({
