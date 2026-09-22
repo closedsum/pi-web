@@ -7,6 +7,7 @@ import { execFile, spawn } from "node:child_process";
 import { writeFile, mkdir, open, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { readAllDispatches } from "./dispatch-status";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 
@@ -21,7 +22,7 @@ const OWNERSHIP_PATTERNS = [
   "scope conflict", "already has a running lane", "already running",
 ];
 
-export const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "ue_dispatch"]);
+export const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "CheckLaneStatus", "CheckDispatchStatus", "ue_dispatch"]);
 
 export function classifyDispatchFailure(error: string): DispatchFailureClass {
   const lower = error.toLowerCase();
@@ -338,9 +339,83 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
                 params.skip_review ? "Review: skipped" : "Review: enabled",
                 `Log: ${logPath}`,
                 "",
-                "The lane is running autonomously. Progress is visible in the task panel.",
+                "The lane is running autonomously. Use CheckLaneStatus to check progress.",
               ].filter(Boolean).join("\n"),
             }],
+            details: undefined,
+          };
+        },
+      }));
+
+      pi.registerTool(defineTool({
+        name: "CheckLaneStatus",
+        label: "Check Lane Status",
+        description: "Check the current status of dispatched lanes. Returns deterministic JSON from lane manifests.",
+        promptSnippet: "Check status of dispatched implementation lanes",
+        parameters: Type.Object({
+          slug: Type.Optional(Type.String({ description: "Filter to a specific lane slug. Omit to see all lanes." })),
+        }),
+        async execute(_toolCallId, params) {
+          const repo = resolve(options.cwd);
+          const result = await readAllDispatches(repo);
+          let items = result.dispatches.filter((d) => d.source === "lane");
+          if (params.slug) {
+            items = items.filter((d) => d.id === params.slug);
+          }
+          if (items.length === 0) {
+            return {
+              content: [{ type: "text", text: params.slug ? `No lane found with slug "${params.slug}".` : "No dispatched lanes found." }],
+              details: undefined,
+            };
+          }
+          const output = items.map((d) => ({
+            id: d.id,
+            status: d.status,
+            phase: d.phase ?? null,
+            startedAt: d.startedAt,
+            finishedAt: d.finishedAt ?? null,
+            error: d.error ?? null,
+          }));
+          return {
+            content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
+            details: undefined,
+          };
+        },
+      }));
+
+      pi.registerTool(defineTool({
+        name: "CheckDispatchStatus",
+        label: "Check Dispatch Status",
+        description: "Check the status of ALL dispatched work — lanes and UE dispatches. Returns deterministic JSON. Use after DispatchLane or ue_dispatch to check completion, detect crashes, or verify results. ALWAYS call this after dispatching work to confirm the outcome.",
+        promptSnippet: "Check status of all dispatched work (lanes + UE dispatches)",
+        parameters: Type.Object({
+          source: Type.Optional(Type.Union([Type.Literal("lane"), Type.Literal("ue_dispatch")], { description: "Filter by source type. Omit to see all." })),
+        }),
+        async execute(_toolCallId, params) {
+          const repo = resolve(options.cwd);
+          const result = await readAllDispatches(repo);
+          let items = result.dispatches;
+          if (params.source) {
+            items = items.filter((d) => d.source === params.source);
+          }
+          if (items.length === 0) {
+            return {
+              content: [{ type: "text", text: "No dispatched work found." }],
+              details: undefined,
+            };
+          }
+          const output = items.map((d) => ({
+            id: d.id,
+            source: d.source,
+            status: d.status,
+            phase: d.phase ?? null,
+            startedAt: d.startedAt,
+            finishedAt: d.finishedAt ?? null,
+            error: d.error ?? null,
+            steps: d.steps ?? null,
+          }));
+          return {
+            content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
             details: undefined,
           };
         },
