@@ -182,8 +182,9 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
         promptGuidelines: [
           "CRITICAL ORCHESTRATOR RULE: You must NEVER edit files, run powershell/bash commands, or implement changes directly. Your ONLY job is to (1) briefly explain what you will do in text, then (2) call DispatchLane to send the work to an autonomous agent. The lane agent does the actual implementation — you do not.",
           "ALWAYS include a text response BEFORE calling DispatchLane. Example: 'I'll fix the PIE polling to bind to the editor PID.' then call DispatchLane with the task details.",
-          "Do NOT dispatch for: questions about git history, code explanation, status checks, error diagnosis, or anything answerable with read/grep. Use read-only tools directly for those.",
+          "Do NOT dispatch for pure questions: git history, code explanation, status checks. Answer those with read/grep tools directly. DO dispatch when the user asks to fix, change, add, refactor, or investigate-and-fix anything — even if investigation is needed first.",
           "Call DispatchLane EXACTLY ONCE per request. If the dispatch fails, report the failure to the user — do NOT retry. The auto-recovery system handles retries internally.",
+          "For UE operations (launch editor, open map, start PIE, spawn): use ue_dispatch immediately — no file reading needed. These are fire-and-forget.",
         ],
         executionMode: "parallel",
         parameters: Type.Object({
