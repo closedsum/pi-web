@@ -16,6 +16,10 @@ lost.
 
 ## Solution
 
-Change ue_dispatch (or gsd-ue-dispatch.ts) to queue behind the running dispatch
-instead of rejecting. Accept the call, return a "queued" status, and execute
-when the lock releases. The orchestrator model should see "queued" not "failed".
+Add a global `dispatch.queue_concurrent` list in `~/.gsd/defaults.json` naming
+tools/scripts that should queue instead of reject (e.g. `["ue_dispatch"]`).
+CLI-agnostic — any CLI (Claude, GPT, Codex) reads the same config.
+
+When a listed tool hits a lock, the dispatcher accepts the call, returns
+`"queued"` status, and executes when the lock releases. The orchestrator model
+sees "queued" not "failed".
