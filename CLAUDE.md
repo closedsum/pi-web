@@ -45,9 +45,10 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `lib/task-board.ts` | Reads `.planning/threads/board.jsonl` task board data |
 | `lib/model-catalog.ts` | Provider model catalog (discovery, presets) |
 | `lib/model-scope.ts` | Resolves visible models from `enabledModels` whitelist |
-| `lib/dispatch-status.ts` | Reads lane pipeline manifests and UE dispatch progress into unified `DispatchItem[]` |
-| `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags |
-| `components/task-panel/DispatchSection.tsx` | Lanes section in TaskPanel — active/terminal dispatches |
+| `lib/dispatch-status.ts` | Reads lane pipeline manifests (`cwd/.planning/impl-lanes/p-*.json`) and UE dispatch progress into unified `DispatchItem[]` |
+| `app/api/dispatch-status/route.ts` | API route serving dispatch data — calls `readAllDispatches(cwd)` with no session filtering |
+| `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags; passes `key={cwd:sessionId}` to DispatchSection |
+| `components/task-panel/DispatchSection.tsx` | Lanes section — filters pre-existing terminal lanes via baseline snapshot; resets on fetch-recovery (server restart) |
 | `components/ModelSelector.tsx` | Model dropdown with per-provider color coding |
 
 ## Orchestrator Mode
@@ -61,6 +62,7 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 4. **Prompt guideline:** includes "call once, dispatcher handles everything internally"
 
 Current dispatch tools: `DispatchLane`, `ue_dispatch`
+Current status tools: `CheckLaneStatus` — deterministic JSON from lane manifests
 
 ## Architecture
 

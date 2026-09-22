@@ -9,8 +9,10 @@ import {
   isWebPasswordEnabled,
   PI_WEB_SESSION_COOKIE,
 } from "@/lib/web-auth";
+import { touchActivity } from "@/lib/idle-shutdown";
 
 export function proxy(request: NextRequest) {
+  touchActivity();
   const isApiRequest = request.nextUrl.pathname === "/api"
     || request.nextUrl.pathname.startsWith("/api/");
   const isTrustedRequest = isApiRequest

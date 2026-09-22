@@ -42,7 +42,8 @@ def main():
     npm_cmd = ["npm", "run", "dev" if args.mode == "dev" else "start"]
 
     log(f"Starting Pi Web ({args.mode})...")
-    server = subprocess.Popen(npm_cmd, cwd=project_dir, shell=True)
+    env = {**os.environ, "PI_IDLE_SHUTDOWN_MS": "120000"}
+    server = subprocess.Popen(npm_cmd, cwd=project_dir, shell=True, env=env)
 
     log("Waiting for server...")
     if not wait_for_server():

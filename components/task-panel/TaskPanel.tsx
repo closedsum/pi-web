@@ -332,16 +332,10 @@ export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: s
   }, [fetchBoard, pollMs]);
 
   const sessionStart = sessionStartRef.current;
-  const STALE_MS = 4 * 60 * 60 * 1000;
   const grouped = new Map<BoardTask["status"], BoardTask[]>();
   for (const s of STATUS_ORDER) grouped.set(s, []);
-  const deadTasks = new Set<string>();
   let sessionCompletedCount = 0;
   if (data) {
-    const activeSessions = new Set<string>();
-    for (const task of data.tasks) {
-      if (task.created_at >= sessionStart) activeSessions.add(task.session_id);
-    }
     for (const task of data.tasks) {
       if (task.status === "completed") {
         if (prefs.completedScope === "all" || (task.completed_at && task.completed_at >= sessionStart)) {
@@ -349,22 +343,9 @@ export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: s
           sessionCompletedCount++;
         }
       } else {
-        const age = fetchedAt - new Date(task.created_at).getTime();
-        if (!activeSessions.has(task.session_id) && age > STALE_MS) {
-          deadTasks.add(`${task.id}\0${task.session_id}`);
-        }
         const list = grouped.get(task.status);
         if (list) list.push(task);
       }
-    }
-    for (const status of ["in_progress", "pending"] as const) {
-      const list = grouped.get(status)!;
-      list.sort((a, b) => {
-        const aDead = deadTasks.has(`${a.id}\0${a.session_id}`) ? 1 : 0;
-        const bDead = deadTasks.has(`${b.id}\0${b.session_id}`) ? 1 : 0;
-        if (aDead !== bDead) return aDead - bDead;
-        return a.created_at.localeCompare(b.created_at);
-      });
     }
   }
 
@@ -458,15 +439,10 @@ export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: s
             {error}
           </div>
         )}
-        {cwd && data && data.tasks.length === 0 && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "12px 0", textAlign: "center" }}>
-            No tasks found
-          </div>
-        )}
-        {data && STATUS_ORDER.map((status) => (
-          <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} deadKeys={deadTasks} />
-        ))}
         <DispatchSection key={`${cwd ?? ""}:${sessionId ?? ""}`} cwd={cwd} pollMs={pollMs} />
+        {data && STATUS_ORDER.map((status) => (
+          <StatusSection key={status} status={status} tasks={grouped.get(status) ?? []} />
+        ))}
       </div>
     </div>
   );
