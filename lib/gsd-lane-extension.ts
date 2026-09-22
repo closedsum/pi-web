@@ -144,9 +144,52 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
         }
       }
 
+      let dispatchCount = 0;
+      let lastDispatchTime = 0;
+      const MAX_DISPATCHES = 1;
+      const DISPATCH_COOLDOWN_MS = 45_000;
+      let readCount = 0;
+      let lastReadResetTime = 0;
+      const MAX_READS = 12;
+      const READ_COOLDOWN_MS = 45_000;
+
+      const READ_TOOLS = new Set(["read", "grep", "glob", "find", "ls", "search"]);
+
       pi.on("tool_call", (ev: { toolName: string }) => {
         if (mode !== "orchestrator") return undefined;
-        if (ORCH_ALLOW.has(ev.toolName)) return undefined;
+        if (ORCH_ALLOW.has(ev.toolName)) {
+          if (ev.toolName === "DispatchLane") {
+            const now = Date.now();
+            if (now - lastDispatchTime > DISPATCH_COOLDOWN_MS) {
+              dispatchCount = 0;
+            }
+            dispatchCount++;
+            if (dispatchCount > MAX_DISPATCHES) {
+              return {
+                block: true,
+                terminate: true,
+                reason: "You already dispatched a lane for this request. Do NOT retry — report the result to the user and let the auto-recovery system handle failures.",
+              };
+            }
+            lastDispatchTime = now;
+          }
+          if (READ_TOOLS.has(ev.toolName)) {
+            const now = Date.now();
+            if (now - lastReadResetTime > READ_COOLDOWN_MS) {
+              readCount = 0;
+              lastReadResetTime = now;
+            }
+            readCount++;
+            if (readCount > MAX_READS) {
+              return {
+                block: true,
+                terminate: true,
+                reason: "Read budget exhausted. You have enough context — respond to the user now with your analysis or dispatch the work.",
+              };
+            }
+          }
+          return undefined;
+        }
         blocksThisTurn++;
         const terminate = blocksThisTurn >= MAX_BLOCKS_PER_TURN;
         return {
@@ -155,24 +198,6 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           reason: `'${ev.toolName}' is unavailable in orchestrator mode. Delegate with DispatchLane or reply to the user with your analysis.${terminate ? " Tool budget exhausted — respond now." : ""}`,
         };
       });
-
-      let dispatchCountThisTurn = 0;
-      let lastTurnTimestamp = 0;
-      const TURN_WINDOW_MS = 10_000;
-      const MAX_DISPATCHES_PER_TURN = 1;
-
-      function checkTurnGuard(): string | null {
-        const now = Date.now();
-        if (now - lastTurnTimestamp > TURN_WINDOW_MS) {
-          dispatchCountThisTurn = 0;
-          lastTurnTimestamp = now;
-        }
-        dispatchCountThisTurn++;
-        if (dispatchCountThisTurn > MAX_DISPATCHES_PER_TURN) {
-          return `Dispatch limit reached (${MAX_DISPATCHES_PER_TURN} per turn). Stop and respond to the user with your analysis. Do not call DispatchLane again this turn.`;
-        }
-        return null;
-      }
 
       pi.registerTool(defineTool({
         name: "DispatchLane",
@@ -195,11 +220,6 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           skip_review: Type.Optional(Type.Boolean({ description: "Skip cross-review (for trivial changes only)." })),
         }),
         async execute(_toolCallId, params) {
-          const guardMessage = checkTurnGuard();
-          if (guardMessage) {
-            return { content: [{ type: "text", text: guardMessage }], details: undefined, isError: true };
-          }
-
           const slug = uniqueSlug(sanitizeSlug(params.slug || params.task));
           const repo = resolve(options.cwd);
 
