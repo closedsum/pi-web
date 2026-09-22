@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { homedir } from "os";
 import { NextRequest, NextResponse } from "next/server";
+import { allowFileRoot } from "@/lib/file-access";
 
 const RECENT_PROJECTS_PATH = path.join(homedir(), ".pi", "recent-projects.json");
 const MAX_RECENT = 10;
@@ -29,7 +30,9 @@ function writeRecent(projects: RecentProject[]): void {
 }
 
 export async function GET() {
-  return NextResponse.json({ projects: readRecent() });
+  const projects = readRecent();
+  for (const p of projects) allowFileRoot(p.cwd);
+  return NextResponse.json({ projects });
 }
 
 export async function POST(request: NextRequest) {
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
     filtered.unshift({ cwd, name, lastOpened: new Date().toISOString() });
     const trimmed = filtered.slice(0, MAX_RECENT);
     writeRecent(trimmed);
+    allowFileRoot(cwd);
     return NextResponse.json({ projects: trimmed });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
