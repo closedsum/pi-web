@@ -193,32 +193,34 @@ function DispatchItemRow({ item }: { item: DispatchItem }) {
 export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: number }) {
   const [data, setData] = useState<DispatchStatusData | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const trackedRef = useRef<Set<string>>(new Set());
-  const baselineRef = useRef<boolean>(false);
+  const preExistingRef = useRef<Set<string> | null>(null);
+  const fetchFailedRef = useRef<boolean>(false);
 
   const fetchDispatches = useCallback(async () => {
     if (!cwd) return;
     try {
       const res = await fetch(`/api/dispatch-status?cwd=${encodeURIComponent(cwd)}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        fetchFailedRef.current = true;
+        setData(null);
+        preExistingRef.current = null;
+        return;
+      }
       const json = await res.json() as DispatchStatusData;
-      if (!baselineRef.current) {
-        baselineRef.current = true;
-        for (const d of json.dispatches) {
-          if (d.displayCategory === "active") {
-            trackedRef.current.add(`${d.source}-${d.id}`);
-          }
-        }
-      } else {
-        for (const d of json.dispatches) {
-          const key = `${d.source}-${d.id}`;
-          if (!trackedRef.current.has(key) && d.displayCategory !== "active") continue;
-          trackedRef.current.add(key);
-        }
+      if (fetchFailedRef.current) {
+        preExistingRef.current = null;
+        fetchFailedRef.current = false;
+      }
+      if (preExistingRef.current === null) {
+        preExistingRef.current = new Set(
+          json.dispatches.map((d) => `${d.source}-${d.id}`),
+        );
       }
       setData(json);
     } catch {
-      // ignore fetch errors
+      fetchFailedRef.current = true;
+      setData(null);
+      preExistingRef.current = null;
     }
   }, [cwd]);
 
@@ -230,8 +232,11 @@ export function DispatchSection({ cwd, pollMs }: { cwd: string | null; pollMs: n
     };
   }, [fetchDispatches, pollMs]);
 
-  const tracked = trackedRef.current;
-  const sessionDispatches = (data?.dispatches ?? []).filter((d) => tracked.has(`${d.source}-${d.id}`));
+  const preExisting = preExistingRef.current;
+  const sessionDispatches = (data?.dispatches ?? []).filter((d) => {
+    const key = `${d.source}-${d.id}`;
+    return d.displayCategory === "active" || !preExisting?.has(key);
+  });
 
   if (sessionDispatches.length === 0) return null;
 
