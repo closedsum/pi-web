@@ -36,10 +36,27 @@ export function classifyDispatchFailure(error: string): DispatchFailureClass {
   return "unknown";
 }
 
+export interface OrchestratorBudgets {
+  maxDispatches?: number;
+  dispatchCooldownMs?: number;
+  maxReads?: number;
+  readCooldownMs?: number;
+  maxBlocksPerTurn?: number;
+}
+
+export const DEFAULT_BUDGETS: Required<OrchestratorBudgets> = {
+  maxDispatches: 1,
+  dispatchCooldownMs: 45_000,
+  maxReads: 8,
+  readCooldownMs: 45_000,
+  maxBlocksPerTurn: 3,
+};
+
 export interface GsdLaneExtensionOptions {
   cwd: string;
   gsdBinDir?: string;
   python?: string;
+  budgets?: OrchestratorBudgets;
 }
 
 function sanitizeSlug(text: string): string {
@@ -55,6 +72,27 @@ function uniqueSlug(base: string): string {
   const safe = sanitizeSlug(base);
   const suffix = randomBytes(3).toString("hex");
   return safe ? `${safe}-${suffix}` : `lane-${suffix}`;
+}
+
+async function resolveOrchestratorBudgets(python: string, gsdBinDir: string, overrides?: OrchestratorBudgets): Promise<Required<OrchestratorBudgets>> {
+  let configBudgets: Partial<OrchestratorBudgets> = {};
+  try {
+    const { stdout } = await execFileAsync(python, [
+      join(gsdBinDir, "gsd-config.py"),
+      "get", "orchestrator_mode.budgets",
+    ], { timeout: 10_000 });
+    const raw = JSON.parse(stdout.trim());
+    if (raw && typeof raw === "object") {
+      configBudgets = {
+        maxDispatches: typeof raw.max_dispatches === "number" ? raw.max_dispatches : undefined,
+        dispatchCooldownMs: typeof raw.dispatch_cooldown_ms === "number" ? raw.dispatch_cooldown_ms : undefined,
+        maxReads: typeof raw.max_reads === "number" ? raw.max_reads : undefined,
+        readCooldownMs: typeof raw.read_cooldown_ms === "number" ? raw.read_cooldown_ms : undefined,
+        maxBlocksPerTurn: typeof raw.max_blocks_per_turn === "number" ? raw.max_blocks_per_turn : undefined,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_BUDGETS, ...configBudgets, ...overrides };
 }
 
 async function resolveWorktreeRoot(python: string, gsdBinDir: string): Promise<string> {
@@ -97,7 +135,10 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
     hidden: true,
     factory: (pi) => {
       // ORCH_ALLOW is module-level (exported for rpc-manager prompt boundary)
-      const MAX_BLOCKS_PER_TURN = 3;
+      let budgets = { ...DEFAULT_BUDGETS, ...options.budgets };
+      resolveOrchestratorBudgets(python, gsdBinDir, options.budgets).then(
+        (resolved) => { budgets = resolved; },
+      ).catch(() => {});
       let blocksThisTurn = 0;
       let mode: "orchestrator" | "inline" = "orchestrator";
 
@@ -146,13 +187,9 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
 
       let dispatchCount = 0;
       let lastDispatchTime = 0;
-      const MAX_DISPATCHES = 1;
-      const DISPATCH_COOLDOWN_MS = 45_000;
       let readCount = 0;
       let lastReadResetTime = 0;
       let readBudgetSteered = false;
-      const MAX_READS = 8;
-      const READ_COOLDOWN_MS = 45_000;
 
       const READ_TOOLS = new Set(["read", "grep", "glob", "find", "ls", "search"]);
 
@@ -161,11 +198,11 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
         if (ORCH_ALLOW.has(ev.toolName)) {
           if (ev.toolName === "DispatchLane") {
             const now = Date.now();
-            if (now - lastDispatchTime > DISPATCH_COOLDOWN_MS) {
+            if (now - lastDispatchTime > budgets.dispatchCooldownMs) {
               dispatchCount = 0;
             }
             dispatchCount++;
-            if (dispatchCount > MAX_DISPATCHES) {
+            if (dispatchCount > budgets.maxDispatches) {
               return {
                 block: true,
                 terminate: true,
@@ -176,13 +213,13 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           }
           if (READ_TOOLS.has(ev.toolName)) {
             const now = Date.now();
-            if (now - lastReadResetTime > READ_COOLDOWN_MS) {
+            if (now - lastReadResetTime > budgets.readCooldownMs) {
               readCount = 0;
               readBudgetSteered = false;
               lastReadResetTime = now;
             }
             readCount++;
-            if (readCount > MAX_READS) {
+            if (readCount > budgets.maxReads) {
               if (!readBudgetSteered) {
                 readBudgetSteered = true;
                 pi.sendMessage({
@@ -201,7 +238,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           return undefined;
         }
         blocksThisTurn++;
-        const terminate = blocksThisTurn >= MAX_BLOCKS_PER_TURN;
+        const terminate = blocksThisTurn >= budgets.maxBlocksPerTurn;
         return {
           block: true,
           terminate,
@@ -218,7 +255,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           "CRITICAL ORCHESTRATOR RULE: You must NEVER edit files, run powershell/bash commands, or implement changes directly. Your ONLY job is to (1) briefly explain what you will do in text, then (2) call DispatchLane to send the work to an autonomous agent. The lane agent does the actual implementation — you do not.",
           "ALWAYS include a text response BEFORE calling DispatchLane. Example: 'I'll fix the PIE polling to bind to the editor PID.' then call DispatchLane with the task details.",
           "Do NOT dispatch for pure questions: git history, code explanation, status checks. Answer those with read/grep tools directly. DO dispatch when the user asks to fix, change, add, refactor, propose a fix, suggest a fix, or investigate-and-fix anything — even if investigation is needed first.",
-          "You have a budget of 8 read/grep calls per request. Read only the files essential to answer or dispatch. For code explanations, read 3-5 key files then respond — do not try to read the entire codebase.",
+          `You have a budget of ${budgets.maxReads} read/grep calls per request. Read only the files essential to answer or dispatch. For code explanations, read 3-5 key files then respond — do not try to read the entire codebase.`,
           "Call DispatchLane EXACTLY ONCE per request. If the dispatch fails, report the failure to the user — do NOT retry. The auto-recovery system handles retries internally.",
           "For UE operations (launch editor, open map, start PIE, spawn): use ue_dispatch immediately — no file reading needed. These are fire-and-forget.",
         ],
