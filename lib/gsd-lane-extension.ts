@@ -258,6 +258,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           `You have a budget of ${budgets.maxReads} read/grep calls per request. Read only the files essential to answer or dispatch. For code explanations, read 3-5 key files then respond — do not try to read the entire codebase.`,
           "Call DispatchLane EXACTLY ONCE per request. If the dispatch fails, report the failure to the user — do NOT retry. The auto-recovery system handles retries internally.",
           "For UE operations (launch editor, open map, start PIE, spawn): use ue_dispatch immediately — no file reading needed. These are fire-and-forget.",
+          "When a dispatch or UE operation fails, use CheckDispatchStatus to get the failure details, then read relevant log files to diagnose the root cause. Report the diagnosis to the user with concrete next steps — do not just say 'it failed'.",
         ],
         executionMode: "parallel",
         parameters: Type.Object({
