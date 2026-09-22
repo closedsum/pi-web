@@ -17,32 +17,67 @@ declare global {
 
 const ALLOWED_ROOTS_TTL_MS = 5_000;
 
+export interface AllowedRootSources {
+  sessions?: Array<{ cwd?: string; projectRoot?: string }>;
+  recentProjects?: string[];
+  piCwdDirs?: string[];
+  additional?: Set<string>;
+}
+
+export function collectAllowedRoots(sources: AllowedRootSources): Set<string> {
+  const roots = new Set<string>();
+  for (const s of sources.sessions ?? []) {
+    if (s.cwd) roots.add(normalizeSlashes(s.cwd));
+    if (s.projectRoot) roots.add(normalizeSlashes(s.projectRoot));
+  }
+  for (const p of sources.recentProjects ?? []) {
+    if (p) roots.add(normalizeSlashes(p));
+  }
+  for (const d of sources.piCwdDirs ?? []) {
+    roots.add(normalizeSlashes(d));
+  }
+  for (const r of sources.additional ?? []) {
+    roots.add(r);
+  }
+  return roots;
+}
+
+function readPiCwdDirs(): string[] {
+  try {
+    const dirs: string[] = [];
+    for (const name of readdirSync(homedir())) {
+      if (/^pi-cwd-\d{8}$/.test(name)) {
+        dirs.push(path.join(homedir(), name));
+      }
+    }
+    return dirs;
+  } catch {
+    return [];
+  }
+}
+
+export function readRecentProjectPaths(): string[] {
+  try {
+    const filePath = path.join(homedir(), ".pi", "recent-projects.json");
+    const data = JSON.parse(require("fs").readFileSync(filePath, "utf-8"));
+    if (!Array.isArray(data)) return [];
+    return data.map((p: { cwd?: string }) => p.cwd).filter((c): c is string => Boolean(c));
+  } catch {
+    return [];
+  }
+}
+
 export async function getAllowedFileRoots(): Promise<Set<string>> {
   const now = Date.now();
   const cached = globalThis.__piAllowedRootsCache;
   if (cached && cached.expiresAt > now) return cached.roots;
 
-  const sessions = await listAllSessions();
-  const roots = new Set<string>();
-  for (const s of sessions) {
-    if (s.cwd) roots.add(normalizeSlashes(s.cwd));
-    // The project root (main repo shared by all worktrees) is browsable too —
-    // the project dropdown lists it even when only worktrees have sessions.
-    if (s.projectRoot) roots.add(normalizeSlashes(s.projectRoot));
-  }
-
-  // Also allow ~/pi-cwd-* directories created by the default-cwd endpoint.
-  try {
-    for (const name of readdirSync(homedir())) {
-      if (/^pi-cwd-\d{8}$/.test(name)) {
-        roots.add(normalizeSlashes(path.join(homedir(), name)));
-      }
-    }
-  } catch {
-    // ignore if home is unreadable
-  }
-
-  for (const root of getAdditionalAllowedRoots()) roots.add(root);
+  const roots = collectAllowedRoots({
+    sessions: await listAllSessions(),
+    recentProjects: readRecentProjectPaths(),
+    piCwdDirs: readPiCwdDirs(),
+    additional: getAdditionalAllowedRoots(),
+  });
 
   globalThis.__piAllowedRootsCache = { roots, expiresAt: now + ALLOWED_ROOTS_TTL_MS };
   return roots;

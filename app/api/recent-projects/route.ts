@@ -30,9 +30,7 @@ function writeRecent(projects: RecentProject[]): void {
 }
 
 export async function GET() {
-  const projects = readRecent();
-  for (const p of projects) allowFileRoot(p.cwd);
-  return NextResponse.json({ projects });
+  return NextResponse.json({ projects: readRecent() });
 }
 
 export async function POST(request: NextRequest) {
