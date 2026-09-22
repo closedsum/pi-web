@@ -150,7 +150,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
       const DISPATCH_COOLDOWN_MS = 45_000;
       let readCount = 0;
       let lastReadResetTime = 0;
-      const MAX_READS = 12;
+      let readBudgetSteered = false;
+      const MAX_READS = 8;
       const READ_COOLDOWN_MS = 45_000;
 
       const READ_TOOLS = new Set(["read", "grep", "glob", "find", "ls", "search"]);
@@ -177,10 +178,19 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             const now = Date.now();
             if (now - lastReadResetTime > READ_COOLDOWN_MS) {
               readCount = 0;
+              readBudgetSteered = false;
               lastReadResetTime = now;
             }
             readCount++;
             if (readCount > MAX_READS) {
+              if (!readBudgetSteered) {
+                readBudgetSteered = true;
+                pi.sendMessage({
+                  customType: "gsd-orchestrator-steering",
+                  content: "Read budget reached. Respond to the user NOW with your analysis based on what you have already read, or dispatch the work with DispatchLane.",
+                  display: true,
+                }, { triggerTurn: true });
+              }
               return {
                 block: true,
                 terminate: true,
@@ -207,7 +217,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
         promptGuidelines: [
           "CRITICAL ORCHESTRATOR RULE: You must NEVER edit files, run powershell/bash commands, or implement changes directly. Your ONLY job is to (1) briefly explain what you will do in text, then (2) call DispatchLane to send the work to an autonomous agent. The lane agent does the actual implementation — you do not.",
           "ALWAYS include a text response BEFORE calling DispatchLane. Example: 'I'll fix the PIE polling to bind to the editor PID.' then call DispatchLane with the task details.",
-          "Do NOT dispatch for pure questions: git history, code explanation, status checks. Answer those with read/grep tools directly. DO dispatch when the user asks to fix, change, add, refactor, or investigate-and-fix anything — even if investigation is needed first.",
+          "Do NOT dispatch for pure questions: git history, code explanation, status checks. Answer those with read/grep tools directly. DO dispatch when the user asks to fix, change, add, refactor, propose a fix, suggest a fix, or investigate-and-fix anything — even if investigation is needed first.",
+          "You have a budget of 8 read/grep calls per request. Read only the files essential to answer or dispatch. For code explanations, read 3-5 key files then respond — do not try to read the entire codebase.",
           "Call DispatchLane EXACTLY ONCE per request. If the dispatch fails, report the failure to the user — do NOT retry. The auto-recovery system handles retries internally.",
           "For UE operations (launch editor, open map, start PIE, spawn): use ue_dispatch immediately — no file reading needed. These are fire-and-forget.",
         ],
