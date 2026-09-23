@@ -6,7 +6,7 @@ import {
 import { execFile, spawn } from "node:child_process";
 import { writeFile, mkdir, open, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { readAllDispatches } from "./dispatch-status";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
@@ -95,29 +95,90 @@ async function resolveOrchestratorBudgets(python: string, gsdBinDir: string, ove
   return { ...DEFAULT_BUDGETS, ...configBudgets, ...overrides };
 }
 
+/** `gsd-config.py get` prints JSON, so string values arrive quoted; a bare value is accepted too. */
+export function parseConfigString(stdout: string): string | null {
+  const text = stdout.trim();
+  if (!text) return null;
+  try {
+    const value = JSON.parse(text);
+    return typeof value === "string" && value ? value : null;
+  } catch {
+    return text;
+  }
+}
+
+export interface ResolvedLaneModel { provider: string; model: string; effort: string; reason?: string }
+
+/** `gsd_impl_lane.py resolve-model` prints {Provider, Model, Effort, ModelReason}, currently twice. */
+export function parseResolvedModel(stdout: string): ResolvedLaneModel | null {
+  const first = stdout.trim().split(/\r?\n(?=\{)/)[0];
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(first);
+  } catch {
+    return null;
+  }
+  const pick = (key: string) => {
+    const value = parsed?.[key] ?? parsed?.[key.toLowerCase()];
+    return typeof value === "string" && value ? value : undefined;
+  };
+  const provider = pick("Provider");
+  const model = pick("Model");
+  const effort = pick("Effort");
+  if (!provider || !model || !effort) return null;
+  return { provider, model, effort, reason: pick("ModelReason") };
+}
+
+/**
+ * Lane spec in the gsd-config lane-spec template shape. Lane plan validation
+ * rejects specs without Goal / WriteScope / Test sections.
+ */
+export function renderLaneSpec({ title, task, writeScope = [] }: { title: string; task: string; writeScope?: string[] }): string {
+  const scope = writeScope.length
+    ? writeScope.map((glob) => `- \`${glob}\``).join("\n")
+    : "- Determine from investigation; keep changes to the files the task names and their tests.";
+  return [
+    `# Spec: ${title}`,
+    "",
+    "## Goal",
+    task,
+    "",
+    "## Fix",
+    task,
+    "",
+    "## Test Requirements",
+    "- Add or update tests next to the changed code covering the happy path, an error path, an edge case, and a regression test for the reported problem.",
+    "- Run the project's existing test suite; no new failures.",
+    "",
+    "## WriteScope",
+    scope,
+    "",
+    "## Pipeline Quality Gates",
+    "- Resolve all in-scope review findings before committing.",
+    "- No regressions: the full existing test suite must pass.",
+    "",
+  ].join("\n");
+}
+
 async function resolveWorktreeRoot(python: string, gsdBinDir: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync(python, [
       join(gsdBinDir, "gsd-config.py"),
       "get", "impl_lanes.temp_worktree_root",
     ], { timeout: 10_000 });
-    const root = stdout.trim();
-    if (root) return root;
+    const root = parseConfigString(stdout);
+    if (root && isAbsolute(root)) return root;
   } catch {}
   return join(tmpdir(), "pi-lanes");
 }
 
-async function resolveModel(python: string, gsdBinDir: string): Promise<{ provider: string; model: string; effort: string } | null> {
+async function resolveModel(python: string, gsdBinDir: string): Promise<ResolvedLaneModel | null> {
   try {
     const { stdout } = await execFileAsync(python, [
       join(gsdBinDir, "gsd_impl_lane.py"),
       "resolve-model",
     ], { timeout: 10_000 });
-    const parsed = JSON.parse(stdout.trim());
-    if (typeof parsed.provider === "string" && typeof parsed.model === "string" && typeof parsed.effort === "string") {
-      return parsed as { provider: string; model: string; effort: string };
-    }
-    return null;
+    return parseResolvedModel(stdout);
   } catch {
     return null;
   }
@@ -297,7 +358,11 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           await mkdir(lanesDir, { recursive: true });
 
           const specPath = join(lanesDir, `spec-${slug}.md`);
-          await writeFile(specPath, `# ${params.title || slug}\n\n${params.task}\n`, "utf-8");
+          await writeFile(specPath, renderLaneSpec({
+            title: params.title || slug,
+            task: params.task,
+            writeScope: params.write_scope,
+          }), "utf-8");
 
           const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
@@ -321,7 +386,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             laneParams.Provider = resolved.provider;
             laneParams.Model = resolved.model;
             laneParams.Effort = resolved.effort;
-            laneParams.ModelReason = "resolved from routing config";
+            laneParams.ModelReason = resolved.reason || "resolved from routing config";
           }
 
           const paramsPath = join(lanesDir, `p-${slug}-params.json`);
