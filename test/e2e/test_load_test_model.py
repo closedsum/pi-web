@@ -33,16 +33,29 @@ class LoadTestModelTest(unittest.TestCase):
     def test_empty_override_is_ignored(self):
         self.assertEqual(orch.load_test_model(env={"PI_TEST_MODEL": ""}, path=self.path), FILE)
 
-    def test_missing_file_exits_with_path(self):
-        with self.assertRaises(SystemExit) as ctx:
+    def test_missing_file_raises_with_path(self):
+        with self.assertRaises(ValueError) as ctx:
             orch.load_test_model(env={}, path=os.path.join(self.dir.name, "nope.json"))
         self.assertIn("nope.json", str(ctx.exception))
 
-    def test_missing_key_exits(self):
+    def test_missing_key_raises(self):
         self.write({"provider": "p", "model": "m"})
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(ValueError) as ctx:
             orch.load_test_model(env={}, path=self.path)
         self.assertIn("effort", str(ctx.exception))
+
+    def test_non_object_root_raises(self):
+        for root in (None, [], "x", 3):
+            self.write(root)
+            with self.assertRaises(ValueError) as ctx:
+                orch.load_test_model(env={}, path=self.path)
+            self.assertIn("must be a JSON object", str(ctx.exception))
+
+    def test_wrong_field_types_named(self):
+        self.write({"provider": "", "model": 5, "effort": "high"})
+        with self.assertRaises(ValueError) as ctx:
+            orch.load_test_model(env={}, path=self.path)
+        self.assertIn("provider, model", str(ctx.exception))
 
     def test_repo_file_loads(self):
         cfg = orch.load_test_model(env={})

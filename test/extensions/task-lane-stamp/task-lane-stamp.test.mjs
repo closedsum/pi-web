@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadHook } from "../_hooks.mjs";
+import { SKIP_WITHOUT_HOOKS, loadHook } from "../_hooks.mjs";
 
 // The model-ID -> short-name table comes from the real hook so model swaps
 // there need no edits here.
-const { MODEL_SHORT } = loadHook("task-lane-stamp.cjs");
+const hook = loadHook("task-lane-stamp.cjs", ["MODEL_SHORT"]);
+const MODEL_SHORT = hook?.MODEL_SHORT ?? {};
+const hookTest = (name, fn) => test(name, { skip: hook ? false : SKIP_WITHOUT_HOOKS }, fn);
 
 function idFor(short) {
   const id = Object.keys(MODEL_SHORT).find((key) => MODEL_SHORT[key] === short);
@@ -63,7 +65,7 @@ function handleToolCall(event, manifestStore = {}) {
   return { allow: true, subject: stamp.subject };
 }
 
-test("stamps subject from lane manifest", () => {
+hookTest("stamps subject from lane manifest", () => {
   const event = {
     tool: "TaskCreate",
     input: { owner: "lane:fix-auth", subject: "Fix authentication" },
@@ -74,7 +76,7 @@ test("stamps subject from lane manifest", () => {
   assert.equal(result.subject, "[codex sol high · lane fix-auth] Fix authentication");
 });
 
-test("strips existing prefix before stamping", () => {
+hookTest("strips existing prefix before stamping", () => {
   const event = {
     tool: "TaskUpdate",
     input: { owner: "lane:my-lane", subject: "[old prefix] My task" },
@@ -84,7 +86,7 @@ test("strips existing prefix before stamping", () => {
   assert.equal(result.subject, "[claude opus5 max · lane my-lane] My task");
 });
 
-test("extracts slug from metadata.lane_slug", () => {
+hookTest("extracts slug from metadata.lane_slug", () => {
   const event = {
     tool: "TaskCreate",
     input: { metadata: { lane_slug: "decomp-v2" }, subject: "Decompose" },
@@ -95,25 +97,25 @@ test("extracts slug from metadata.lane_slug", () => {
   assert.match(result.subject, /qwen-cli qwen38 high/);
 });
 
-test("extracts slug from owner with group suffix", () => {
+hookTest("extracts slug from owner with group suffix", () => {
   const slug = extractSlug({ owner: "lane:my-task (group batch-1)" });
   assert.equal(slug, "my-task");
 });
 
-test("returns null slug for non-lane owner", () => {
+hookTest("returns null slug for non-lane owner", () => {
   assert.equal(extractSlug({ owner: "user:bedit" }), null);
   assert.equal(extractSlug({ owner: "" }), null);
   assert.equal(extractSlug({}), null);
 });
 
-test("blocks when manifest not found", () => {
+hookTest("blocks when manifest not found", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:missing", subject: "x" } };
   const result = handleToolCall(event, {});
   assert.ok(result.block);
   assert.match(result.reason, /not found/);
 });
 
-test("blocks when manifest missing required fields", () => {
+hookTest("blocks when manifest missing required fields", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:bad", subject: "x" } };
   const manifests = { bad: { provider: "codex" } };
   const result = handleToolCall(event, manifests);
@@ -121,7 +123,7 @@ test("blocks when manifest missing required fields", () => {
   assert.match(result.reason, /missing/);
 });
 
-test("blocks when manifest is invalid JSON", () => {
+hookTest("blocks when manifest is invalid JSON", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:broken", subject: "x" } };
   const manifests = { broken: { parseError: true } };
   const result = handleToolCall(event, manifests);
@@ -129,23 +131,23 @@ test("blocks when manifest is invalid JSON", () => {
   assert.match(result.reason, /not valid JSON/);
 });
 
-test("ignores non-task tools", () => {
+hookTest("ignores non-task tools", () => {
   assert.equal(handleToolCall({ tool: "Edit", input: { owner: "lane:x" } }, {}), undefined);
 });
 
-test("ignores tasks without lane owner", () => {
+hookTest("ignores tasks without lane owner", () => {
   const event = { tool: "TaskCreate", input: { subject: "no lane" } };
   assert.equal(handleToolCall(event, {}), undefined);
 });
 
-test("modelShort maps all known models", () => {
-  assert.equal(modelShort("claude-sonnet-5[1m]"), "sonnet5");
-  for (const tier of ["sol", "terra", "luna", "astra"]) assert.equal(modelShort(idFor(tier)), tier);
-  assert.equal(modelShort("qwen3.8-flash"), "qwen38flash");
+hookTest("modelShort maps every hook model and passes unknown IDs through", () => {
+  assert.ok(Object.keys(MODEL_SHORT).length >= 8, "hook MODEL_SHORT looks truncated");
+  for (const [id, short] of Object.entries(MODEL_SHORT)) assert.equal(modelShort(id), short);
+  for (const tier of ["sol", "terra", "luna", "astra"]) assert.ok(idFor(tier), `hook maps a model to '${tier}'`);
   assert.equal(modelShort("unknown-model"), "unknown-model");
 });
 
-test("works with TaskUpdate", () => {
+hookTest("works with TaskUpdate", () => {
   const event = {
     tool: "TaskUpdate",
     input: { owner: "lane:update-test", subject: "Update me" },
@@ -156,7 +158,7 @@ test("works with TaskUpdate", () => {
   assert.match(result.subject, /codex terra high/);
 });
 
-test("lane_slug takes priority over owner", () => {
+hookTest("lane_slug takes priority over owner", () => {
   const slug = extractSlug({ owner: "lane:from-owner", metadata: { lane_slug: "from-metadata" } });
   assert.equal(slug, "from-metadata");
 });

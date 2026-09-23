@@ -1,9 +1,21 @@
 import { readFileSync } from "node:fs";
 
 // Single source: test/test-model.json. PI_TEST_* env vars override per run.
+const TEST_MODEL_KEYS = ["provider", "model", "effort"];
 export const TEST_MODEL_FILE = JSON.parse(readFileSync(new URL("../test-model.json", import.meta.url), "utf8"));
 
+/** Throws naming the bad keys unless cfg is an object whose provider/model/effort are non-empty strings. */
+export function validateTestModel(cfg, source = "test/test-model.json") {
+  if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) {
+    throw new Error(`${source} must be a JSON object with ${TEST_MODEL_KEYS.join(", ")}`);
+  }
+  const bad = TEST_MODEL_KEYS.filter((key) => typeof cfg[key] !== "string" || !cfg[key]);
+  if (bad.length) throw new Error(`${source} missing or invalid: ${bad.join(", ")}`);
+  return cfg;
+}
+
 export function resolveTestModel(env, file) {
+  validateTestModel(file);
   return {
     model: env.PI_TEST_MODEL || file.model,
     effort: env.PI_TEST_EFFORT || file.effort,

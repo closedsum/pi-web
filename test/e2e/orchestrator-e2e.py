@@ -27,20 +27,28 @@ TEST_MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(_
 
 
 def load_test_model(env=None, path=TEST_MODEL_PATH):
-    """Provider/model/effort from test/test-model.json; non-empty PI_TEST_* env vars override."""
+    """Provider/model/effort from test/test-model.json; non-empty PI_TEST_* env vars override.
+
+    Raises ValueError naming the problem when the file is unreadable or invalid.
+    """
     env = os.environ if env is None else env
     try:
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        raise SystemExit(f"cannot load test model config {path}: {e}")
-    missing = [k for k in ("provider", "model", "effort") if not isinstance(cfg.get(k), str) or not cfg[k]]
-    if missing:
-        raise SystemExit(f"{path} missing {', '.join(missing)}")
+        raise ValueError(f"cannot load test model config {path}: {e}") from e
+    if not isinstance(cfg, dict):
+        raise ValueError(f"{path} must be a JSON object with provider, model, effort")
+    bad = [k for k in ("provider", "model", "effort") if not isinstance(cfg.get(k), str) or not cfg[k]]
+    if bad:
+        raise ValueError(f"{path} missing or invalid: {', '.join(bad)}")
     return {key: env.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
 
 
-TEST_MODEL = load_test_model()
+try:
+    TEST_MODEL = load_test_model()
+except ValueError as e:
+    raise SystemExit(str(e))
 
 # ---------------------------------------------------------------------------
 # Test scenarios — same 5 from the contract tests, plus expected verdicts

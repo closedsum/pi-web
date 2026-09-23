@@ -1,13 +1,11 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { TEST_CONFIG } from "./_config.mjs";
-
-const HOOKS_DIR = join(homedir(), "gsd-config", "get-shit-done", "hooks");
+import { HOOKS_DIR } from "./_hooks.mjs";
 
 export const E2E_CONFIG = {
   ...TEST_CONFIG,
-  hooksDir: process.env.PI_TEST_HOOKS_DIR || HOOKS_DIR,
+  hooksDir: HOOKS_DIR,
   timeout: parseInt(process.env.PI_TEST_TIMEOUT || "10000", 10),
 };
 

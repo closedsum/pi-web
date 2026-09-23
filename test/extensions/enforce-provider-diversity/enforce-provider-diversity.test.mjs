@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadHook } from "../_hooks.mjs";
+import { SKIP_WITHOUT_HOOKS, loadHook } from "../_hooks.mjs";
 
 // Model/effort profiles come from the real hook so model swaps there need no edits here.
-const { providerProfile } = loadHook("enforce-provider-diversity.cjs");
+const hook = loadHook("enforce-provider-diversity.cjs", ["providerProfile"]);
+const providerProfile = hook?.providerProfile ?? (() => ({}));
+const hookTest = (name, fn) => test(name, { skip: hook ? false : SKIP_WITHOUT_HOOKS }, fn);
 
 const DEFAULT_PROVIDERS = ["codex", "claude", "qwen-cli"];
 
@@ -66,7 +68,7 @@ function assignProviders(manifest) {
   return { manifest: { ...manifest, wave: assigned }, distribution: counts };
 }
 
-test("assigns providers evenly across wave", () => {
+hookTest("assigns providers evenly across wave", () => {
   const result = assignProviders({
     wave: [{ subject: "t1" }, { subject: "t2" }, { subject: "t3" }],
   });
@@ -76,7 +78,7 @@ test("assigns providers evenly across wave", () => {
   assert.equal(unique.size, 3);
 });
 
-test("respects explicit provider locks", () => {
+hookTest("respects explicit provider locks", () => {
   const result = assignProviders({
     wave: [
       { subject: "t1", provider: "claude" },
@@ -86,7 +88,7 @@ test("respects explicit provider locks", () => {
   assert.equal(result.manifest.wave[0].provider, "claude");
 });
 
-test("errors on unknown provider", () => {
+hookTest("errors on unknown provider", () => {
   const result = assignProviders({
     wave: [{ subject: "t1", provider: "unknown-ai" }],
   });
@@ -94,56 +96,58 @@ test("errors on unknown provider", () => {
   assert.match(result.error, /unknown provider/);
 });
 
-test("errors on non-array wave", () => {
+hookTest("errors on non-array wave", () => {
   const result = assignProviders({ wave: "not-array" });
   assert.ok(result.error);
 });
 
-test("errors on non-object manifest", () => {
+hookTest("errors on non-object manifest", () => {
   const result = assignProviders(null);
   assert.ok(result.error);
 });
 
-test("review tasks prefer codex first", () => {
+hookTest("review tasks prefer codex first", () => {
   const result = assignProviders({
     wave: [{ subject: "review", task_type: "review" }],
   });
   assert.equal(result.manifest.wave[0].provider, "codex");
 });
 
-test("research tasks prefer claude first", () => {
+hookTest("research tasks prefer claude first", () => {
   const result = assignProviders({
     wave: [{ subject: "research", task_type: "research" }],
   });
   assert.equal(result.manifest.wave[0].provider, "claude");
 });
 
-test("narrow tasks prefer qwen-cli first", () => {
+hookTest("narrow tasks prefer qwen-cli first", () => {
   const result = assignProviders({
     wave: [{ subject: "narrow", task_type: "narrow" }],
   });
   assert.equal(result.manifest.wave[0].provider, "qwen-cli");
 });
 
-test("assigns model and effort from provider profile", () => {
+hookTest("assigns model and effort from provider profile", () => {
   const result = assignProviders({
     wave: [{ subject: "t1", task_type: "review" }],
   });
   const task = result.manifest.wave[0];
-  const expected = providerProfile(task.provider, "review");
+  assert.equal(task.provider, "codex", "review tasks go to codex first");
+  const expected = providerProfile("codex", "review");
   assert.equal(typeof expected.model, "string");
   assert.equal(task.model, expected.model);
   assert.equal(task.effort, expected.effort);
+  assert.notEqual(expected.model, providerProfile("codex", "narrow").model, "review and narrow use distinct codex models");
 });
 
-test("explicit model on task is preserved", () => {
+hookTest("explicit model on task is preserved", () => {
   const result = assignProviders({
     wave: [{ subject: "t1", model: "custom-model" }],
   });
   assert.equal(result.manifest.wave[0].model, "custom-model");
 });
 
-test("canonicalProvider normalizes aliases", () => {
+hookTest("canonicalProvider normalizes aliases", () => {
   assert.equal(canonicalProvider("qwen"), "qwen-cli");
   assert.equal(canonicalProvider("Codex"), "codex");
   assert.equal(canonicalProvider("Claude"), "claude");
@@ -151,7 +155,7 @@ test("canonicalProvider normalizes aliases", () => {
   assert.equal(canonicalProvider(42), null);
 });
 
-test("distribution counts are correct", () => {
+hookTest("distribution counts are correct", () => {
   const result = assignProviders({
     wave: [{ subject: "t1" }, { subject: "t2" }, { subject: "t3" }],
   });
@@ -159,7 +163,7 @@ test("distribution counts are correct", () => {
   assert.equal(total, 3);
 });
 
-test("large wave balances across providers", () => {
+hookTest("large wave balances across providers", () => {
   const wave = Array.from({ length: 6 }, (_, i) => ({ subject: `t${i}` }));
   const result = assignProviders({ wave });
   const counts = Object.values(result.distribution);

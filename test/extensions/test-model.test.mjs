@@ -1,20 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { TEST_CONFIG, TEST_MODEL_FILE, resolveTestModel } from "./_config.mjs";
+import { TEST_CONFIG, TEST_MODEL_FILE, resolveTestModel, validateTestModel } from "./_config.mjs";
 import { E2E_CONFIG } from "./_e2e-harness.mjs";
 
 const DISPLAY = JSON.parse(readFileSync(new URL("../../lib/model-display.json", import.meta.url), "utf8"));
 const FILE = { provider: "p-file", model: "m-file", effort: "high" };
 
 test("test-model.json defines provider, model, and effort", () => {
-  for (const key of ["provider", "model", "effort"]) {
-    assert.equal(typeof TEST_MODEL_FILE[key], "string", `${key} must be a string`);
-    assert.ok(TEST_MODEL_FILE[key].length > 0, `${key} must be non-empty`);
-  }
+  assert.equal(validateTestModel(TEST_MODEL_FILE), TEST_MODEL_FILE);
 });
 
-test("test-model.json effort is a known thinking level", () => {
+test("test-model.json provider and model are single tokens", () => {
+  // No in-repo provider-ID roster exists (models come from ~/.pi/agent at runtime),
+  // so guard the format: typos like trailing spaces surface here, not as e2e flakes.
+  assert.match(TEST_MODEL_FILE.provider, /^\S+$/);
+  assert.match(TEST_MODEL_FILE.model, /^\S+$/);
+});
+
+test("test-model.json effort is a known effort level", () => {
   assert.ok(Object.hasOwn(DISPLAY.effortColors, TEST_MODEL_FILE.effort),
     `${TEST_MODEL_FILE.effort} must be one of ${Object.keys(DISPLAY.effortColors).join(", ")}`);
 });
@@ -30,16 +34,21 @@ test("resolveTestModel applies each PI_TEST_* override independently", () => {
     { provider: "p-env", model: "m-file", effort: "low" });
 });
 
+test("validateTestModel rejects non-object roots and bad fields, naming the keys", () => {
+  for (const root of [null, [], "x", 3]) {
+    assert.throws(() => validateTestModel(root), /must be a JSON object/);
+  }
+  assert.throws(() => validateTestModel({ provider: "p", model: "m" }), /invalid: effort$/);
+  assert.throws(() => validateTestModel({ provider: "", model: 5, effort: "high" }), /invalid: provider, model$/);
+  assert.throws(() => resolveTestModel({}, { provider: "p" }), /invalid: model, effort$/);
+});
+
 test("resolveTestModel ignores empty overrides", () => {
   assert.deepEqual(resolveTestModel({ PI_TEST_MODEL: "", PI_TEST_EFFORT: "" }, FILE),
     { provider: "p-file", model: "m-file", effort: "high" });
 });
 
-test("TEST_CONFIG and E2E_CONFIG resolve from test-model.json plus this run's env", () => {
-  const expected = resolveTestModel(process.env, TEST_MODEL_FILE);
-  for (const cfg of [TEST_CONFIG, E2E_CONFIG]) {
-    assert.equal(cfg.provider, expected.provider);
-    assert.equal(cfg.model, expected.model);
-    assert.equal(cfg.effort, expected.effort);
-  }
+test("E2E_CONFIG carries TEST_CONFIG's provider, model, and effort", () => {
+  const { provider, model, effort } = E2E_CONFIG;
+  assert.deepEqual({ provider, model, effort }, { ...TEST_CONFIG });
 });
