@@ -1,5 +1,5 @@
 export const TEST_CONFIG = {
-  model: process.env.PI_TEST_MODEL || "gpt-5.6-sol",
+  model: process.env.PI_TEST_MODEL || "gpt-6-sol",
   effort: process.env.PI_TEST_EFFORT || "high",
   provider: process.env.PI_TEST_PROVIDER || "openai",
 };

@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 const HOOKS_DIR = join(homedir(), "gsd-config", "get-shit-done", "hooks");
 
 export const E2E_CONFIG = {
-  model: process.env.PI_TEST_MODEL || "gpt-5.6-sol",
+  model: process.env.PI_TEST_MODEL || "gpt-6-sol",
   effort: process.env.PI_TEST_EFFORT || "high",
   provider: process.env.PI_TEST_PROVIDER || "openai",
   hooksDir: process.env.PI_TEST_HOOKS_DIR || HOOKS_DIR,

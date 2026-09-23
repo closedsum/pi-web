@@ -23,9 +23,9 @@
   },
   "fallbackColor": "#a78bfa",
   "displayNames": {
-    "sol": "gpt-5.6-sol",
+    "sol": "gpt-6-sol",
     "terra": "gpt-5.6-terra",
-    "luna": "gpt-5.6-luna",
+    "luna": "gpt-6-luna",
     "astra": "gpt-6-astra",
     "opus5": "opus-5",
     "sonnet5": "sonnet-5",

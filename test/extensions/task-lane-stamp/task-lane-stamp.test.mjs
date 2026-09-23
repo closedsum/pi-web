@@ -5,9 +5,9 @@ const MODEL_SHORT = {
   "claude-sonnet-5[1m]": "sonnet5",
   "claude-opus-5[1m]": "opus5",
   "claude-opus-4-6[1m]": "opus4.6",
-  "gpt-5.6-sol": "sol",
+  "gpt-6-sol": "sol",
   "gpt-5.6-terra": "terra",
-  "gpt-5.6-luna": "luna",
+  "gpt-6-luna": "luna",
   "gpt-6-astra": "astra",
   "qwen3.8-max": "qwen38",
   "qwen3.8-flash": "qwen38flash",
@@ -69,7 +69,7 @@ test("stamps subject from lane manifest", () => {
     tool: "TaskCreate",
     input: { owner: "lane:fix-auth", subject: "Fix authentication" },
   };
-  const manifests = { "fix-auth": { provider: "codex", model: "gpt-5.6-sol", effort: "high" } };
+  const manifests = { "fix-auth": { provider: "codex", model: "gpt-6-sol", effort: "high" } };
   const result = handleToolCall(event, manifests);
   assert.ok(result.allow);
   assert.equal(result.subject, "[codex sol high · lane fix-auth] Fix authentication");

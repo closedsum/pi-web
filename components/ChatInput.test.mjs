@@ -339,7 +339,7 @@ test("renders the shared field model selector as a disabled gray control", () =>
       I18nProvider,
       null,
       React.createElement(ModelSelector, {
-        options: [{ provider: "openai", modelId: "gpt-5.6-sol", name: "GPT-5.6 Sol" }],
+        options: [{ provider: "openai", modelId: "gpt-6-sol", name: "GPT-6 Sol" }],
         value: null,
         onChange() {},
         onClear() {},

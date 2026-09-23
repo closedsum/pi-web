@@ -2,7 +2,7 @@
 
 Usage:
     python test/e2e/orchestrator-e2e.py                              # defaults: claude/opus, max effort
-    python test/e2e/orchestrator-e2e.py --provider openai --model gpt-5.6-sol --effort high
+    python test/e2e/orchestrator-e2e.py --provider openai --model gpt-6-sol --effort high
     python test/e2e/orchestrator-e2e.py --scenario implementation-request   # run one scenario
     python test/e2e/orchestrator-e2e.py --list                       # list available scenarios
 
@@ -572,7 +572,7 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
 def main():
     parser = argparse.ArgumentParser(description="Orchestrator e2e tests against live pi-web")
     parser.add_argument("--provider", default="openai-codex", help="Model provider (default: openai-codex)")
-    parser.add_argument("--model", default="gpt-5.6-sol", help="Model ID (default: gpt-5.6-sol)")
+    parser.add_argument("--model", default="gpt-6-sol", help="Model ID (default: gpt-6-sol)")
     parser.add_argument("--effort", default="high", help="Thinking level (default: high)")
     parser.add_argument("--scenario", default=None, help="Run a single scenario by id")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show full event chains")
