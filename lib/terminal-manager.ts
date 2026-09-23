@@ -186,13 +186,24 @@ export function killTerminal(id: string, force = false): boolean {
   if (record.cleanupTimer) clearTimeout(record.cleanupTimer);
   registry().delete(id);
   if (!record.exited) {
-    record.pty.kill(force ? "SIGKILL" : undefined);
-    // A shell may trap SIGHUP; explicit close and lease expiry must still finish.
-    if (!force) {
+    if (process.platform === "win32") {
+      // node-pty on Windows rejects any signal, and its kill() is already forceful
+      // (TerminateProcess on the console processes, or closing the ConPTY), so there
+      // is nothing to escalate to; a PTY that survives it is reported, not retried.
+      record.pty.kill();
       record.cleanupTimer = setTimeout(() => {
-        if (!record.exited) record.pty.kill("SIGKILL");
+        if (!record.exited) console.warn(`terminal ${id}: PTY pid ${record.pty.pid} still running 2s after kill()`);
       }, 2000);
       record.cleanupTimer.unref?.();
+    } else {
+      record.pty.kill(force ? "SIGKILL" : undefined);
+      // A shell may trap SIGHUP; explicit close and lease expiry must still finish.
+      if (!force) {
+        record.cleanupTimer = setTimeout(() => {
+          if (!record.exited) record.pty.kill("SIGKILL");
+        }, 2000);
+        record.cleanupTimer.unref?.();
+      }
     }
   }
   emit(record, { type: "closed" });
