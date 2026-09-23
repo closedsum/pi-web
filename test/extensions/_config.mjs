@@ -4,23 +4,27 @@ import { readFileSync } from "node:fs";
 const TEST_MODEL_KEYS = ["provider", "model", "effort"];
 export const TEST_MODEL_FILE = JSON.parse(readFileSync(new URL("../test-model.json", import.meta.url), "utf8"));
 
-/** Throws naming the bad keys unless cfg is an object whose provider/model/effort are non-empty strings. */
+/**
+ * Throws naming the bad keys unless cfg is an object whose provider/model/effort
+ * are non-empty strings without whitespace. No in-repo model-ID roster exists
+ * (models come from ~/.pi/agent at runtime), so the format is what we can check.
+ */
 export function validateTestModel(cfg, source = "test/test-model.json") {
   if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) {
     throw new Error(`${source} must be a JSON object with ${TEST_MODEL_KEYS.join(", ")}`);
   }
-  const bad = TEST_MODEL_KEYS.filter((key) => typeof cfg[key] !== "string" || !cfg[key]);
+  const bad = TEST_MODEL_KEYS.filter((key) => typeof cfg[key] !== "string" || !/^\S+$/.test(cfg[key]));
   if (bad.length) throw new Error(`${source} missing or invalid: ${bad.join(", ")}`);
   return cfg;
 }
 
 export function resolveTestModel(env, file) {
   validateTestModel(file);
-  return {
+  return validateTestModel({
     model: env.PI_TEST_MODEL || file.model,
     effort: env.PI_TEST_EFFORT || file.effort,
     provider: env.PI_TEST_PROVIDER || file.provider,
-  };
+  }, "test model after PI_TEST_* overrides");
 }
 
 export const TEST_CONFIG = resolveTestModel(process.env, TEST_MODEL_FILE);

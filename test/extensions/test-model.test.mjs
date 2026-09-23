@@ -11,11 +11,12 @@ test("test-model.json defines provider, model, and effort", () => {
   assert.equal(validateTestModel(TEST_MODEL_FILE), TEST_MODEL_FILE);
 });
 
-test("test-model.json provider and model are single tokens", () => {
-  // No in-repo provider-ID roster exists (models come from ~/.pi/agent at runtime),
-  // so guard the format: typos like trailing spaces surface here, not as e2e flakes.
-  assert.match(TEST_MODEL_FILE.provider, /^\S+$/);
-  assert.match(TEST_MODEL_FILE.model, /^\S+$/);
+test("validateTestModel rejects whitespace so typos surface here, not as e2e flakes", () => {
+  assert.throws(() => validateTestModel({ provider: "p", model: "gpt-6-sol ", effort: "high" }), /invalid: model$/);
+});
+
+test("resolveTestModel validates overridden values too", () => {
+  assert.throws(() => resolveTestModel({ PI_TEST_MODEL: "has space" }, FILE), /after PI_TEST_\* overrides.*model$/);
 });
 
 test("test-model.json effort is a runtime thinking level", () => {
@@ -48,7 +49,8 @@ test("resolveTestModel ignores empty overrides", () => {
     { provider: "p-file", model: "m-file", effort: "high" });
 });
 
-test("E2E_CONFIG carries TEST_CONFIG's provider, model, and effort", () => {
+test("TEST_CONFIG is test-model.json resolved with this run's env; E2E_CONFIG carries it", () => {
+  assert.deepEqual({ ...TEST_CONFIG }, resolveTestModel(process.env, TEST_MODEL_FILE));
   const { provider, model, effort } = E2E_CONFIG;
   assert.deepEqual({ provider, model, effort }, { ...TEST_CONFIG });
 });

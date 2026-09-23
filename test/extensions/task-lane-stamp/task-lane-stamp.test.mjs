@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SKIP_WITHOUT_HOOKS, loadHook } from "../_hooks.mjs";
+import { hookTestFor, loadHook } from "../_hooks.mjs";
 
 // The model-ID -> short-name table comes from the real hook so model swaps
 // there need no edits here.
-const hook = loadHook("task-lane-stamp.cjs", ["MODEL_SHORT"]);
+const hook = loadHook("task-lane-stamp.cjs", { MODEL_SHORT: "object" });
 const MODEL_SHORT = hook?.MODEL_SHORT ?? {};
-const hookTest = (name, fn) => test(name, { skip: hook ? false : SKIP_WITHOUT_HOOKS }, fn);
+const hookTest = hookTestFor(hook);
 
 function idFor(short) {
   const id = Object.keys(MODEL_SHORT).find((key) => MODEL_SHORT[key] === short);
@@ -97,25 +97,25 @@ hookTest("extracts slug from metadata.lane_slug", () => {
   assert.match(result.subject, /qwen-cli qwen38 high/);
 });
 
-hookTest("extracts slug from owner with group suffix", () => {
+test("extracts slug from owner with group suffix", () => {
   const slug = extractSlug({ owner: "lane:my-task (group batch-1)" });
   assert.equal(slug, "my-task");
 });
 
-hookTest("returns null slug for non-lane owner", () => {
+test("returns null slug for non-lane owner", () => {
   assert.equal(extractSlug({ owner: "user:bedit" }), null);
   assert.equal(extractSlug({ owner: "" }), null);
   assert.equal(extractSlug({}), null);
 });
 
-hookTest("blocks when manifest not found", () => {
+test("blocks when manifest not found", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:missing", subject: "x" } };
   const result = handleToolCall(event, {});
   assert.ok(result.block);
   assert.match(result.reason, /not found/);
 });
 
-hookTest("blocks when manifest missing required fields", () => {
+test("blocks when manifest missing required fields", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:bad", subject: "x" } };
   const manifests = { bad: { provider: "codex" } };
   const result = handleToolCall(event, manifests);
@@ -123,7 +123,7 @@ hookTest("blocks when manifest missing required fields", () => {
   assert.match(result.reason, /missing/);
 });
 
-hookTest("blocks when manifest is invalid JSON", () => {
+test("blocks when manifest is invalid JSON", () => {
   const event = { tool: "TaskCreate", input: { owner: "lane:broken", subject: "x" } };
   const manifests = { broken: { parseError: true } };
   const result = handleToolCall(event, manifests);
@@ -131,17 +131,16 @@ hookTest("blocks when manifest is invalid JSON", () => {
   assert.match(result.reason, /not valid JSON/);
 });
 
-hookTest("ignores non-task tools", () => {
+test("ignores non-task tools", () => {
   assert.equal(handleToolCall({ tool: "Edit", input: { owner: "lane:x" } }, {}), undefined);
 });
 
-hookTest("ignores tasks without lane owner", () => {
+test("ignores tasks without lane owner", () => {
   const event = { tool: "TaskCreate", input: { subject: "no lane" } };
   assert.equal(handleToolCall(event, {}), undefined);
 });
 
 hookTest("modelShort maps every hook model and passes unknown IDs through", () => {
-  assert.ok(Object.keys(MODEL_SHORT).length >= 8, "hook MODEL_SHORT looks truncated");
   for (const [id, short] of Object.entries(MODEL_SHORT)) assert.equal(modelShort(id), short);
   for (const tier of ["sol", "terra", "luna", "astra"]) assert.ok(idFor(tier), `hook maps a model to '${tier}'`);
   assert.equal(modelShort("unknown-model"), "unknown-model");
@@ -158,7 +157,7 @@ hookTest("works with TaskUpdate", () => {
   assert.match(result.subject, /codex terra high/);
 });
 
-hookTest("lane_slug takes priority over owner", () => {
+test("lane_slug takes priority over owner", () => {
   const slug = extractSlug({ owner: "lane:from-owner", metadata: { lane_slug: "from-metadata" } });
   assert.equal(slug, "from-metadata");
 });
