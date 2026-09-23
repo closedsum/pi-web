@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GPT } from "../_models.mjs";
+import { loadHook } from "../_hooks.mjs";
 
-const MODEL_SHORT = {
-  "claude-sonnet-5[1m]": "sonnet5",
-  "claude-opus-5[1m]": "opus5",
-  "claude-opus-4-6[1m]": "opus4.6",
-  [GPT.sol]: "sol",
-  [GPT.terra]: "terra",
-  [GPT.luna]: "luna",
-  [GPT.astra]: "astra",
-  "qwen3.8-max": "qwen38",
-  "qwen3.8-flash": "qwen38flash",
-};
+// The model-ID -> short-name table comes from the real hook so model swaps
+// there need no edits here.
+const { MODEL_SHORT } = loadHook("task-lane-stamp.cjs");
+
+function idFor(short) {
+  const id = Object.keys(MODEL_SHORT).find((key) => MODEL_SHORT[key] === short);
+  if (!id) throw new Error(`task-lane-stamp MODEL_SHORT has no model for '${short}'`);
+  return id;
+}
 
 const OWNER_RE = /^lane:(?<slug>[A-Za-z0-9._-]+)(?: \(group [^)]+\))?$/;
 
@@ -70,7 +68,7 @@ test("stamps subject from lane manifest", () => {
     tool: "TaskCreate",
     input: { owner: "lane:fix-auth", subject: "Fix authentication" },
   };
-  const manifests = { "fix-auth": { provider: "codex", model: GPT.sol, effort: "high" } };
+  const manifests = { "fix-auth": { provider: "codex", model: idFor("sol"), effort: "high" } };
   const result = handleToolCall(event, manifests);
   assert.ok(result.allow);
   assert.equal(result.subject, "[codex sol high · lane fix-auth] Fix authentication");
@@ -142,7 +140,7 @@ test("ignores tasks without lane owner", () => {
 
 test("modelShort maps all known models", () => {
   assert.equal(modelShort("claude-sonnet-5[1m]"), "sonnet5");
-  for (const tier of ["sol", "terra", "luna", "astra"]) assert.equal(modelShort(GPT[tier]), tier);
+  for (const tier of ["sol", "terra", "luna", "astra"]) assert.equal(modelShort(idFor(tier)), tier);
   assert.equal(modelShort("qwen3.8-flash"), "qwen38flash");
   assert.equal(modelShort("unknown-model"), "unknown-model");
 });
@@ -152,7 +150,7 @@ test("works with TaskUpdate", () => {
     tool: "TaskUpdate",
     input: { owner: "lane:update-test", subject: "Update me" },
   };
-  const manifests = { "update-test": { provider: "codex", model: GPT.terra, effort: "high" } };
+  const manifests = { "update-test": { provider: "codex", model: idFor("terra"), effort: "high" } };
   const result = handleToolCall(event, manifests);
   assert.ok(result.allow);
   assert.match(result.subject, /codex terra high/);

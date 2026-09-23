@@ -23,12 +23,21 @@ TEST_CWD = os.environ.get("PI_WEB_TEST_CWD", os.path.dirname(os.path.dirname(os.
 TURN_TIMEOUT_S = int(os.environ.get("PI_WEB_TURN_TIMEOUT", "120"))
 
 
-def load_test_model():
-    """Provider/model/effort from test/test-model.json; PI_TEST_* env vars override."""
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test-model.json")
-    with open(path, encoding="utf-8") as f:
-        cfg = json.load(f)
-    return {key: os.environ.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
+TEST_MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test-model.json")
+
+
+def load_test_model(env=None, path=TEST_MODEL_PATH):
+    """Provider/model/effort from test/test-model.json; non-empty PI_TEST_* env vars override."""
+    env = os.environ if env is None else env
+    try:
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise SystemExit(f"cannot load test model config {path}: {e}")
+    missing = [k for k in ("provider", "model", "effort") if not isinstance(cfg.get(k), str) or not cfg[k]]
+    if missing:
+        raise SystemExit(f"{path} missing {', '.join(missing)}")
+    return {key: env.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
 
 
 TEST_MODEL = load_test_model()

@@ -1,13 +1,17 @@
 import { readFileSync } from "node:fs";
 
 // Single source: test/test-model.json. PI_TEST_* env vars override per run.
-const TEST_MODEL = JSON.parse(readFileSync(new URL("../test-model.json", import.meta.url), "utf8"));
+export const TEST_MODEL_FILE = JSON.parse(readFileSync(new URL("../test-model.json", import.meta.url), "utf8"));
 
-export const TEST_CONFIG = {
-  model: process.env.PI_TEST_MODEL || TEST_MODEL.model,
-  effort: process.env.PI_TEST_EFFORT || TEST_MODEL.effort,
-  provider: process.env.PI_TEST_PROVIDER || TEST_MODEL.provider,
-};
+export function resolveTestModel(env, file) {
+  return {
+    model: env.PI_TEST_MODEL || file.model,
+    effort: env.PI_TEST_EFFORT || file.effort,
+    provider: env.PI_TEST_PROVIDER || file.provider,
+  };
+}
+
+export const TEST_CONFIG = resolveTestModel(process.env, TEST_MODEL_FILE);
 
 export function makeToolCallEvent(toolName, args = {}) {
   return {

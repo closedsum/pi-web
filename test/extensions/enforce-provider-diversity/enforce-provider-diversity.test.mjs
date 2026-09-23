@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GPT } from "../_models.mjs";
+import { loadHook } from "../_hooks.mjs";
+
+// Model/effort profiles come from the real hook so model swaps there need no edits here.
+const { providerProfile } = loadHook("enforce-provider-diversity.cjs");
 
 const DEFAULT_PROVIDERS = ["codex", "claude", "qwen-cli"];
 
@@ -24,21 +27,6 @@ function taskFamily(task) {
   if (/plan/.test(type)) return "planning";
   if (/narrow|small|simple/.test(type)) return "narrow";
   return "generic";
-}
-
-function providerProfile(provider, family) {
-  if (provider === "codex") {
-    if (family === "review") return { model: GPT.sol, effort: "xhigh" };
-    if (family === "planning") return { model: GPT.astra, effort: "xhigh" };
-    if (family === "narrow") return { model: GPT.luna, effort: "medium" };
-    return { model: GPT.terra, effort: "high" };
-  }
-  if (provider === "claude") {
-    if (family === "research") return { model: "claude-opus-5[1m]", effort: "max" };
-    return { model: "claude-sonnet-5[1m]", effort: "high" };
-  }
-  if (family === "review" || family === "research") return { model: "qwen3.8-max", effort: "high" };
-  return { model: "qwen3.8-flash", effort: "medium" };
 }
 
 function assignProviders(manifest) {
@@ -142,8 +130,10 @@ test("assigns model and effort from provider profile", () => {
     wave: [{ subject: "t1", task_type: "review" }],
   });
   const task = result.manifest.wave[0];
-  assert.equal(task.model, GPT.sol);
-  assert.equal(task.effort, "xhigh");
+  const expected = providerProfile(task.provider, "review");
+  assert.equal(typeof expected.model, "string");
+  assert.equal(task.model, expected.model);
+  assert.equal(task.effort, expected.effort);
 });
 
 test("explicit model on task is preserved", () => {
