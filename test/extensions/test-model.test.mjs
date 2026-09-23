@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { createJiti } from "jiti";
 import { TEST_CONFIG, TEST_MODEL_FILE, resolveTestModel, validateTestModel } from "./_config.mjs";
 import { E2E_CONFIG } from "./_e2e-harness.mjs";
 
-const DISPLAY = JSON.parse(readFileSync(new URL("../../lib/model-display.json", import.meta.url), "utf8"));
+const { THINKING_LEVELS } = await createJiti(import.meta.url).import("../../lib/thinking-levels.ts");
 const FILE = { provider: "p-file", model: "m-file", effort: "high" };
 
 test("test-model.json defines provider, model, and effort", () => {
@@ -18,9 +18,9 @@ test("test-model.json provider and model are single tokens", () => {
   assert.match(TEST_MODEL_FILE.model, /^\S+$/);
 });
 
-test("test-model.json effort is a known effort level", () => {
-  assert.ok(Object.hasOwn(DISPLAY.effortColors, TEST_MODEL_FILE.effort),
-    `${TEST_MODEL_FILE.effort} must be one of ${Object.keys(DISPLAY.effortColors).join(", ")}`);
+test("test-model.json effort is a runtime thinking level", () => {
+  assert.ok(THINKING_LEVELS.has(TEST_MODEL_FILE.effort),
+    `${TEST_MODEL_FILE.effort} must be one of ${[...THINKING_LEVELS].join(", ")}`);
 });
 
 test("resolveTestModel uses the file when no override is set", () => {

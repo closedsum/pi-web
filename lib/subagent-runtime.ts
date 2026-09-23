@@ -9,6 +9,7 @@ import {
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike } from "./pi-types";
+import { THINKING_LEVELS } from "./thinking-levels";
 import {
   subagentFinalText,
   subagentToolDetails,
@@ -80,7 +81,6 @@ declare global {
   var __piSubagentQueue: SubagentQueue<SubagentRunInfo> | undefined;
 }
 const SUBAGENT_CONTEXT_LIMIT = 50_000;
-const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 function getSubagentRuns(): Map<string, StoredSubagentExecution> {
   if (!globalThis.__piSubagentRuns) globalThis.__piSubagentRuns = new Map();
