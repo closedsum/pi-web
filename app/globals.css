@@ -1,5 +1,9 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "tailwindcss";
+/* Planning notes and agent state aren't UI source; their Windows paths (e.g. "\36622b…")
+   read as invalid CSS escapes and break the build. */
+@source not "../.planning";
+@source not "../.claude";
 
 @theme {
   --color-bg: var(--bg);
