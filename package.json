@@ -37,6 +37,7 @@
     "lint": "eslint .",
     "test:extensions": "node --test \"test/extensions/**/*.test.mjs\"",
     "test:extensions:e2e": "node --test \"test/extensions/e2e/**/*.e2e.mjs\"",
+    "test:py": "python -m unittest discover -s test/e2e -p \"test_*.py\"",
     "test:terminal": "node e2e/terminal.mjs",
     "test:e2e": "node e2e/run.mjs",
     "test": "node --experimental-strip-types --test --test-skip-pattern \"app/api/*/test/\" \"app/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\"",

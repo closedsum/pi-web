@@ -48,3 +48,4 @@ e2e_*.mjs
 
 # e2e test artifacts
 test/e2e/results/
+__pycache__/
