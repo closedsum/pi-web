@@ -144,7 +144,8 @@ export function renderLaneSpec({ title, task, writeScope = [] }: { title: string
     task,
     "",
     "## Fix",
-    task,
+    "- Implement the Goal. If the cause or the right place to change is unclear, investigate the code paths it names before editing.",
+    "- Keep the change minimal and inside the WriteScope.",
     "",
     "## Test Requirements",
     "- Add or update tests next to the changed code covering the happy path, an error path, an edge case, and a regression test for the reported problem.",
@@ -160,27 +161,39 @@ export function renderLaneSpec({ title, task, writeScope = [] }: { title: string
   ].join("\n");
 }
 
-async function resolveWorktreeRoot(python: string, gsdBinDir: string): Promise<string> {
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err)).split("\n")[0];
+
+/** Configured lane worktree root; falls back to <tmp>/pi-lanes with a warning when unusable. */
+async function resolveWorktreeRoot(python: string, gsdBinDir: string): Promise<{ root: string; warning?: string }> {
+  const fallback = join(tmpdir(), "pi-lanes");
   try {
     const { stdout } = await execFileAsync(python, [
       join(gsdBinDir, "gsd-config.py"),
       "get", "impl_lanes.temp_worktree_root",
     ], { timeout: 10_000 });
     const root = parseConfigString(stdout);
-    if (root && isAbsolute(root)) return root;
-  } catch {}
-  return join(tmpdir(), "pi-lanes");
+    if (!root) return { root: fallback };
+    if (!isAbsolute(root)) {
+      return { root: fallback, warning: `impl_lanes.temp_worktree_root ignored (not absolute): ${root}; using ${fallback}` };
+    }
+    return { root };
+  } catch (err) {
+    return { root: fallback, warning: `could not read impl_lanes.temp_worktree_root (${errorText(err)}); using ${fallback}` };
+  }
 }
 
-async function resolveModel(python: string, gsdBinDir: string): Promise<ResolvedLaneModel | null> {
+/** Config-sanctioned lane model; null with a warning when resolve-model fails or is unparseable. */
+async function resolveModel(python: string, gsdBinDir: string): Promise<{ model: ResolvedLaneModel | null; warning?: string }> {
   try {
     const { stdout } = await execFileAsync(python, [
       join(gsdBinDir, "gsd_impl_lane.py"),
       "resolve-model",
     ], { timeout: 10_000 });
-    return parseResolvedModel(stdout);
-  } catch {
-    return null;
+    const model = parseResolvedModel(stdout);
+    if (model) return { model };
+    return { model: null, warning: `resolve-model output not parseable; lane pipeline will choose the model: ${stdout.trim().slice(0, 120)}` };
+  } catch (err) {
+    return { model: null, warning: `resolve-model failed (${errorText(err)}); lane pipeline will choose the model` };
   }
 }
 
@@ -330,10 +343,15 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           skip_review: Type.Optional(Type.Boolean({ description: "Skip cross-review (for trivial changes only)." })),
         }),
         async execute(_toolCallId, params) {
+          if (!params.task?.trim()) {
+            return { content: [{ type: "text", text: "DispatchLane: task is required (describe what to change and why)." }], details: undefined, isError: true };
+          }
           const slug = uniqueSlug(sanitizeSlug(params.slug || params.task));
           const repo = resolve(options.cwd);
+          const warnings: string[] = [];
 
-          const worktreeRoot = await resolveWorktreeRoot(python, gsdBinDir);
+          const { root: worktreeRoot, warning: rootWarning } = await resolveWorktreeRoot(python, gsdBinDir);
+          if (rootWarning) warnings.push(rootWarning);
           const worktreePath = join(worktreeRoot, `pi-${slug}`);
           const branchName = `lane/${slug}`;
 
@@ -352,7 +370,8 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
             return { content: [{ type: "text", text: msg }], details: undefined, isError: true };
           }
 
-          const resolved = await resolveModel(python, gsdBinDir);
+          const { model: resolved, warning: modelWarning } = await resolveModel(python, gsdBinDir);
+          if (modelWarning) warnings.push(modelWarning);
 
           const lanesDir = join(repo, ".planning", "impl-lanes");
           await mkdir(lanesDir, { recursive: true });
@@ -473,6 +492,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
                 resolved ? `Model: ${resolved.model} (${resolved.effort})` : "",
                 params.skip_review ? "Review: skipped" : "Review: enabled",
                 `Log: ${logPath}`,
+                warnings.length ? `Warnings:\n${warnings.map((w) => `- ${w}`).join("\n")}` : "",
                 "",
                 "The lane is running autonomously. Use CheckLaneStatus to check progress.",
               ].filter(Boolean).join("\n"),
