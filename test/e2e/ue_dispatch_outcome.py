@@ -77,6 +77,15 @@ def dispatch_refs(events):
     return refs
 
 
+def _waiting(ref):
+    return bool(ref["log_path"]) and ref["result"] is None and ref["error"] is None
+
+
+def pending_dispatches(steps):
+    """How many dispatches in {step_id: [ref, ...]} still wait on their log."""
+    return sum(1 for refs in steps.values() for ref in refs if _waiting(ref))
+
+
 def _read(path):
     """(text, mtime) of the log; (None, None) while it does not exist yet. Other I/O errors raise."""
     try:
@@ -99,35 +108,34 @@ def resolve_outcomes(steps, timeout_s=900, poll_s=2.0):
     (inline results never queued, so they take no part in order checks).
     """
     outcomes = {step: [dict(ref, finished_at=None) for ref in refs] for step, refs in steps.items()}
-    pending = [o for refs in outcomes.values() for o in refs
-               if o["log_path"] and o["result"] is None and o["error"] is None]
+    pending = {(step, i): o for step, refs in outcomes.items() for i, o in enumerate(refs) if _waiting(o)}
     last_text, read_errors = {}, {}
     deadline = time.monotonic() + timeout_s
     while pending:
-        for o in list(pending):
+        for key, o in list(pending.items()):
             try:
                 text, mtime = _read(o["log_path"])
             except OSError as e:
                 # The dispatcher may hold the log open mid-write; only a persistent error is final.
-                errors = read_errors.setdefault(id(o), [])
+                errors = read_errors.setdefault(key, [])
                 errors.append(e)
                 if len(errors) >= MAX_CONSECUTIVE_READ_ERRORS:
                     o["error"] = f"READ_ERROR: {o['log_path']}: {e}"
-                    pending.remove(o)
+                    del pending[key]
                 continue
-            read_errors.pop(id(o), None)
-            last_text[id(o)] = text
+            read_errors.pop(key, None)
+            last_text[key] = text
             result = parse_final_result(text) if text is not None else None
             if result is not None:
                 o["result"], o["finished_at"] = result, mtime
-                pending.remove(o)
+                del pending[key]
         if not pending or time.monotonic() >= deadline:
             break
         time.sleep(poll_s)
-    for o in pending:
-        text = last_text.get(id(o))
-        if read_errors.get(id(o)):
-            o["error"] = f"READ_ERROR: {o['log_path']}: {read_errors[id(o)][-1]}"
+    for key, o in pending.items():
+        text = last_text.get(key)
+        if read_errors.get(key):
+            o["error"] = f"READ_ERROR: {o['log_path']}: {read_errors[key][-1]}"
         elif text is None:
             o["error"] = f"{FINAL_TIMEOUT_ERROR} (log file never appeared: {o['log_path']})"
         else:

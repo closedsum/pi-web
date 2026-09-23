@@ -272,8 +272,12 @@ VERBOSE_SSE = os.environ.get("PI_WEB_VERBOSE_SSE", "0") == "1"
 def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, stop_event=None):
     """Read SSE events via raw socket, stripping chunked transfer encoding.
 
-    on_connected, if given, is called once the response headers arrive, i.e.
-    the event stream is subscribed and a prompt sent now will not be missed.
+    on_connected, if given, is called once, on the server's first
+    {"type": "connected"} event: a prompt sent after it will not be missed.
+    Headers are not enough: the events route (app/api/agent/[id]/events)
+    returns them at once, but createAgentEventStream (lib/agent-event-stream.ts)
+    emits "connected" only after session.onEvent is attached.
+    A non-200 response ends the read with [{"type": "sse_http_error", "status": N}].
     stop_event, if given, ends the read early (checked at least every 3s).
     """
     import socket as _socket
@@ -298,7 +302,7 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, sto
             print(f"    [SSE] connected to {host}:{port}", flush=True)
 
         all_bytes = b""
-        header_done = False
+        header_done = connected = False
         while time.monotonic() < deadline and not (stop_event and stop_event.is_set()):
             try:
                 chunk = sock.recv(8192)
@@ -310,10 +314,13 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, sto
 
             if not header_done:
                 if b"\r\n\r\n" in all_bytes:
-                    _, all_bytes = all_bytes.split(b"\r\n\r\n", 1)
+                    head, all_bytes = all_bytes.split(b"\r\n\r\n", 1)
+                    status_parts = head.split(b"\r\n", 1)[0].split()
+                    status = int(status_parts[1]) if len(status_parts) > 1 and status_parts[1].isdigit() else 0
+                    if status != 200:
+                        sock.close()
+                        return [{"type": "sse_http_error", "status": status}]
                     header_done = True
-                    if on_connected:
-                        on_connected()
                     if VERBOSE_SSE:
                         print(f"    [SSE] headers done, body starts", flush=True)
                 continue
@@ -332,6 +339,9 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, sto
                     try:
                         event = json.loads(stripped[6:])
                         events.append(event)
+                        if on_connected and not connected and event.get("type") == "connected":
+                            connected = True
+                            on_connected()
                         if VERBOSE_SSE:
                             print(f"    [SSE] event: {event.get('type')}", flush=True)
                         if is_turn_complete(event):

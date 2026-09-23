@@ -19,10 +19,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 orch = import_module("orchestrator-e2e")
 from ue_dispatch_outcome import (count_violations, dispatch_refs, order_violations, outcome_violations,
-                                 parse_editor_rows, resolve_outcomes, stop_owned_editors)
+                                 parse_editor_rows, pending_dispatches, resolve_outcomes,
+                                 stop_owned_editors)
 
 PI_WEB_URL = os.environ.get("PI_WEB_URL", "http://127.0.0.1:30141")
 TEST_CWD = os.environ.get("PI_WEB_TEST_CWD", r"D:\Trees\CropoutSampleProject")
+CONNECT_TIMEOUT_S = 60  # SSE subscribe budget per step (session cold start included)
 sys.stdout.reconfigure(line_buffering=True)
 
 STEPS = [
@@ -85,8 +87,17 @@ def run_step(session_id, step, turn_timeout):
 
     reader = threading.Thread(target=sse_reader, daemon=True)
     reader.start()
-    if not subscribed.wait(timeout=10):
-        return abort("SSE_NOT_CONNECTED: event stream did not subscribe within 10s")
+    # "connected" arrives only after the server has started the session, which can take far
+    # longer than the TCP/header handshake on a cold start.
+    connect_deadline = time.monotonic() + min(CONNECT_TIMEOUT_S, turn_timeout)
+    while not subscribed.wait(timeout=0.2):
+        if not reader.is_alive():
+            http = next((e for e in collected_events if e.get("type") == "sse_http_error"), None)
+            reason = f" (HTTP {http['status']})" if http else ""
+            return abort(f"SSE_NOT_CONNECTED: event stream ended before subscribing{reason}")
+        if time.monotonic() >= connect_deadline:
+            return abort(f"SSE_NOT_CONNECTED: event stream did not subscribe within "
+                         f"{min(CONNECT_TIMEOUT_S, turn_timeout)}s")
 
     try:
         orch.send_prompt(session_id, step["prompt"])
@@ -96,11 +107,12 @@ def run_step(session_id, step, turn_timeout):
     # read_sse_events returns at the turn's completion event or at turn_timeout.
     reader.join(timeout=turn_timeout + 10)
     stop.set()
+    events = list(collected_events)  # one snapshot, in case the reader outlived its join
     violations = []
-    if not any(orch.is_turn_complete(e) for e in collected_events):
+    if not any(orch.is_turn_complete(e) for e in events):
         violations.append(f"TURN_TIMEOUT: turn did not complete within {turn_timeout}s")
-    chain = orch.extract_chain(list(collected_events))
-    refs = dispatch_refs(collected_events)
+    chain = orch.extract_chain(events)
+    refs = dispatch_refs(events)
 
     has_text = any(e["type"] == "text" for e in chain)
     tool_calls = [e for e in chain if e["type"] == "tool_call"]
@@ -175,8 +187,8 @@ def main():
 
         # The turns only prove the model dispatched; the UE outcome lands in each
         # dispatch log once the queued work actually runs.
-        pending = sum(1 for refs in step_refs.values() for r in refs if r["log_path"])
-        print(f"Waiting up to {args.dispatch_timeout}s for {pending} queued dispatch(es) to finish...")
+        print(f"Waiting up to {args.dispatch_timeout}s for {pending_dispatches(step_refs)} "
+              "queued dispatch(es) to finish...")
         outcomes = resolve_outcomes(step_refs, timeout_s=args.dispatch_timeout)
         out_of_order = order_violations([s["id"] for s in STEPS], outcomes)
         expect = {s["id"]: s["expect_tool"] for s in STEPS}

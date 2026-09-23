@@ -16,6 +16,7 @@ from ue_dispatch_outcome import (  # noqa: E402
     outcome_violations,
     parse_editor_rows,
     parse_final_result,
+    pending_dispatches,
     resolve_outcomes,
     select_owned_editors,
     stop_owned_editors,
@@ -177,6 +178,13 @@ class ViolationsTest(unittest.TestCase):
         outcomes = {"a": [{"finished_at": 10.0}], "b": [{"finished_at": 5.0}, {"finished_at": 12.0}, {"finished_at": None}]}
         self.assertEqual(order_violations(["a", "b"], outcomes),
                          {"b": ["OUT_OF_ORDER: finished before earlier step 'a'"]})
+
+    def test_pending_counts_only_refs_waiting_on_a_log(self):
+        steps = {"a": [{"log_path": "a.log", "result": None, "error": None},
+                       {"log_path": "b.log", "result": FINAL_OK, "error": None}],
+                 "b": [{"log_path": None, "result": FINAL_OK, "error": None},
+                       {"log_path": "c.log", "result": None, "error": "boom"}]}
+        self.assertEqual(pending_dispatches(steps), 1)
 
     def test_count_violations_require_exactly_one_outcome(self):
         self.assertEqual(count_violations([]), ["NO_OUTCOME: no ue_dispatch result to judge"])
