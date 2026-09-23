@@ -1,4 +1,5 @@
 """Unit tests for cropout-ue-chain run_step turn handling (run: npm run test:py)."""
+import json
 import os
 import sys
 import threading
@@ -13,6 +14,8 @@ STEP = {"id": "open-map", "prompt": "Open Cropout_Map", "expect_tool": "ue_dispa
 TEXT = {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Dispatched."}]}}
 DISPATCH = {"type": "tool_execution_start", "toolName": "ue_dispatch"}
 DONE = {"type": "agent_end"}
+# lib/agent-event-stream.ts emits this, then closes the stream, when the session fails to start.
+STARTUP_ERROR = {"type": "startup_error", "errorMessage": "Failed to start agent: broken config"}
 
 
 def fake_reader(events):
@@ -69,9 +72,41 @@ class RunStepTest(unittest.TestCase):
         self.assertEqual(stopped, [True])
 
 
-def sse_chunk(event_type):
+class StartupErrorTest(unittest.TestCase):
+    def test_startup_error_is_a_terminal_event(self):
+        self.assertTrue(chain.orch.is_turn_complete(STARTUP_ERROR))
+
+    def test_startup_error_before_connect_reports_the_server_message(self):
+        # The server fails the session before it sends "connected".
+        def failing_reader(_session_id, timeout_s, on_connected=None, stop_event=None):
+            return [dict(STARTUP_ERROR)]
+
+        with mock.patch.object(chain.orch, "read_sse_events", side_effect=failing_reader), \
+             mock.patch.object(chain.orch, "send_prompt") as send:
+            violations, _, _ = chain.run_step("s1", STEP, turn_timeout=90)
+        send.assert_not_called()
+        self.assertEqual(violations, ["STARTUP_ERROR: Failed to start agent: broken config"])
+
+    def test_startup_error_after_connect_is_not_a_turn_timeout(self):
+        with mock.patch.object(chain.orch, "read_sse_events", side_effect=fake_reader([STARTUP_ERROR])), \
+             mock.patch.object(chain.orch, "send_prompt"):
+            violations, _, _ = chain.run_step("s1", STEP, turn_timeout=1)
+        self.assertIn("STARTUP_ERROR: Failed to start agent: broken config", violations)
+        self.assertFalse([v for v in violations if v.startswith("TURN_TIMEOUT")], violations)
+
+    def test_run_scenario_reports_startup_error(self):
+        scenario = {"id": "startup", "input": "hi", "expect_text": True, "expect_text_first": False,
+                    "expect_dispatch": False, "max_dispatches": 0}
+        with mock.patch.object(chain.orch, "read_sse_events", return_value=[dict(STARTUP_ERROR)]), \
+             mock.patch.object(chain.orch, "send_prompt"):
+            result = chain.orch.run_scenario("s1", scenario)
+        self.assertFalse(result["pass"])
+        self.assertIn("STARTUP_ERROR: Failed to start agent: broken config", result["violations"])
+
+
+def sse_chunk(event_type, **fields):
     """One chunked-transfer chunk holding one SSE event, as the Next.js route frames it."""
-    body = f'data: {{"type": "{event_type}"}}\n\n'.encode()
+    body = f"data: {json.dumps({'type': event_type, **fields})}\n\n".encode()
     return f"{len(body):x}\r\n".encode() + body + b"\r\n"
 
 
@@ -111,6 +146,11 @@ class ReadSseConnectedTest(unittest.TestCase):
                                              sse_chunk("agent_end")])
         self.assertEqual(fired, 1)
         self.assertEqual([e["type"] for e in events], ["connected", "connected", "agent_end"])
+
+    def test_startup_error_ends_the_read(self):
+        events, _ = self.read("200 OK", [sse_chunk("startup_error", errorMessage="boom"),
+                                         sse_chunk("message_update")])
+        self.assertEqual(events, [{"type": "startup_error", "errorMessage": "boom"}])
 
     def test_non_200_response_ends_the_read_with_its_status(self):
         events, fired = self.read("404 Not Found", [])

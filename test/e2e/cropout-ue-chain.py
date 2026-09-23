@@ -92,6 +92,9 @@ def run_step(session_id, step, turn_timeout):
     connect_deadline = time.monotonic() + min(CONNECT_TIMEOUT_S, turn_timeout)
     while not subscribed.wait(timeout=0.2):
         if not reader.is_alive():
+            startup = orch.startup_error_violation(collected_events)
+            if startup:
+                return abort(startup)
             http = next((e for e in collected_events if e.get("type") == "sse_http_error"), None)
             reason = f" (HTTP {http['status']})" if http else ""
             return abort(f"SSE_NOT_CONNECTED: event stream ended before subscribing{reason}")
@@ -108,7 +111,8 @@ def run_step(session_id, step, turn_timeout):
     reader.join(timeout=turn_timeout + 10)
     stop.set()
     events = list(collected_events)  # one snapshot, in case the reader outlived its join
-    violations = []
+    startup = orch.startup_error_violation(events)
+    violations = [startup] if startup else []
     if not any(orch.is_turn_complete(e) for e in events):
         violations.append(f"TURN_TIMEOUT: turn did not complete within {turn_timeout}s")
     chain = orch.extract_chain(events)

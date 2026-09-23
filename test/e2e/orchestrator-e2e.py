@@ -360,9 +360,23 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, sto
 
 def is_turn_complete(event):
     etype = event.get("type", "")
-    if etype in ("prompt_done", "agent_settled", "agent_end", "idle", "turn_complete", "error"):
+    # startup_error: the session failed to start and the server closes the stream after it.
+    if etype in ("prompt_done", "agent_settled", "agent_end", "idle", "turn_complete", "error",
+                 "startup_error"):
         return True
     return False
+
+
+def startup_error_violation(events):
+    """STARTUP_ERROR violation for the server's startup_error event, or None.
+
+    lib/agent-event-stream.ts sends {"type": "startup_error", "errorMessage": ...}
+    when the session fails to start, before any "connected" event.
+    """
+    event = next((e for e in events if e.get("type") == "startup_error"), None)
+    if event is None:
+        return None
+    return f"STARTUP_ERROR: {event.get('errorMessage') or 'session failed to start'}"
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +535,10 @@ def run_scenario(session_id, scenario, verbose=False):
 
     chain = extract_chain(events)
     passed, violations = evaluate_chain(chain, scenario)
+    startup = startup_error_violation(events)
+    if startup:
+        violations.insert(0, startup)
+        passed = False
 
     max_turn = scenario.get("max_turn_time_s")
     if max_turn and turn_time > max_turn:
