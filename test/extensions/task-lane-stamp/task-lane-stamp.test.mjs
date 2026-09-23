@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GPT } from "../_models.mjs";
 
 const MODEL_SHORT = {
   "claude-sonnet-5[1m]": "sonnet5",
   "claude-opus-5[1m]": "opus5",
   "claude-opus-4-6[1m]": "opus4.6",
-  "gpt-6-sol": "sol",
-  "gpt-5.6-terra": "terra",
-  "gpt-6-luna": "luna",
-  "gpt-6-astra": "astra",
+  [GPT.sol]: "sol",
+  [GPT.terra]: "terra",
+  [GPT.luna]: "luna",
+  [GPT.astra]: "astra",
   "qwen3.8-max": "qwen38",
   "qwen3.8-flash": "qwen38flash",
 };
@@ -69,7 +70,7 @@ test("stamps subject from lane manifest", () => {
     tool: "TaskCreate",
     input: { owner: "lane:fix-auth", subject: "Fix authentication" },
   };
-  const manifests = { "fix-auth": { provider: "codex", model: "gpt-6-sol", effort: "high" } };
+  const manifests = { "fix-auth": { provider: "codex", model: GPT.sol, effort: "high" } };
   const result = handleToolCall(event, manifests);
   assert.ok(result.allow);
   assert.equal(result.subject, "[codex sol high · lane fix-auth] Fix authentication");
@@ -141,7 +142,7 @@ test("ignores tasks without lane owner", () => {
 
 test("modelShort maps all known models", () => {
   assert.equal(modelShort("claude-sonnet-5[1m]"), "sonnet5");
-  assert.equal(modelShort("gpt-6-astra"), "astra");
+  for (const tier of ["sol", "terra", "luna", "astra"]) assert.equal(modelShort(GPT[tier]), tier);
   assert.equal(modelShort("qwen3.8-flash"), "qwen38flash");
   assert.equal(modelShort("unknown-model"), "unknown-model");
 });
@@ -151,7 +152,7 @@ test("works with TaskUpdate", () => {
     tool: "TaskUpdate",
     input: { owner: "lane:update-test", subject: "Update me" },
   };
-  const manifests = { "update-test": { provider: "codex", model: "gpt-5.6-terra", effort: "high" } };
+  const manifests = { "update-test": { provider: "codex", model: GPT.terra, effort: "high" } };
   const result = handleToolCall(event, manifests);
   assert.ok(result.allow);
   assert.match(result.subject, /codex terra high/);

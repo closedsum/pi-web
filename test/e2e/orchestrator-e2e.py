@@ -1,7 +1,7 @@
 """Live e2e tests for orchestrator behavior across models.
 
 Usage:
-    python test/e2e/orchestrator-e2e.py                              # defaults: openai-codex/gpt-6-sol, high effort
+    python test/e2e/orchestrator-e2e.py                              # defaults: test/test-model.json
     python test/e2e/orchestrator-e2e.py --provider openai-codex --model gpt-6-luna --effort medium
     python test/e2e/orchestrator-e2e.py --scenario implementation-request   # run one scenario
     python test/e2e/orchestrator-e2e.py --list                       # list available scenarios
@@ -21,6 +21,17 @@ sys.stdout.reconfigure(line_buffering=True)
 PI_WEB_URL = os.environ.get("PI_WEB_URL", "http://127.0.0.1:30141")
 TEST_CWD = os.environ.get("PI_WEB_TEST_CWD", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 TURN_TIMEOUT_S = int(os.environ.get("PI_WEB_TURN_TIMEOUT", "120"))
+
+
+def load_test_model():
+    """Provider/model/effort from test/test-model.json; PI_TEST_* env vars override."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test-model.json")
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    return {key: os.environ.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
+
+
+TEST_MODEL = load_test_model()
 
 # ---------------------------------------------------------------------------
 # Test scenarios — same 5 from the contract tests, plus expected verdicts
@@ -571,9 +582,9 @@ def run_all(provider, model_id, effort, scenario_filter=None, verbose=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Orchestrator e2e tests against live pi-web")
-    parser.add_argument("--provider", default="openai-codex", help="Model provider (default: openai-codex)")
-    parser.add_argument("--model", default="gpt-6-sol", help="Model ID (default: gpt-6-sol)")
-    parser.add_argument("--effort", default="high", help="Thinking level (default: high)")
+    parser.add_argument("--provider", default=TEST_MODEL["provider"], help="Model provider (default: test/test-model.json)")
+    parser.add_argument("--model", default=TEST_MODEL["model"], help="Model ID (default: test/test-model.json)")
+    parser.add_argument("--effort", default=TEST_MODEL["effort"], help="Thinking level (default: test/test-model.json)")
     parser.add_argument("--scenario", default=None, help="Run a single scenario by id")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show full event chains")
     parser.add_argument("--list", action="store_true", help="List available scenarios")

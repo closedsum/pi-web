@@ -1,0 +1,6 @@
+{
+  "_note": "Single source for the model live/extension tests run against. Edit here to swap; PI_TEST_PROVIDER / PI_TEST_MODEL / PI_TEST_EFFORT override per run. Read by test/extensions/_config.mjs and test/e2e/orchestrator-e2e.py.",
+  "provider": "openai-codex",
+  "model": "gpt-6-sol",
+  "effort": "high"
+}

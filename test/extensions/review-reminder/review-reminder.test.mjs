@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEST_CONFIG } from "../_config.mjs";
 
 function handleToolResult(event, state) {
   if (event.tool !== "Bash" && event.tool !== "PowerShell") return undefined;
@@ -41,13 +40,4 @@ test("does not trigger for non-commit output", () => {
   const state = {};
   const result = handleToolResult(event, state);
   assert.equal(result, undefined);
-});
-
-test("test config defaults to gpt-6-sol high", (t) => {
-  if (process.env.PI_TEST_MODEL || process.env.PI_TEST_EFFORT) {
-    t.skip("PI_TEST_MODEL/PI_TEST_EFFORT override set");
-    return;
-  }
-  assert.equal(TEST_CONFIG.model, "gpt-6-sol");
-  assert.equal(TEST_CONFIG.effort, "high");
 });

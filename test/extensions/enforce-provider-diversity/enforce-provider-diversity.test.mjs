@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GPT } from "../_models.mjs";
 
 const DEFAULT_PROVIDERS = ["codex", "claude", "qwen-cli"];
 
@@ -27,10 +28,10 @@ function taskFamily(task) {
 
 function providerProfile(provider, family) {
   if (provider === "codex") {
-    if (family === "review") return { model: "gpt-6-sol", effort: "xhigh" };
-    if (family === "planning") return { model: "gpt-6-astra", effort: "xhigh" };
-    if (family === "narrow") return { model: "gpt-6-luna", effort: "medium" };
-    return { model: "gpt-5.6-terra", effort: "high" };
+    if (family === "review") return { model: GPT.sol, effort: "xhigh" };
+    if (family === "planning") return { model: GPT.astra, effort: "xhigh" };
+    if (family === "narrow") return { model: GPT.luna, effort: "medium" };
+    return { model: GPT.terra, effort: "high" };
   }
   if (provider === "claude") {
     if (family === "research") return { model: "claude-opus-5[1m]", effort: "max" };
@@ -141,7 +142,7 @@ test("assigns model and effort from provider profile", () => {
     wave: [{ subject: "t1", task_type: "review" }],
   });
   const task = result.manifest.wave[0];
-  assert.equal(task.model, "gpt-6-sol");
+  assert.equal(task.model, GPT.sol);
   assert.equal(task.effort, "xhigh");
 });
 

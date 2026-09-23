@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
+
+// Single source: test/test-model.json. PI_TEST_* env vars override per run.
+const TEST_MODEL = JSON.parse(readFileSync(new URL("../test-model.json", import.meta.url), "utf8"));
+
 export const TEST_CONFIG = {
-  model: process.env.PI_TEST_MODEL || "gpt-6-sol",
-  effort: process.env.PI_TEST_EFFORT || "high",
-  provider: process.env.PI_TEST_PROVIDER || "openai",
+  model: process.env.PI_TEST_MODEL || TEST_MODEL.model,
+  effort: process.env.PI_TEST_EFFORT || TEST_MODEL.effort,
+  provider: process.env.PI_TEST_PROVIDER || TEST_MODEL.provider,
 };
 
 export function makeToolCallEvent(toolName, args = {}) {

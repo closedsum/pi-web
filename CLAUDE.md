@@ -33,6 +33,7 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
     } catch { return import("./<module>.ts"); }
   }
   ```
+- **Test model:** `test/test-model.json` is the single source for the provider/model/effort that extension and e2e tests run against (read by `test/extensions/_config.mjs` and `test/e2e/orchestrator-e2e.py`); override per run with `PI_TEST_PROVIDER` / `PI_TEST_MODEL` / `PI_TEST_EFFORT`. GPT tier IDs in tests come from `lib/model-display.json` via `test/extensions/_models.mjs`
 - **Client components:** Mark with `"use client"` directive
 - **Path aliases:** `@/` maps to project root (e.g., `@/lib/model-registry`)
 
