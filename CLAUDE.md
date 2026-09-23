@@ -20,7 +20,7 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npm run test:e2e` | End-to-end tests |
-| `npm run test:py` | Python unit tests for e2e helpers (`test/e2e/test_*.py`) |
+| `npm run test:py` | Python unit tests for e2e helpers (`test/e2e/test_*.py`) via `test/e2e/run_unittests.py`; any error/failure also writes a full traceback report under `<tempdir>/pi-web-test-py/` and prints its path |
 | `python test/e2e/cropout-ue-chain.py` | Live UE chain via pi-web; fails a step if its UE dispatch fails or finishes out of send order (logs checked via `test/e2e/ue_dispatch_outcome.py`) |
 
 ## Conventions
