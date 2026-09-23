@@ -1,6 +1,7 @@
 """Unit tests for cropout-ue-chain run_step turn handling (run: npm run test:py)."""
 import json
 import os
+import re
 import sys
 import threading
 import time as _real_time
@@ -409,25 +410,28 @@ class FakeSocket:
     """Socket stand-in for read_sse_events: recv() replays blocks; an exception block is raised.
 
     Once the blocks run out, recv() returns EOF, or with stall=True keeps timing out
-    like a server that holds the connection open, each timeout advancing clock by 1s.
+    like a server that holds the connection open, each timeout advancing clock by the
+    timeout the reader last set (settimeout). Everything sent is kept in .sent.
     """
 
     def __init__(self, blocks, stall=False, clock=None):
         self._blocks = list(blocks)
         self._stall = stall
         self._clock = clock
+        self._timeout = 1.0
+        self.sent = b""
 
-    def settimeout(self, _seconds):
-        pass
+    def settimeout(self, seconds):
+        self._timeout = seconds
 
-    def sendall(self, _data):
-        pass
+    def sendall(self, data):
+        self.sent += data
 
     def recv(self, _size):
         if not self._blocks:
             if self._stall:
                 if self._clock is not None:
-                    self._clock.now += 1.0
+                    self._clock.now += self._timeout
                 else:
                     threading.Event().wait(0.005)
                 raise TimeoutError("timed out")  # what socket.timeout is since Python 3.10
@@ -636,7 +640,17 @@ class ReadEndTest(unittest.TestCase):
     def test_header_byte_count_includes_skipped_interim_heads(self):
         hint = b"HTTP/1.1 103 Early Hints\r\n\r\n"
         [error] = read_blocks([hint, hint, b"HTTP/1.1 200"], timeout_s=0.1, stall=True)
-        self.assertIn(f"({2 * len(hint) + 12} header bytes received)", error["error"])
+        counted = re.search(r"\((\d+) header bytes", error["error"])
+        self.assertIsNotNone(counted, error["error"])
+        self.assertEqual(int(counted.group(1)), 2 * len(hint) + len(b"HTTP/1.1 200"))
+
+    def test_request_asks_for_an_identity_encoded_body(self):
+        # The reader rejects a compressed body, so it asks the server not to send one.
+        sock = FakeSocket([CHUNKED_HEAD + sse_chunk("connected") + b"0\r\n\r\n"], clock=FakeClock())
+        with mock.patch("socket.create_connection", return_value=sock), \
+             mock.patch.object(chain.orch, "time", sock._clock):
+            chain.orch.read_sse_events("s1", timeout_s=5)
+        self.assertIn(b"\r\nAccept-Encoding: identity\r\n", sock.sent)
 
     def test_event_built_from_many_short_lines_is_bounded(self):
         with mock.patch.object(chain.orch, "MAX_SSE_LINE_BYTES", 64):

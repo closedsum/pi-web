@@ -524,21 +524,25 @@ def _status_code(head):
     return int(match.group(1)) if match else None
 
 
+def _shown(values):
+    """Header values for a rejection message."""
+    return b", ".join(values).decode(errors="replace") or "none"
+
+
 def _head_rejection(head):
     """Why a 200 head can't carry an event stream this reader decodes, or None when it can."""
     media = _header_values(head, b"content-type")
     if len(media) != 1 or media[0].split(b";")[0].strip().lower() != b"text/event-stream":
-        shown = b", ".join(media).decode(errors="replace") or "none"
-        return f"Content-Type is not text/event-stream ({shown})"
+        return f"Content-Type is not text/event-stream ({_shown(media)})"
     codings = _transfer_codings(head)
     if codings not in ([], [b"chunked"]):  # only chunk framing is decoded here
-        return f"unsupported transfer coding ({b', '.join(codings).decode(errors='replace')})"
+        return f"unsupported transfer coding ({_shown(codings)})"
     if _header_values(head, b"content-length"):  # the body is chunked or ends at close
         return "Content-Length framing is not read; the stream must be chunked or close-delimited"
     encodings = [e.strip().lower() for v in _header_values(head, b"content-encoding")
                  for e in v.split(b",") if e.strip()]
     if encodings not in ([], [b"identity"]):
-        return f"unsupported Content-Encoding ({b', '.join(encodings).decode(errors='replace')})"
+        return f"unsupported Content-Encoding ({_shown(encodings)})"
     return None
 
 
@@ -588,7 +592,8 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, sto
         req_bytes = (
             f"GET /api/agent/{session_id}/events HTTP/1.1\r\n"
             f"Host: {host}:{port}\r\n"
-            f"Accept: text/event-stream\r\n\r\n"
+            f"Accept: text/event-stream\r\n"
+            f"Accept-Encoding: identity\r\n\r\n"  # a compressed body is rejected (_head_rejection)
         ).encode()
         sock.sendall(req_bytes)
         if VERBOSE_SSE:
