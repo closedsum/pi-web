@@ -79,11 +79,14 @@ def run_step(session_id, step, turn_timeout):
         collected_events.extend(orch.read_sse_events(
             session_id, timeout_s=turn_timeout, on_connected=subscribed.set, stop_event=stop))
 
-    def abort(violation):
-        # Stop this step's subscription so it cannot overlap the next step's.
+    V, violation = orch.V, orch.violation
+
+    def abort(abort_violation):
+        # Stop this step's subscription so it cannot overlap the next step's, then judge
+        # what the reader saw: it hands its events over only when it returns.
         stop.set()
         reader.join(timeout=10)
-        return [violation], [], []
+        return orch.judge_abort(orch.snapshot_events(collected_events), abort_violation), [], []
 
     reader = threading.Thread(target=sse_reader, daemon=True)
     reader.start()
@@ -92,29 +95,22 @@ def run_step(session_id, step, turn_timeout):
     connect_deadline = time.monotonic() + min(CONNECT_TIMEOUT_S, turn_timeout)
     while not subscribed.wait(timeout=0.2):
         if not reader.is_alive():
-            startup = orch.startup_error_violation(collected_events)
-            if startup:
-                return abort(startup)
             http = next((e for e in collected_events if e.get("type") == "sse_http_error"), None)
             reason = f" (HTTP {http['status']})" if http else ""
-            return abort(f"SSE_NOT_CONNECTED: event stream ended before subscribing{reason}")
+            return abort(violation(V.SSE_NOT_CONNECTED, f"event stream ended before subscribing{reason}"))
         if time.monotonic() >= connect_deadline:
-            return abort(f"SSE_NOT_CONNECTED: event stream did not subscribe within "
-                         f"{min(CONNECT_TIMEOUT_S, turn_timeout)}s")
+            return abort(violation(V.SSE_NOT_CONNECTED, f"event stream did not subscribe within "
+                                                        f"{min(CONNECT_TIMEOUT_S, turn_timeout)}s"))
 
     try:
         orch.send_prompt(session_id, step["prompt"])
     except Exception as e:
-        return abort(f"SEND_FAILED: {e}")
+        return abort(violation(V.SEND_FAILED, e))
 
     # read_sse_events returns at the turn's completion event or at turn_timeout.
     reader.join(timeout=turn_timeout + 10)
     stop.set()
-    events = list(collected_events)  # one snapshot, in case the reader outlived its join
-    startup = orch.startup_error_violation(events)
-    violations = [startup] if startup else []
-    if not any(orch.is_turn_complete(e) for e in events):
-        violations.append(f"TURN_TIMEOUT: turn did not complete within {turn_timeout}s")
+    events = orch.snapshot_events(collected_events)  # the reader may outlive its join
     chain = orch.extract_chain(events)
     refs = dispatch_refs(events)
 
@@ -123,17 +119,20 @@ def run_step(session_id, step, turn_timeout):
     lane_dispatches = [e for e in tool_calls if e.get("name") == "DispatchLane"]
     ue_dispatches = [e for e in tool_calls if e.get("name") == "ue_dispatch"]
 
+    checks = []
     if not has_text:
-        violations.append("NO_TEXT: model returned no text")
+        checks.append(violation(V.NO_TEXT, "model returned no text"))
 
     if step["expect_tool"] == "ue_dispatch" and not ue_dispatches:
-        violations.append("NO_DISPATCH: expected ue_dispatch but got none")
+        checks.append(violation(V.NO_DISPATCH, "expected ue_dispatch but got none"))
 
     if lane_dispatches:
-        violations.append(f"WRONG_TOOL: {len(lane_dispatches)} DispatchLane call(s) for a UE operation")
+        checks.append(violation(V.WRONG_TOOL, f"{len(lane_dispatches)} DispatchLane call(s) for a UE operation"))
 
-    if not collected_events:
-        violations.append("NO_EVENTS: SSE stream returned nothing (timeout?)")
+    # sse_stream_ended is the reader's note on how the body ended, not an event the server sent.
+    if not [e for e in events if e.get("type") != "sse_stream_ended"]:
+        checks.append(violation(V.NO_EVENTS, "SSE stream returned nothing (timeout?)"))
+    violations = orch.judge_turn(events, checks, turn_timeout)
 
     tool_names = [e.get("name", "") for e in tool_calls]
     print(f"    Tools: {', '.join(tool_names) if tool_names else '(none)'}")
