@@ -1,0 +1,281 @@
+diff --git a/get-shit-done/hooks/commit-gate.cjs b/get-shit-done/hooks/commit-gate.cjs
+index cd71978..21085e1 100644
+--- a/get-shit-done/hooks/commit-gate.cjs
++++ b/get-shit-done/hooks/commit-gate.cjs
+@@ -424,15 +424,20 @@ function _hookCallback(source, payload) {
+         }
+       }
+     }
+-    if (!match) {
++    // A per-SHA receipt vouches for a commit that already exists, so it is
++    // evidence only for a push, whose payload is exactly those commits. A
++    // commit's payload is the staged change, which no earlier receipt covers.
++    if (!match && candidate.git.subcommand !== "commit") {
+       try {
+-        const pushCommits = _git(["rev-list", `${candidate.upstream || "origin/master"}..HEAD`],
+-          candidate.gitCwd).trim().split("\n").filter(Boolean);
++        const pushCommits = _git(["rev-list", `${identity.baseSha}..${identity.headSha}`],
++          candidate.gitCwd).trim().split(/\r?\n/).filter(Boolean);
+         if (pushCommits.length > 0) {
+           const receiptResult = _checkPerShaReceipts(pushCommits, candidate.gitCwd);
+           if (receiptResult) { match = receiptResult; }
+         }
+-      } catch {}
++      } catch (error) {
++        inspectErrors.push(`per-SHA receipts: ${_safeError(error)}`);
++      }
+     }
+     if (!match) {
+       const where = (roots.length > 1 || reviewHistoryRoots.length)
+diff --git a/get-shit-done/hooks/lib/commit-gate-evidence.cjs b/get-shit-done/hooks/lib/commit-gate-evidence.cjs
+index 72de5d5..1a2f8c1 100644
+--- a/get-shit-done/hooks/lib/commit-gate-evidence.cjs
++++ b/get-shit-done/hooks/lib/commit-gate-evidence.cjs
+@@ -477,6 +477,9 @@ function createCommitGateEvidence({ _git, _gitRaw, _patchSha256, _indexAndObject
+       return {
+         status: "mismatch",
+         path: evidencePath,
++        // Why this evidence could not stand in as a fix round; the deny names
++        // it beside the skipped artifact (02258b4 no longer blames it).
++        fixRoundDetail: fixRound.detail,
+         reason: `review evidence mismatch: ${evidencePath} was bound to ` +
+           `${mismatches.map((record) => record.description).join("; ")}; ` +
+           `current change is ${_describeCurrentIdentity(currentIdentity)}; ${fixRound.detail}`,
+diff --git a/get-shit-done/hooks/lib/commit-gate-scan.cjs b/get-shit-done/hooks/lib/commit-gate-scan.cjs
+index bb5c150..b72d55e 100644
+--- a/get-shit-done/hooks/lib/commit-gate-scan.cjs
++++ b/get-shit-done/hooks/lib/commit-gate-scan.cjs
+@@ -101,11 +101,20 @@ function createCommitGateScan({ _git, _repoRoot, _readJsonEvidence, _inspectFlat
+       .map((item) => item.path))];
+     // Manifests bound to another change are skipped rather than reported as the
+     // deny reason (02258b4), but still named so the deny explains what it saw.
++    // A rejected fix round keeps its reason, so the deny still explains why
++    // the closest review evidence could not be reused.
++    const fixRoundDetail = new Map();
++    for (const item of skipped) {
++      if (item.status === "mismatch" && item.fixRoundDetail && !fixRoundDetail.has(item.path)) {
++        fixRoundDetail.set(item.path, item.fixRoundDetail);
++      }
++    }
+     const otherChange = [...new Set(skipped.filter((item) => item.status === "mismatch")
+       .map((item) => item.path))];
+     const parts = [];
+     if (otherChange.length) {
+-      const names = otherChange.slice(0, 3).map((item) => path.basename(item)).join(", ");
++      const names = otherChange.slice(0, 3).map((item) => path.basename(item) +
++        (fixRoundDetail.has(item) ? ` (fix round: ${fixRoundDetail.get(item)})` : "")).join(", ");
+       parts.push(`${otherChange.length} review ${otherChange.length === 1 ? "artifact" : "artifacts"} ` +
+         `bound to a different change (${names}${otherChange.length > 3 ? ", ..." : ""})`);
+     }
+@@ -184,9 +193,14 @@ function createCommitGateScan({ _git, _repoRoot, _readJsonEvidence, _inspectFlat
+     return null;
+   }
+ 
+-  function _stagedDiffPaths(gitCwd) {
+-    const output = _git(["diff", "--cached", "--no-renames", "--name-only"], gitCwd);
+-    const paths = output ? output.split(/\r?\n/).filter(Boolean).map(_normalizedReviewPath) : [];
++  // The gated payload's own paths, from the identity the gate already measured:
++  // the prospective index of a compound add+commit, a pathspec commit's paths,
++  // or a push's range (with the .planning excludes). The real index would see
++  // nothing for a compound commit and the wrong files for a push.
++  function _payloadPaths(currentIdentity) {
++    const changed = currentIdentity && currentIdentity.changedBlobs;
++    if (!(changed instanceof Map)) return null;
++    const paths = [...changed.keys()].map(_normalizedReviewPath);
+     return paths.some((item) => item === null) ? null : new Set(paths);
+   }
+ 
+@@ -218,7 +232,7 @@ function createCommitGateScan({ _git, _repoRoot, _readJsonEvidence, _inspectFlat
+   }
+ 
+   function _searchShaFallback(evidenceRoot, directory, currentIdentity, gitCwd, strict) {
+-    const stagedPaths = _stagedDiffPaths(gitCwd);
++    const stagedPaths = _payloadPaths(currentIdentity);
+     if (stagedPaths === null || stagedPaths.size === 0) return null;
+     const now = Date.now();
+     for (const manifestPath of _allManifestPaths(directory)) {
+@@ -434,7 +448,7 @@ function createCommitGateScan({ _git, _repoRoot, _readJsonEvidence, _inspectFlat
+   return {
+     _evidenceRoot, _normalizeRoot, _evidenceRoots, _reviewHistoryRoots, _isTracked,
+     _historicalEvidenceNames, _skippedEvidenceText, _allManifestPaths, _searchManifestsBySha,
+-    _normalizedReviewPath, _reviewedManifestPaths, _stagedDiffPaths, _shaFallbackMatch,
++    _normalizedReviewPath, _reviewedManifestPaths, _payloadPaths, _shaFallbackMatch,
+     _searchShaFallback, _inspectRecentReview, _inspectReviewHistory, _hasRecentReview, _manifestQuorumMet,
+     _checkPerShaReceipts,
+   };
+diff --git a/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs b/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
+index 55f833b..4db5a19 100644
+--- a/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
++++ b/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
+@@ -54,6 +54,31 @@ test('fallback below the strict eighty-percent overlap threshold is rejected', t
+     /No recent cross-review found in \.planning\/research\//);
+ }, line => t.diagnostic(line)));
+ 
++// The fallback compares reviewed paths with the gated payload's own paths:
++// the prospective index of a compound add+commit, and the pushed range of a
++// push. Reading the real index instead sees nothing (compound) or the wrong
++// files (push).
++test('fallback measures the paths a compound add+commit stages', t => runCase(t.name, () => {
++  const repo = initRepo('sha-fallback-compound');
++  const files = ['src/one.js', 'src/two.js'];
++  for (const file of files) writeLines(repo, file, OVER_THRESHOLD, file);
++  plantManifest(repo, { staged_patch_sha256: 'a'.repeat(64), reviewed_paths: files });
++  assertAllowed(runHook(`git add -- ${files.join(' ')} && git commit -m "compound fallback"`, {
++    cwd: repo, toolName: 'Bash',
++  }), 'the fallback must see the prospectively staged paths');
++}, line => t.diagnostic(line)));
++
++test('fallback measures the pushed range, not the index', t => runCase(t.name, () => {
++  const { initRepoWithRemote, commitLines } = require('../../tests/commit-gate/helpers.cjs');
++  const repo = initRepoWithRemote('sha-fallback-push');
++  commitLines(repo, 'src/pushed.js', OVER_THRESHOLD, 'pushed change');
++  writeLines(repo, 'src/unrelated.js', 5, 'staged but not pushed');
++  git(repo, ['add', '--', 'src/unrelated.js']);
++  plantManifest(repo, { staged_patch_sha256: 'a'.repeat(64), reviewed_paths: ['src/pushed.js'] });
++  assertAllowed(runHook('git push', { cwd: repo }),
++    'the fallback must compare the pushed commits, not unrelated staged files');
++}, line => t.diagnostic(line)));
++
+ test('no manifest is rejected', t => runCase(t.name, () => {
+   const repo = initRepo('sha-fallback-none');
+   stageLargeFiles(repo, ['src/none.js']);
+diff --git a/get-shit-done/tests/commit-gate/helpers.cjs b/get-shit-done/tests/commit-gate/helpers.cjs
+index ada3496..1fa1b2d 100644
+--- a/get-shit-done/tests/commit-gate/helpers.cjs
++++ b/get-shit-done/tests/commit-gate/helpers.cjs
+@@ -96,6 +96,14 @@ function commitLines(repo, relativePath, count, message = 'unreviewed code') {
+ function hookEnv(overrides = {}) {
+   return hermeticHookEnv(tmpDir, overrides);
+ }
++const STATE_HOME = hookEnv().GSD_STATE_HOME;
++
++// A per-SHA review receipt, as the review tooling records one after a commit.
++function plantReceipt(sha) {
++  const dir = path.join(STATE_HOME, 'review-receipts');
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(path.join(dir, `${sha}.json`), JSON.stringify({ sha }));
++}
+ 
+ // Run fn with the hermetic hook env applied to the real process.env, for a
+ // hook evaluated in-process via vm: the hook's own libraries are loaded in the
+@@ -266,7 +274,7 @@ module.exports = {
+   HOOK_PATH, tmpDir, _patchSha256,
+   git, writeLines, initRepo, initRepoWithRemote,
+   initLaneWorktree, stageLargeLaneChange, writeLaneManifest, commitLines,
+-  runHook, hookEnv, withHookEnv, context, denyReason,
++  runHook, hookEnv, withHookEnv, STATE_HOME, plantReceipt, context, denyReason,
+   FAIL_CLOSED_REASONS, NO_REVIEW_REASON, noReviewReason,
+   THRESHOLD, OVER_THRESHOLD, HALF,
+   rejectProbeTimeout, assertAllowed, assertBlocked, runCase,
+diff --git a/get-shit-done/tests/commit-gate/test_compound.cjs b/get-shit-done/tests/commit-gate/test_compound.cjs
+index fce9c48..a449a00 100644
+--- a/get-shit-done/tests/commit-gate/test_compound.cjs
++++ b/get-shit-done/tests/commit-gate/test_compound.cjs
+@@ -148,7 +148,8 @@ test('round2: compound Git process budget (S5)', t => runCase(t.name, () => {
+     'process reductions must preserve the measured payload');
+   assert.strictEqual(calls.filter(({ args }) => args[0] === 'add').length, 2);
+   // Identity binding (8558e4f) + changed-blob identity (#16) + lane worktree
+-  // detection.
++  // detection. The SHA fallback reuses the identity's paths and per-SHA
++  // receipts are consulted only for pushes, so neither adds a process here.
+   assert.ok(calls.length <= 14, `expected at most 14 Git processes, got ${calls.length}`);
+   assert.strictEqual(require('./helpers.cjs').git(repo, ['diff', '--cached', '--name-only']), '');
+ }, line => t.diagnostic(line)));
+diff --git a/get-shit-done/tests/commit-gate/test_gating.cjs b/get-shit-done/tests/commit-gate/test_gating.cjs
+index 8114dcc..6633e30 100644
+--- a/get-shit-done/tests/commit-gate/test_gating.cjs
++++ b/get-shit-done/tests/commit-gate/test_gating.cjs
+@@ -85,6 +85,17 @@ test('review lookup uses git toplevel', t => runCase(t.name, () => {
+     'review lookup must use the repository root');
+ }, line => t.diagnostic(line)));
+ 
++test('receipts for earlier unpushed commits never admit a staged change', t => runCase(t.name, () => {
++  const { git, initRepoWithRemote, commitLines, plantReceipt } = require('./helpers.cjs');
++  const repo = initRepoWithRemote('receipt-bypass');
++  commitLines(repo, 'reviewed.js', OVER_THRESHOLD, 'reviewed earlier');
++  plantReceipt(git(repo, ['rev-parse', 'HEAD']).trim());
++  writeLines(repo, 'unreviewed.js', OVER_THRESHOLD, 'code');
++  git(repo, ['add', '--', 'unreviewed.js']);
++  assertBlocked(runHook('git commit -m "unreviewed change"', { cwd: repo }), NO_REVIEW_REASON,
++    'a receipt vouches for an existing commit, never for the staged change');
++}, line => t.diagnostic(line)));
++
+ test('rename cannot hide a generated artifact (7766fe8a73)', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('rename-hides-manifest');
+diff --git a/get-shit-done/tests/commit-gate/test_push.cjs b/get-shit-done/tests/commit-gate/test_push.cjs
+index 1c7a17c..eb3102d 100644
+--- a/get-shit-done/tests/commit-gate/test_push.cjs
++++ b/get-shit-done/tests/commit-gate/test_push.cjs
+@@ -3,7 +3,7 @@
+ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo, initRepoWithRemote, commitLines,
+-  runHook, assertBlocked, runCase,
++  runHook, assertAllowed, assertBlocked, runCase,
+   NO_REVIEW_REASON, OVER_THRESHOLD, cleanup, fs, path,
+ } = require('./helpers.cjs');
+ 
+@@ -29,6 +29,18 @@ test('every commit and push candidate is gated', t => runCase(t.name, () => {
+   }), NO_REVIEW_REASON, 'a later large push in the same command must be gated');
+ }, line => t.diagnostic(line)));
+ 
++test('receipts covering every pushed commit admit the push', t => runCase(t.name, () => {
++  const { git, plantReceipt } = require('./helpers.cjs');
++  const repo = initRepoWithRemote('receipted-push');
++  commitLines(repo, 'one.js', OVER_THRESHOLD, 'first');
++  commitLines(repo, 'two.js', OVER_THRESHOLD, 'second');
++  for (const sha of git(repo, ['rev-list', '@{upstream}..HEAD']).trim().split(/\r?\n/)) {
++    plantReceipt(sha);
++  }
++  const result = runHook('git push', { cwd: repo });
++  assertAllowed(result, 'per-SHA receipts for every pushed commit are review evidence');
++}, line => t.diagnostic(line)));
++
+ test('detached-HEAD push fails safe', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepoWithRemote('detached-push');
+diff --git a/get-shit-done/tests/test_commit_gate_fix_round.cjs b/get-shit-done/tests/test_commit_gate_fix_round.cjs
+index f598520..3800bfa 100644
+--- a/get-shit-done/tests/test_commit_gate_fix_round.cjs
++++ b/get-shit-done/tests/test_commit_gate_fix_round.cjs
+@@ -135,10 +135,14 @@ describe('commit-gate fix rounds', () => {
+ 
+     const result = runHook(repo, 'unreviewed extra change');
+ 
++    // 02258b4 skips evidence bound to another change instead of blaming it,
++    // but a rejected fix round must still say why it was rejected.
+     assert.strictEqual(result.permissionDecision, 'deny');
+-    assert.match(result.permissionDecisionReason, /review evidence mismatch/i);
+-    assert.match(result.permissionDecisionReason, /full re-review needed/i);
++    assert.match(result.permissionDecisionReason, /Review evidence: none found/);
++    assert.match(result.permissionDecisionReason,
++      /gsd-ar-manifest-cross-review-fix-non-finding\.json \(fix round: delta touches lines outside cited findings/);
+     assert.match(result.permissionDecisionReason, /src\/app\.js.*40/i);
++    assert.match(result.permissionDecisionReason, /full re-review needed/i);
+   });
+ 
+   it('rejects a fix round when the manifest artifacts lack finding locations', () => {
+@@ -150,7 +154,8 @@ describe('commit-gate fix rounds', () => {
+     const result = runHook(repo, 'fix without locations');
+ 
+     assert.strictEqual(result.permissionDecision, 'deny');
+-    assert.match(result.permissionDecisionReason, /review evidence mismatch/i);
+-    assert.match(result.permissionDecisionReason, /finding locations unavailable.*full re-review needed/i);
++    assert.match(result.permissionDecisionReason, /Review evidence: none found/);
++    assert.match(result.permissionDecisionReason,
++      /\(fix round: finding locations unavailable; full re-review needed\)/);
+   });
+ });
+diff --git a/get-shit-done/tests/test_commit_gate_push_range.cjs b/get-shit-done/tests/test_commit_gate_push_range.cjs
+index cda5730..bb9cb87 100644
+--- a/get-shit-done/tests/test_commit_gate_push_range.cjs
++++ b/get-shit-done/tests/test_commit_gate_push_range.cjs
+@@ -280,5 +280,7 @@ describe('commit-gate push fix-round', () => {
+     assert.match(reason, /Review evidence: none found/);
+     assert.match(reason,
+       /1 review artifact bound to a different change \(gsd-ar-manifest-cross-review-push-reject\.json/);
++    assert.match(reason, new RegExp(
++      `fix round: delta touches lines outside cited findings \\(.*src/app\\.js old ${outside}\\b`));
+   });
+ });

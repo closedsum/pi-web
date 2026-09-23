@@ -1,0 +1,2061 @@
+diff --git a/get-shit-done/bin/tests/test_commit_gate.cjs b/get-shit-done/bin/tests/test_commit_gate.cjs
+index 8250e15..5edf363 100644
+--- a/get-shit-done/bin/tests/test_commit_gate.cjs
++++ b/get-shit-done/bin/tests/test_commit_gate.cjs
+@@ -8,29 +8,19 @@ const os = require('os');
+ const { execFileSync } = require('child_process');
+ 
+ const HOOK_PATH = path.resolve(__dirname, '../../hooks/commit-gate.cjs');
++const { runHookProcess } = require('../../tests/lib/hook-spawn.cjs');
++const { OVER_THRESHOLD, GATE_SPAWN_WEIGHT } = require('../../tests/lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('../../tests/lib/hermetic-hook-env.cjs');
+ 
+ // --- Setup temp dirs ---
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-commit-gate-'));
+-const homeDir = path.join(tmpDir, 'home');
+-const gsdHome = path.join(tmpDir, 'gsd-home');
+-const stateHome = path.join(tmpDir, 'state-home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(gsdHome, 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
+-const HOOK_ENV = {
+-  USERPROFILE: homeDir,
+-  HOME: homeDir,
+-  GSD_HOME: gsdHome,
+-  GSD_STATE_HOME: stateHome,
+-  GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-};
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ function git(repo, args, options = {}) {
+   return execFileSync('git', args, {
+     cwd: repo,
+     encoding: options.encoding === null ? null : 'utf8',
+-    env: { ...process.env, ...HOOK_ENV },
++    env: HOOK_ENV,
+   });
+ }
+ 
+@@ -59,22 +49,18 @@ function runHook(command, opts = {}) {
+     tool_name: 'Bash',
+     tool_input: { command },
+   });
+-  try {
+-    const stdout = execFileSync('node', [HOOK_PATH], {
+-      input: payload,
+-      encoding: 'utf8',
+-      timeout: 10000,
+-      cwd: opts.cwd || process.cwd(),
+-      env: { ...process.env, ...HOOK_ENV, ...(opts.env || {}) },
+-    });
+-    if (!stdout.trim()) return null;
+-    return JSON.parse(stdout.trim());
+-  } catch (e) {
+-    if (e.stdout) {
+-      try { return JSON.parse(e.stdout.trim()); } catch {}
+-    }
+-    return null;
+-  }
++  // The shared runner applies the calibrated budget and tags a timeout for
++  // FLAKE-RERUN. The gate exits 0 whenever it decides (a deny is a printed
++  // decision), so any thrown error is a crash, signal or timeout: it fails
++  // the case, even if a decision was printed before it happened.
++  const stdout = runHookProcess([HOOK_PATH], {
++    input: payload,
++    encoding: 'utf8',
++    cwd: opts.cwd || process.cwd(),
++    env: { ...HOOK_ENV, ...(opts.env || {}) },
++  }, GATE_SPAWN_WEIGHT);
++  if (!stdout.trim()) return null;
++  return JSON.parse(stdout.trim());
+ }
+ 
+ const fakeRepoDir = path.join(tmpDir, 'fake-repo');
+@@ -116,7 +102,7 @@ function testSmallCommitAdvisory() {
+ // --- Test: large commit without review is blocked ---
+ function testLargeCommitNoReviewBlocked() {
+   // Create a large file and stage it
+-  const lines = Array(30).fill('line of code').join('\n');
++  const lines = Array.from({ length: OVER_THRESHOLD }, (_, i) => `line of code ${i}`).join('\n') + '\n';
+   fs.writeFileSync(path.join(fakeRepoDir, 'large.txt'), lines);
+   git(fakeRepoDir, ['add', '--', 'large.txt']);
+ 
+@@ -173,7 +159,7 @@ function testCrossRepoViaCdExtraction() {
+   git(otherRepoDir, ['commit', '--no-verify', '--quiet', '-m', 'seed']);
+ 
+   // Large file staged in other repo
+-  const lines = Array(30).fill('code').join('\n');
++  const lines = Array.from({ length: OVER_THRESHOLD }, (_, i) => `code ${i}`).join('\n') + '\n';
+   fs.writeFileSync(path.join(otherRepoDir, 'big.txt'), lines);
+   git(otherRepoDir, ['add', '--', 'big.txt']);
+   plantReview(otherRepoDir, 'cross-review-other');
+diff --git a/get-shit-done/config/defaults.json b/get-shit-done/config/defaults.json
+index 53ef633..6527853 100644
+--- a/get-shit-done/config/defaults.json
++++ b/get-shit-done/config/defaults.json
+@@ -21,6 +21,7 @@
+   "test_hooks": {
+     "spawn_floor_ms": 20000,
+     "spawn_factor": 40,
++    "spawn_git_factor": 10,
+     "spawn_ceiling_ms": 120000
+   },
+   "testing": {
+diff --git a/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs b/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
+index 1941688..55f833b 100644
+--- a/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
++++ b/get-shit-done/hooks/tests/test_commit_gate_sha_fallback.cjs
+@@ -11,12 +11,13 @@ const {
+   assertBlocked,
+   runCase,
+   cleanup,
++  OVER_THRESHOLD,
+   fs,
+   path,
+ } = require('../../tests/commit-gate/helpers.cjs');
+ 
+ function stageLargeFiles(repo, files) {
+-  for (const file of files) writeLines(repo, file, 210, file);
++  for (const file of files) writeLines(repo, file, OVER_THRESHOLD, file);
+   git(repo, ['add', '--', ...files]);
+ }
+ 
+diff --git a/get-shit-done/tests/commit-gate/gsd-fallback/test_gsd_fallback.cjs b/get-shit-done/tests/commit-gate/gsd-fallback/test_gsd_fallback.cjs
+deleted file mode 100644
+index 147cf69..0000000
+--- a/get-shit-done/tests/commit-gate/gsd-fallback/test_gsd_fallback.cjs
++++ /dev/null
+@@ -1,56 +0,0 @@
+-'use strict';
+-
+-const { test, after } = require('node:test');
+-const {
+-  git, writeLines, initRepo,
+-  runHook, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup, fs, path,
+-} = require('../helpers.cjs');
+-
+-test('GSD-only payload gets advisory fallback when quorum unmet', t => runCase(t.name, () => {
+-  const repo = initRepo('gsd-fallback-positive');
+-  writeLines(repo, 'get-shit-done/bin/tool.py', 30, 'tool code');
+-  git(repo, ['add', '--', 'get-shit-done/bin/tool.py']);
+-  const manifestDir = path.join(repo, '.planning', 'research', 'review-test');
+-  fs.mkdirSync(manifestDir, { recursive: true });
+-  const { _patchSha256 } = require('../helpers.cjs');
+-  const patchSha = _patchSha256(repo, ['--cached']);
+-  fs.writeFileSync(path.join(manifestDir, 'gsd-ar-manifest-test.json'),
+-    JSON.stringify({
+-      slug: 'test', round: 1,
+-      quorum: { met: false, selected: 3, reviewed: 1, min_reviewed: 3, min_fraction: 0.6 },
+-      reviewers: { a: { outcome: 'reviewed', findings: 0 } },
+-      binding: { patchSha256: patchSha },
+-    }));
+-  assertAllowed(runHook('git commit -m "gsd tool"', { cwd: repo }),
+-    'GSD-only payload with quorum-unmet manifest must get advisory fallback');
+-}, line => t.diagnostic(line)));
+-
+-test('non-GSD payload is blocked even with quorum problem', t => runCase(t.name, () => {
+-  const repo = initRepo('gsd-fallback-non-gsd');
+-  writeLines(repo, 'src/main.js', 30, 'app code');
+-  git(repo, ['add', '--', 'src/main.js']);
+-  assertBlocked(runHook('git commit -m "app code"', { cwd: repo }),
+-    NO_REVIEW_REASON,
+-    'non-GSD payload must never get advisory fallback');
+-}, line => t.diagnostic(line)));
+-
+-test('hook-source-only still gets self-exemption (not fallback)', t => runCase(t.name, () => {
+-  const repo = initRepo('gsd-fallback-hookonly');
+-  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', 30, 'hook code');
+-  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs']);
+-  assertAllowed(runHook('git commit -m "hook only"', { cwd: repo }),
+-    'hooks/-only payload must still get self-exemption before reaching fallback');
+-}, line => t.diagnostic(line)));
+-
+-test('mixed GSD + non-GSD payload is blocked even with quorum-unmet manifest', t => runCase(t.name, () => {
+-  const repo = initRepo('gsd-fallback-mixed');
+-  writeLines(repo, 'get-shit-done/bin/tool.py', 15, 'tool code');
+-  writeLines(repo, 'src/main.js', 15, 'app code');
+-  git(repo, ['add', '--', 'get-shit-done/bin/tool.py', 'src/main.js']);
+-  assertBlocked(runHook('git commit -m "mixed gsd and app"', { cwd: repo }),
+-    NO_REVIEW_REASON,
+-    'mixed GSD + non-GSD payload must never get advisory fallback');
+-}, line => t.diagnostic(line)));
+-
+-after(cleanup);
+diff --git a/get-shit-done/tests/commit-gate/helpers.cjs b/get-shit-done/tests/commit-gate/helpers.cjs
+index 2c79a42..ada3496 100644
+--- a/get-shit-done/tests/commit-gate/helpers.cjs
++++ b/get-shit-done/tests/commit-gate/helpers.cjs
+@@ -9,12 +9,22 @@ const { runHookProcess } = require('../lib/hook-spawn.cjs');
+ const vm = require('node:vm');
+ const { createRequire } = require('node:module');
+ 
+-const HOOK_PATH = path.resolve(__dirname, '../../hooks/commit-gate.cjs');
+-const { _patchSha256 } = require(HOOK_PATH);
++const {
++  COMMIT_GATE_PATH: HOOK_PATH, THRESHOLD, OVER_THRESHOLD, HALF, NO_REVIEW_REASON, noReviewReason,
++  GATE_SPAWN_WEIGHT,
++} = require('../lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('../lib/hermetic-hook-env.cjs');
++const { _patchSha256: hookPatchSha256 } = require(HOOK_PATH);
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-commit-gate-'));
+ 
++// Fixture git and in-process patch hashing run in the same hermetic env as
++// the hook, so both read the same (sandboxed) git config.
+ function git(repo, args) {
+-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
++  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', env: hookEnv() });
++}
++
++function _patchSha256(cwd, prefixArgs, pathspecs = []) {
++  return hookPatchSha256(cwd, prefixArgs, pathspecs, hookEnv());
+ }
+ 
+ function writeLines(repo, relativePath, count, prefix = 'line') {
+@@ -62,7 +72,7 @@ function initLaneWorktree(name, slug = name) {
+ }
+ 
+ function stageLargeLaneChange(worktree) {
+-  writeLines(worktree, 'lane.js', 30, 'lane code');
++  writeLines(worktree, 'lane.js', OVER_THRESHOLD, 'lane code');
+   git(worktree, ['add', '--', 'lane.js']);
+ }
+ 
+@@ -81,6 +91,50 @@ function commitLines(repo, relativePath, count, message = 'unreviewed code') {
+   git(repo, ['commit', '--no-verify', '--quiet', '-m', message]);
+ }
+ 
++// The environment every hook run sees: homes, review history and review
++// receipts all live under this suite's temp dir, never the developer's live ones.
++function hookEnv(overrides = {}) {
++  return hermeticHookEnv(tmpDir, overrides);
++}
++
++// Run fn with the hermetic hook env applied to the real process.env, for a
++// hook evaluated in-process via vm: the hook's own libraries are loaded in the
++// real context and read the real process.env, so a proxy can't reach them.
++// This mutates the real process.env for the duration of fn, so fn must be
++// synchronous: JavaScript then cannot interleave another test inside it, and
++// an async fn (which would run after the env is restored) fails loudly.
++function withHookEnv(fn, overrides = {}) {
++  const env = hookEnv(overrides);
++  const saved = {};
++  const set = (key, value) => {
++    if (!(key in saved)) {
++      saved[key] = Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined;
++    }
++    // Like a spawned child's env, an undefined value means "unset", never the
++    // string 'undefined'.
++    if (value === undefined) delete process.env[key];
++    else process.env[key] = value;
++  };
++  for (const key of Object.keys(process.env)) {
++    if (!(key in env)) set(key, undefined);
++  }
++  for (const [key, value] of Object.entries(env)) {
++    if (process.env[key] !== value) set(key, value);
++  }
++  try {
++    const result = fn();
++    if (result && typeof result.then === 'function') {
++      throw new Error('withHookEnv needs a synchronous fn: the env is restored before an async fn runs');
++    }
++    return result;
++  } finally {
++    for (const [key, value] of Object.entries(saved)) {
++      if (value === undefined) delete process.env[key];
++      else process.env[key] = value;
++    }
++  }
++}
++
+ function runHook(command, opts = {}) {
+   const payload = JSON.stringify({
+     tool_name: opts.toolName || 'PowerShell',
+@@ -91,8 +145,8 @@ function runHook(command, opts = {}) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: opts.cwd || process.cwd(),
+-    env: { ...process.env, GSD_REVIEW_HISTORY_PATHS: tmpDir, ...(opts.env || {}) },
+-  });
++    env: hookEnv(opts.env),
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()) : null;
+ }
+ 
+@@ -108,7 +162,6 @@ const FAIL_CLOSED_REASONS = [
+   'commit-gate could not measure the Git payload',
+   'commit-gate could not inspect review evidence',
+ ];
+-const NO_REVIEW_REASON = /\d+ lines changed \(threshold: 20\)\. No recent cross-review found in \.planning\/research\//;
+ 
+ function rejectProbeTimeout(ctx) {
+   const reason = ctx.permissionDecisionReason || '';
+@@ -164,34 +217,43 @@ function runCase(name, fn, diagnostic = line => console.log(line)) {
+   diagnostic(`FLAKE-RERUN-PASS ${name}`);
+ }
+ 
+-function probeFailureFixture(code = 'ETIMEDOUT', probe = 'diff') {
++// Evaluate the gate in-process for one payload, with its child_process
++// replaced by `execFileSync` and the hermetic env applied (the only way a vm
++// run of the hook is allowed; see withHookEnv). Returns the single decision.
++function runHookInVm({ source, cwd, execFileSync: exec, toolName = 'Bash', timeout }) {
+   const output = [];
+   const hookRequire = createRequire(HOOK_PATH);
+-  vm.runInNewContext(fs.readFileSync(HOOK_PATH, 'utf8'), {
++  withHookEnv(() => vm.runInNewContext(fs.readFileSync(HOOK_PATH, 'utf8'), {
+     require(name) {
+-      if (name === 'child_process') return {
+-        execFileSync(_executable, args) {
+-          if (args[0] === probe) {
+-            throw Object.assign(new Error(`spawnSync git ${code}`), { code });
+-          }
+-          assert.deepStrictEqual(Array.from(args), ['rev-parse', '--show-toplevel']);
+-          return tmpDir;
+-        },
+-      };
++      if (name === 'child_process') return { execFileSync: exec };
+       if (name === './lib/read-pretool-command.cjs') return {
+         readPreToolCommand(_name, callback) {
+-          callback('git commit -m fixture', { tool_name: 'Bash', cwd: tmpDir });
++          callback(source, { tool_name: toolName, cwd });
+         },
+       };
+       return hookRequire(name);
+     },
+     process,
+     console: { log(value) { output.push(JSON.parse(value)); } },
+-  }, { filename: HOOK_PATH });
++  }, { filename: HOOK_PATH, ...(timeout ? { timeout } : {}) }));
+   assert.strictEqual(output.length, 1);
+   return output[0];
+ }
+ 
++function probeFailureFixture(code = 'ETIMEDOUT', probe = 'diff') {
++  return runHookInVm({
++    source: 'git commit -m fixture',
++    cwd: tmpDir,
++    execFileSync(_executable, args) {
++      if (args[0] === probe) {
++        throw Object.assign(new Error(`spawnSync git ${code}`), { code });
++      }
++      assert.deepStrictEqual(Array.from(args), ['rev-parse', '--show-toplevel']);
++      return tmpDir;
++    },
++  });
++}
++
+ function denyReason(result) {
+   return context(result).permissionDecisionReason || '';
+ }
+@@ -204,9 +266,10 @@ module.exports = {
+   HOOK_PATH, tmpDir, _patchSha256,
+   git, writeLines, initRepo, initRepoWithRemote,
+   initLaneWorktree, stageLargeLaneChange, writeLaneManifest, commitLines,
+-  runHook, context, denyReason,
+-  FAIL_CLOSED_REASONS, NO_REVIEW_REASON,
++  runHook, hookEnv, withHookEnv, context, denyReason,
++  FAIL_CLOSED_REASONS, NO_REVIEW_REASON, noReviewReason,
++  THRESHOLD, OVER_THRESHOLD, HALF,
+   rejectProbeTimeout, assertAllowed, assertBlocked, runCase,
+-  probeFailureFixture, cleanup,
++  runHookInVm, probeFailureFixture, cleanup,
+   assert, fs, path, os, vm, createRequire, execFileSync,
+ };
+diff --git a/get-shit-done/tests/commit-gate/self-exemption/test_self_exemption.cjs b/get-shit-done/tests/commit-gate/self-exemption/test_self_exemption.cjs
+deleted file mode 100644
+index e84bd27..0000000
+--- a/get-shit-done/tests/commit-gate/self-exemption/test_self_exemption.cjs
++++ /dev/null
+@@ -1,65 +0,0 @@
+-'use strict';
+-
+-const { test, after } = require('node:test');
+-const {
+-  git, writeLines, initRepo,
+-  runHook, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup,
+-} = require('../helpers.cjs');
+-
+-test('hooks/-only commit bypasses gate', t => runCase(t.name, () => {
+-  const repo = initRepo('hooks-only');
+-  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', 30, 'hook code');
+-  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs']);
+-  assertAllowed(runHook('git commit -m "hooks only"', { cwd: repo }),
+-    'pure hooks/ commit must bypass cross-review gate (self-exemption)');
+-}, line => t.diagnostic(line)));
+-
+-test('tests/-only commit bypasses gate', t => runCase(t.name, () => {
+-  const repo = initRepo('tests-only');
+-  writeLines(repo, 'get-shit-done/tests/my-test.cjs', 30, 'test code');
+-  git(repo, ['add', '--', 'get-shit-done/tests/my-test.cjs']);
+-  assertAllowed(runHook('git commit -m "tests only"', { cwd: repo }),
+-    'pure tests/ commit must bypass cross-review gate (self-exemption)');
+-}, line => t.diagnostic(line)));
+-
+-test('hooks/ + tests/ combined commit bypasses gate', t => runCase(t.name, () => {
+-  const repo = initRepo('hooks-tests-combined');
+-  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', 20, 'hook code');
+-  writeLines(repo, 'get-shit-done/tests/my-test.cjs', 20, 'test code');
+-  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs', 'get-shit-done/tests/my-test.cjs']);
+-  assertAllowed(runHook('git commit -m "hooks and tests"', { cwd: repo }),
+-    'combined hooks/ + tests/ commit must bypass cross-review gate');
+-}, line => t.diagnostic(line)));
+-
+-test('hooks/ + tests/ + .md combined commit bypasses gate', t => runCase(t.name, () => {
+-  const repo = initRepo('hooks-tests-md');
+-  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', 15, 'hook code');
+-  writeLines(repo, 'get-shit-done/tests/my-test.cjs', 15, 'test code');
+-  writeLines(repo, 'README.md', 10, 'docs');
+-  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs', 'get-shit-done/tests/my-test.cjs', 'README.md']);
+-  assertAllowed(runHook('git commit -m "hooks tests and docs"', { cwd: repo }),
+-    'hooks/ + tests/ + .md commit must bypass gate');
+-}, line => t.diagnostic(line)));
+-
+-test('tests/ + code mixed commit still blocked', t => runCase(t.name, () => {
+-  const repo = initRepo('tests-code-mixed');
+-  writeLines(repo, 'get-shit-done/tests/my-test.cjs', 20, 'test code');
+-  writeLines(repo, 'src/main.js', 20, 'app code');
+-  git(repo, ['add', '--', 'get-shit-done/tests/my-test.cjs', 'src/main.js']);
+-  assertBlocked(runHook('git commit -m "mixed"', { cwd: repo }),
+-    NO_REVIEW_REASON,
+-    'tests/ + non-exempt code commit must still require cross-review');
+-}, line => t.diagnostic(line)));
+-
+-test('compound git-add && git-commit with tests/-only bypasses gate', t => runCase(t.name, () => {
+-  const repo = initRepo('compound-tests-only');
+-  writeLines(repo, 'get-shit-done/tests/my-test.cjs', 30, 'test code');
+-  assertAllowed(
+-    runHook('git add -- get-shit-done/tests/my-test.cjs && git commit -m "compound tests"', {
+-      cwd: repo, toolName: 'Bash',
+-    }),
+-    'compound add+commit of tests/-only files must bypass gate via simulated index');
+-}, line => t.diagnostic(line)));
+-
+-after(cleanup);
+diff --git a/get-shit-done/tests/commit-gate/test_compound.cjs b/get-shit-done/tests/commit-gate/test_compound.cjs
+index a61de1f..fce9c48 100644
+--- a/get-shit-done/tests/commit-gate/test_compound.cjs
++++ b/get-shit-done/tests/commit-gate/test_compound.cjs
+@@ -4,14 +4,14 @@ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo,
+   runHook, context, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup, fs, path, vm, createRequire, execFileSync,
+-  HOOK_PATH,
++  NO_REVIEW_REASON, noReviewReason, THRESHOLD, OVER_THRESHOLD, HALF,
++  cleanup, fs, path, execFileSync, runHookInVm,
+ } = require('./helpers.cjs');
+ 
+ test('compound planning remedy is allowed', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('compound-remedy', { 'unrelated.js': 'old\n' });
+-  writeLines(repo, 'unrelated.js', 1000, 'unrelated');
++  writeLines(repo, 'unrelated.js', THRESHOLD * 5, 'unrelated');
+   for (const name of ['one.md', 'two.md', 'three.md']) {
+     writeLines(repo, `.planning/threads/${name}`, 5, 'thread');
+   }
+@@ -26,7 +26,7 @@ test('compound planning remedy is allowed', t => runCase(t.name, () => {
+ test('compound large code is still blocked', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('compound-code');
+-  writeLines(repo, 'large.js', 40, 'code');
++  writeLines(repo, 'large.js', OVER_THRESHOLD, 'code');
+   const command = 'git add -- large.js && git commit -m "large unreviewed code"';
+   const result = runHook(command, { cwd: repo, toolName: 'Bash' });
+   assertBlocked(result,
+@@ -38,7 +38,7 @@ test('compound large code is still blocked', t => runCase(t.name, () => {
+ 
+ test('OR-list does not hide earlier staging', t => runCase(t.name, () => {
+   const repo = initRepo('or-chain-code');
+-  writeLines(repo, 'large.js', 40, 'code');
++  writeLines(repo, 'large.js', OVER_THRESHOLD, 'code');
+   const command = 'git add -- large.js || echo staging-failed; git commit -m "large after OR list"';
+   assertBlocked(runHook(command, { cwd: repo, toolName: 'Bash' }),
+     NO_REVIEW_REASON,
+@@ -48,37 +48,37 @@ test('OR-list does not hide earlier staging', t => runCase(t.name, () => {
+ test('round2: prospective add before --all (A3)', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('round2-add-all');
+-  writeLines(repo, 'large.js', 40);
++  writeLines(repo, 'large.js', OVER_THRESHOLD);
+   const indexBefore = fs.readFileSync(path.join(repo, '.git', 'index'));
+   const objectsBefore = git(repo, ['count-objects', '-v']);
+   const result = runHook('git add -- large.js && git commit -am change', {
+     cwd: repo, toolName: 'Bash',
+   });
+-  assertBlocked(result, /40 lines changed \(threshold: 20\)\. No recent cross-review found/,
++  assertBlocked(result, noReviewReason(OVER_THRESHOLD),
+     '--all must include files tracked by preceding adds');
+   assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.git', 'index')), indexBefore);
+   assert.strictEqual(git(repo, ['count-objects', '-v']), objectsBefore);
+   git(repo, ['add', '--', 'large.js']);
+   git(repo, ['commit', '--no-verify', '--quiet', '-am', 'reference']);
+-  assert.match(git(repo, ['show', '--format=', '--shortstat', 'HEAD']), /40 insertions/);
++  assert.match(git(repo, ['show', '--format=', '--shortstat', 'HEAD']), new RegExp(`\\b${OVER_THRESHOLD} insertions`));
+ }, line => t.diagnostic(line)));
+ 
+ test('round2: prospective add before explicit path (A3)', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('round2-add-explicit');
+   fs.writeFileSync(path.join(repo, 'new.js'), 'small\n');
+-  writeLines(repo, 'unrelated.js', 40);
++  writeLines(repo, 'unrelated.js', OVER_THRESHOLD);
+   git(repo, ['add', '--', 'unrelated.js']);
+   const indexBefore = fs.readFileSync(path.join(repo, '.git', 'index'));
+   const objectsBefore = git(repo, ['count-objects', '-v']);
+   assertAllowed(runHook('git add -- new.js && git commit -m change -- new.js', {
+     cwd: repo, toolName: 'Bash',
+   }), 'a new explicit path must be validated against prospective staging');
+-  writeLines(repo, 'new.js', 30);
++  writeLines(repo, 'new.js', OVER_THRESHOLD);
+   const result = runHook('git add -- new.js && git commit -m change -- new.js', {
+     cwd: repo, toolName: 'Bash',
+   });
+-  assertBlocked(result, /30 lines changed \(threshold: 20\)\. No recent cross-review found/,
++  assertBlocked(result, noReviewReason(OVER_THRESHOLD),
+     'large new explicit path must still require review');
+   assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.git', 'index')), indexBefore);
+   assert.strictEqual(git(repo, ['count-objects', '-v']), objectsBefore);
+@@ -111,7 +111,7 @@ test('round2: conditional directory changes fail safe (A5)', t => runCase(t.name
+   const { git } = require('./helpers.cjs');
+   const caller = initRepo('round2-conditional-caller');
+   const other = initRepo('round2-conditional-clean');
+-  writeLines(caller, 'large.js', 40);
++  writeLines(caller, 'large.js', OVER_THRESHOLD);
+   git(caller, ['add', '--', 'large.js']);
+   for (const [source, toolName] of [
+     [`false && cd "${other}"; git commit -m change`, 'Bash'],
+@@ -132,35 +132,23 @@ test('round2: conditional directory changes fail safe (A5)', t => runCase(t.name
+ 
+ test('round2: compound Git process budget (S5)', t => runCase(t.name, () => {
+   const repo = initRepo('round2-process-budget');
+-  writeLines(repo, 'one.js', 25);
+-  writeLines(repo, 'two.js', 25);
++  writeLines(repo, 'one.js', HALF);
++  writeLines(repo, 'two.js', HALF);
+   const calls = [];
+-  const output = [];
+-  const hookRequire = createRequire(HOOK_PATH);
+-  const source = 'git add -- one.js && git add -- two.js && git commit -m change';
+-  vm.runInNewContext(fs.readFileSync(HOOK_PATH, 'utf8'), {
+-    require(name) {
+-      if (name === 'child_process') return {
+-        execFileSync(executable, args, options) {
+-          calls.push({ executable, args });
+-          return execFileSync(executable, args, options);
+-        },
+-      };
+-      if (name === './lib/read-pretool-command.cjs') return {
+-        readPreToolCommand(_name, callback) {
+-          callback(source, { tool_name: 'Bash', cwd: repo });
+-        },
+-      };
+-      return hookRequire(name);
++  const decision = runHookInVm({
++    source: 'git add -- one.js && git add -- two.js && git commit -m change',
++    cwd: repo,
++    timeout: 15000,
++    execFileSync(executable, args, options) {
++      calls.push({ executable, args });
++      return execFileSync(executable, args, options);
+     },
+-    process,
+-    console: { log(value) { output.push(JSON.parse(value)); } },
+-  }, { filename: HOOK_PATH, timeout: 15000 });
+-  assert.strictEqual(output.length, 1);
+-  assertBlocked(output[0], /50 lines changed \(threshold: 20\)\. No recent cross-review found/,
++  });
++  assertBlocked(decision, noReviewReason(HALF * 2),
+     'process reductions must preserve the measured payload');
+   assert.strictEqual(calls.filter(({ args }) => args[0] === 'add').length, 2);
+-  // Identity binding (8558e4f) + lane worktree detection + hook-source exemption.
++  // Identity binding (8558e4f) + changed-blob identity (#16) + lane worktree
++  // detection.
+   assert.ok(calls.length <= 14, `expected at most 14 Git processes, got ${calls.length}`);
+   assert.strictEqual(require('./helpers.cjs').git(repo, ['diff', '--cached', '--name-only']), '');
+ }, line => t.diagnostic(line)));
+@@ -169,7 +157,7 @@ test('round2: background AND/OR-list directory change (A5)', t => runCase(t.name
+   const { git } = require('./helpers.cjs');
+   const caller = initRepo('round2-background-list-caller');
+   const other = initRepo('round2-background-list-clean');
+-  writeLines(caller, 'large.js', 40);
++  writeLines(caller, 'large.js', OVER_THRESHOLD);
+   git(caller, ['add', '--', 'large.js']);
+   for (const connector of ['&&', '||']) {
+     const source = `cd "${other}" ${connector} echo done & git commit -m change`;
+diff --git a/get-shit-done/tests/commit-gate/test_exemptions.cjs b/get-shit-done/tests/commit-gate/test_exemptions.cjs
+index 408da10..3166b69 100644
+--- a/get-shit-done/tests/commit-gate/test_exemptions.cjs
++++ b/get-shit-done/tests/commit-gate/test_exemptions.cjs
+@@ -2,26 +2,28 @@
+ 
+ const { test, after } = require('node:test');
+ const {
+-  writeLines, initRepo,
+-  runHook, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup,
++  assert, writeLines, initRepo,
++  runHook, context, assertAllowed, assertBlocked, runCase,
++  NO_REVIEW_REASON, OVER_THRESHOLD, HALF, cleanup,
+ } = require('./helpers.cjs');
+ 
+ test('docs-only .md commit bypasses gate', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('docs-only-bypass');
+-  writeLines(repo, 'docs/guide.md', 50, 'documentation');
+-  writeLines(repo, 'README.md', 30, 'readme');
++  writeLines(repo, 'docs/guide.md', HALF, 'documentation');
++  writeLines(repo, 'README.md', HALF, 'readme');
+   git(repo, ['add', '--', 'docs/guide.md', 'README.md']);
+-  assertAllowed(runHook('git commit -m "docs only"', { cwd: repo }),
+-    'pure .md commit must bypass cross-review gate');
++  const result = runHook('git commit -m "docs only"', { cwd: repo });
++  assertAllowed(result, 'pure .md commit must bypass cross-review gate');
++  // Over the threshold, so the docs exemption (not size) is what allows it.
++  assert.match(context(result).additionalContext, /lines changed in a docs-only payload/);
+ }, line => t.diagnostic(line)));
+ 
+ test('mixed .md + code commit still blocked', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('mixed-docs-code');
+-  writeLines(repo, 'docs/guide.md', 30, 'documentation');
+-  writeLines(repo, 'src/main.py', 30, 'code');
++  writeLines(repo, 'docs/guide.md', HALF, 'documentation');
++  writeLines(repo, 'src/main.py', HALF, 'code');
+   git(repo, ['add', '--', 'docs/guide.md', 'src/main.py']);
+   assertBlocked(runHook('git commit -m "mixed"', { cwd: repo }),
+     NO_REVIEW_REASON,
+@@ -31,7 +33,7 @@ test('mixed .md + code commit still blocked', t => runCase(t.name, () => {
+ test('code-only commit still blocked', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('code-only-blocked');
+-  writeLines(repo, 'src/main.js', 40, 'code');
++  writeLines(repo, 'src/main.js', OVER_THRESHOLD, 'code');
+   git(repo, ['add', '--', 'src/main.js']);
+   assertBlocked(runHook('git commit -m "code only"', { cwd: repo }),
+     NO_REVIEW_REASON,
+diff --git a/get-shit-done/tests/commit-gate/test_gating.cjs b/get-shit-done/tests/commit-gate/test_gating.cjs
+index ad78c64..8114dcc 100644
+--- a/get-shit-done/tests/commit-gate/test_gating.cjs
++++ b/get-shit-done/tests/commit-gate/test_gating.cjs
+@@ -4,7 +4,7 @@ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo, _patchSha256,
+   runHook, context, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup, fs, path,
++  NO_REVIEW_REASON, noReviewReason, THRESHOLD, OVER_THRESHOLD, cleanup, fs, path,
+ } = require('./helpers.cjs');
+ 
+ test('small commit gets advisory', t => runCase(t.name, () => {
+@@ -17,9 +17,32 @@ test('small commit gets advisory', t => runCase(t.name, () => {
+     'PowerShell call operator should preserve Git command structure');
+ }, line => t.diagnostic(line)));
+ 
++test('review threshold is the 200-line policy (2520c7b)', () => {
++  // The suites size fixtures from the hook's constant, so they would follow an
++  // accidental change silently; this pin makes a policy change deliberate.
++  assert.strictEqual(THRESHOLD, 200);
++});
++
++test('exactly the threshold is gated; one line less is not', t => runCase(t.name, () => {
++  const { git } = require('./helpers.cjs');
++  const below = initRepo('threshold-minus-one');
++  writeLines(below, 'edge.txt', THRESHOLD - 1, 'code');
++  git(below, ['add', '--', 'edge.txt']);
++  const allowed = runHook('git commit -m "just under"', { cwd: below });
++  assertAllowed(allowed, 'one line under the threshold is not gated');
++  assert.match(context(allowed).additionalContext,
++    new RegExp(`\\b${THRESHOLD - 1} lines changed, below review threshold: ${THRESHOLD}`));
++
++  const at = initRepo('threshold-exact');
++  writeLines(at, 'edge.txt', THRESHOLD, 'code');
++  git(at, ['add', '--', 'edge.txt']);
++  assertBlocked(runHook('git commit -m "at threshold"', { cwd: at }), noReviewReason(THRESHOLD),
++    'a payload of exactly the threshold requires review');
++}, line => t.diagnostic(line)));
++
+ test('real --no-verify bypasses gate', t => runCase(t.name, () => {
+   const repo = initRepo('real-no-verify');
+-  writeLines(repo, 'large.txt', 30, 'code');
++  writeLines(repo, 'large.txt', OVER_THRESHOLD, 'code');
+   require('./helpers.cjs').git(repo, ['add', '--', 'large.txt']);
+   assert.strictEqual(
+     runHook('git commit --no-verify -m "explicit bypass"', { cwd: repo }),
+@@ -28,7 +51,7 @@ test('real --no-verify bypasses gate', t => runCase(t.name, () => {
+ 
+ test('large commit without review blocked', t => runCase(t.name, () => {
+   const repo = initRepo('large-staged');
+-  writeLines(repo, 'large.txt', 30, 'code');
++  writeLines(repo, 'large.txt', OVER_THRESHOLD, 'code');
+   require('./helpers.cjs').git(repo, ['add', '--', 'large.txt']);
+   assertBlocked(runHook('git commit -m "big change"', { cwd: repo }),
+     NO_REVIEW_REASON,
+@@ -38,7 +61,7 @@ test('large commit without review blocked', t => runCase(t.name, () => {
+ test('large commit with review passes', t => runCase(t.name, () => {
+   const repo = initRepo('large-reviewed');
+   const { git } = require('./helpers.cjs');
+-  writeLines(repo, 'large.txt', 30, 'code');
++  writeLines(repo, 'large.txt', OVER_THRESHOLD, 'code');
+   git(repo, ['add', '--', 'large.txt']);
+   fs.writeFileSync(
+     path.join(repo, '.planning', 'research', 'cross-review-test.md'),
+@@ -53,7 +76,7 @@ test('review lookup uses git toplevel', t => runCase(t.name, () => {
+   const repo = initRepo('deep-review');
+   const subDir = path.join(repo, 'src', 'deep');
+   fs.mkdirSync(subDir, { recursive: true });
+-  writeLines(repo, 'large.txt', 30, 'code');
++  writeLines(repo, 'large.txt', OVER_THRESHOLD, 'code');
+   git(repo, ['add', '--', 'large.txt']);
+   fs.writeFileSync(
+     path.join(repo, '.planning', 'research', 'cross-review-toplevel.md'),
+diff --git a/get-shit-done/tests/commit-gate/test_parsing.cjs b/get-shit-done/tests/commit-gate/test_parsing.cjs
+index 14c8a55..de96944 100644
+--- a/get-shit-done/tests/commit-gate/test_parsing.cjs
++++ b/get-shit-done/tests/commit-gate/test_parsing.cjs
+@@ -4,13 +4,13 @@ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo, _patchSha256,
+   runHook, context, assertAllowed, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup, fs, path, git,
++  NO_REVIEW_REASON, OVER_THRESHOLD, THRESHOLD, cleanup, fs, path, git,
+ } = require('./helpers.cjs');
+ 
+ test('cross-repo quoted Set-Location', t => runCase(t.name, () => {
+   const caller = initRepo('caller');
+   const repo = initRepo('other repo');
+-  writeLines(repo, 'big.txt', 30, 'code');
++  writeLines(repo, 'big.txt', OVER_THRESHOLD, 'code');
+   require('./helpers.cjs').git(repo, ['add', '--', 'big.txt']);
+   fs.writeFileSync(
+     path.join(repo, '.planning', 'research', 'cross-review-other.md'),
+@@ -23,7 +23,7 @@ test('cross-repo quoted Set-Location', t => runCase(t.name, () => {
+ test('payload cwd selects repository', t => runCase(t.name, () => {
+   const caller = initRepo('payload-caller');
+   const repo = initRepo('payload-target', { 'tracked.js': 'old\n' });
+-  writeLines(repo, 'tracked.js', 40, 'code');
++  writeLines(repo, 'tracked.js', OVER_THRESHOLD, 'code');
+   require('./helpers.cjs').git(repo, ['add', '--', 'tracked.js']);
+   assertBlocked(
+     runHook('git commit -m "payload cwd"', { cwd: caller, payloadCwd: repo }),
+@@ -39,7 +39,7 @@ test('commit message staging verb is opaque', t => runCase(t.name, () => {
+   });
+   fs.writeFileSync(path.join(repo, 'tracked.txt'), 'new\n');
+   git(repo, ['add', '--', 'tracked.txt']);
+-  writeLines(repo, 'unrelated.txt', 200, 'dirty');
++  writeLines(repo, 'unrelated.txt', THRESHOLD * 2, 'dirty');
+   const command = 'git commit -m "fix: quoted git add text is data, not staging"';
+   assertAllowed(runHook(command, { cwd: repo }),
+     'git add inside -m must not expand measurement to the working tree');
+@@ -61,7 +61,7 @@ test('explicit-path commit ignores unrelated dirt', t => runCase(t.name, () => {
+     'unrelated.txt': 'old\n',
+   });
+   fs.writeFileSync(path.join(repo, 'target.txt'), 'new\n');
+-  writeLines(repo, 'unrelated.txt', 2000, 'unrelated dirty');
++  writeLines(repo, 'unrelated.txt', THRESHOLD * 10, 'unrelated dirty');
+   assertAllowed(
+     runHook('git commit -m "target only" -- target.txt', { cwd: repo }),
+     'explicit path commit must measure only that path');
+@@ -69,7 +69,7 @@ test('explicit-path commit ignores unrelated dirt', t => runCase(t.name, () => {
+ 
+ test('empty index ignores working tree', t => runCase(t.name, () => {
+   const repo = initRepo('empty-index', { 'dirty.txt': 'old\n' });
+-  writeLines(repo, 'dirty.txt', 100, 'dirty');
++  writeLines(repo, 'dirty.txt', THRESHOLD * 2, 'dirty');
+   assertAllowed(runHook('git commit -m "nothing staged"', { cwd: repo }),
+     'pathless commit with an empty index must remain below threshold');
+ }, line => t.diagnostic(line)));
+@@ -79,7 +79,7 @@ test('nested .planning is excluded', t => runCase(t.name, () => {
+   const repo = initRepo('nested-planning', {
+     'Plugins/CsMCP/.planning/state.md': 'old\n',
+   });
+-  writeLines(repo, 'Plugins/CsMCP/.planning/state.md', 100, 'planning');
++  writeLines(repo, 'Plugins/CsMCP/.planning/state.md', THRESHOLD * 2, 'planning');
+   git(repo, ['add', '--', 'Plugins/CsMCP/.planning/state.md']);
+   assertAllowed(runHook('git commit -m "planning only"', { cwd: repo }),
+     'nested .planning changes must not count as code churn');
+@@ -87,7 +87,7 @@ test('nested .planning is excluded', t => runCase(t.name, () => {
+ 
+ test('commit --all measures working tree', t => runCase(t.name, () => {
+   const repo = initRepo('commit-all', { 'tracked.js': 'old\n' });
+-  writeLines(repo, 'tracked.js', 40, 'code');
++  writeLines(repo, 'tracked.js', OVER_THRESHOLD, 'code');
+   assertBlocked(runHook('git commit --all -m "large tracked change"', { cwd: repo }),
+     NO_REVIEW_REASON,
+     'real --all commit must measure tracked working-tree changes');
+@@ -119,7 +119,7 @@ test('Git environment override fails safe', t => runCase(t.name, () => {
+ test('redirection and commit options cannot bypass', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const staged = initRepo('option-bypasses', { 'tracked.js': 'old\n' });
+-  writeLines(staged, 'tracked.js', 40, 'code');
++  writeLines(staged, 'tracked.js', OVER_THRESHOLD, 'code');
+   git(staged, ['add', '--', 'tracked.js']);
+   for (const command of [
+     'git commit -m "big change" > commit.log',
+@@ -131,7 +131,7 @@ test('redirection and commit options cannot bypass', t => runCase(t.name, () =>
+   }
+ 
+   const tracked = initRepo('clustered-commit-option', { 'tracked.js': 'old\n' });
+-  writeLines(tracked, 'tracked.js', 40, 'code');
++  writeLines(tracked, 'tracked.js', OVER_THRESHOLD, 'code');
+   assertBlocked(runHook('git commit -aC HEAD -m big', { cwd: tracked, toolName: 'Bash' }),
+     NO_REVIEW_REASON,
+     'a value consumed by a clustered option must not become a pathspec');
+@@ -140,7 +140,7 @@ test('redirection and commit options cannot bypass', t => runCase(t.name, () =>
+ test('unmatched pathspec fails safe', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('unmatched-pathspec');
+-  writeLines(repo, 'large.js', 40, 'code');
++  writeLines(repo, 'large.js', OVER_THRESHOLD, 'code');
+   git(repo, ['add', '--', 'large.js']);
+   const result = runHook('git commit -m big -- does-not-exist.js', { cwd: repo });
+   assertBlocked(result, /could not measure the Git payload \(Command failed: git ls-files --error-unmatch -- does-not-exist\.js/,
+@@ -150,7 +150,7 @@ test('unmatched pathspec fails safe', t => runCase(t.name, () => {
+ test('git -C directory is honored', t => runCase(t.name, () => {
+   const caller = initRepo('git-c-caller');
+   const repo = initRepo('git-c-target', { 'tracked.js': 'old\n' });
+-  writeLines(repo, 'tracked.js', 40, 'code');
++  writeLines(repo, 'tracked.js', OVER_THRESHOLD, 'code');
+   assertBlocked(
+     runHook(`git -C "${repo}" commit -am "large through -C"`, { cwd: caller }),
+     NO_REVIEW_REASON,
+diff --git a/get-shit-done/tests/commit-gate/test_passthrough.cjs b/get-shit-done/tests/commit-gate/test_passthrough.cjs
+index 3746e78..78c1579 100644
+--- a/get-shit-done/tests/commit-gate/test_passthrough.cjs
++++ b/get-shit-done/tests/commit-gate/test_passthrough.cjs
+@@ -4,7 +4,7 @@ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo, initRepoWithRemote, commitLines,
+   runHook, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup,
++  NO_REVIEW_REASON, OVER_THRESHOLD, cleanup,
+ } = require('./helpers.cjs');
+ 
+ test('non-git and quoted Git prose pass through', t => runCase(t.name, () => {
+@@ -17,7 +17,7 @@ test('non-git and quoted Git prose pass through', t => runCase(t.name, () => {
+ 
+ test('read-only Git commands pass through', t => runCase(t.name, () => {
+   const repo = initRepoWithRemote('read-only-git');
+-  commitLines(repo, 'large.js', 40);
++  commitLines(repo, 'large.js', OVER_THRESHOLD);
+   assertBlocked(runHook('git push', { cwd: repo }),
+     NO_REVIEW_REASON,
+     'control: the unreviewed push payload must exceed the threshold');
+@@ -58,7 +58,7 @@ test('directory-stack pop fails safe', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const caller = initRepo('pop-caller');
+   const other = initRepo('pop-other');
+-  writeLines(caller, 'large.js', 40, 'code');
++  writeLines(caller, 'large.js', OVER_THRESHOLD, 'code');
+   git(caller, ['add', '--', 'large.js']);
+   const command = `Push-Location "${other}"; Pop-Location; git commit -m big`;
+   const result = runHook(command, { cwd: caller, toolName: 'PowerShell' });
+diff --git a/get-shit-done/tests/commit-gate/test_push.cjs b/get-shit-done/tests/commit-gate/test_push.cjs
+index 5697d18..1c7a17c 100644
+--- a/get-shit-done/tests/commit-gate/test_push.cjs
++++ b/get-shit-done/tests/commit-gate/test_push.cjs
+@@ -4,7 +4,7 @@ const { test, after } = require('node:test');
+ const {
+   assert, writeLines, initRepo, initRepoWithRemote, commitLines,
+   runHook, assertBlocked, runCase,
+-  NO_REVIEW_REASON, cleanup, fs, path,
++  NO_REVIEW_REASON, OVER_THRESHOLD, cleanup, fs, path,
+ } = require('./helpers.cjs');
+ 
+ test('every commit and push candidate is gated', t => runCase(t.name, () => {
+@@ -12,7 +12,7 @@ test('every commit and push candidate is gated', t => runCase(t.name, () => {
+   const commits = initRepo('multiple-commits');
+   fs.writeFileSync(path.join(commits, 'small.txt'), 'small\n');
+   git(commits, ['add', '--', 'small.txt']);
+-  writeLines(commits, 'large.js', 40, 'code');
++  writeLines(commits, 'large.js', OVER_THRESHOLD, 'code');
+   assertBlocked(runHook(
+     'git commit -m small && git add -- large.js && git commit -m large',
+     { cwd: commits, toolName: 'Bash' }),
+@@ -20,7 +20,7 @@ test('every commit and push candidate is gated', t => runCase(t.name, () => {
+   'a later large commit in the same command must be gated');
+ 
+   const push = initRepoWithRemote('commit-then-push');
+-  commitLines(push, 'unpushed.js', 40);
++  commitLines(push, 'unpushed.js', OVER_THRESHOLD);
+   fs.writeFileSync(path.join(push, 'small.txt'), 'small\n');
+   git(push, ['add', '--', 'small.txt']);
+   assertBlocked(runHook('git commit -m small && git push', {
+@@ -32,7 +32,7 @@ test('every commit and push candidate is gated', t => runCase(t.name, () => {
+ test('detached-HEAD push fails safe', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepoWithRemote('detached-push');
+-  commitLines(repo, 'large.js', 40);
++  commitLines(repo, 'large.js', OVER_THRESHOLD);
+   git(repo, ['checkout', '--quiet', '--detach', 'HEAD']);
+   const explicit = runHook('git push origin HEAD:main', { cwd: repo });
+   assertBlocked(explicit, 'explicit git push refspecs are unsupported',
+@@ -44,7 +44,7 @@ test('detached-HEAD push fails safe', t => runCase(t.name, () => {
+ 
+ test('push without upstream fails safe', t => runCase(t.name, () => {
+   const repo = initRepo('push-without-upstream');
+-  commitLines(repo, 'large.js', 40);
++  commitLines(repo, 'large.js', OVER_THRESHOLD);
+   const result = runHook('git push', { cwd: repo });
+   assertBlocked(result, /cannot measure push: branch .+ has no upstream/,
+     'a push without an upstream must not be treated as zero lines');
+@@ -53,7 +53,7 @@ test('push without upstream fails safe', t => runCase(t.name, () => {
+ test('round2: quoted Git parse failures fail safe (A1)', t => runCase(t.name, () => {
+   const { git } = require('./helpers.cjs');
+   const repo = initRepo('round2-quoted-git');
+-  writeLines(repo, 'large.js', 40);
++  writeLines(repo, 'large.js', OVER_THRESHOLD);
+   git(repo, ['add', '--', 'large.js']);
+   for (const [source, toolName] of [
+     ['"/usr/bin/git" commit -m "$(printf message)"', 'Bash'],
+diff --git a/get-shit-done/tests/commit-gate/test_removed_exemptions.cjs b/get-shit-done/tests/commit-gate/test_removed_exemptions.cjs
+new file mode 100644
+index 0000000..90d143c
+--- /dev/null
++++ b/get-shit-done/tests/commit-gate/test_removed_exemptions.cjs
+@@ -0,0 +1,131 @@
++'use strict';
++
++// 92539bf removed two exemptions, and these cases pin the removal:
++// - the hook/test-source self-exemption: gate code is not exempt from its own
++//   review requirement;
++// - the GSD-only advisory fallback: quorum-unmet evidence never admits an
++//   over-threshold payload, GSD-owned or not.
++// Every payload exceeds the gate threshold, so none can pass merely by being
++// small (under the old 20-line threshold these passed vacuously once 2520c7b
++// raised it to 200).
++
++const { test, after } = require('node:test');
++const {
++  git, writeLines, initRepo, _patchSha256,
++  runHook, assertBlocked, runCase,
++  NO_REVIEW_REASON, OVER_THRESHOLD, HALF, cleanup, fs, path,
++} = require('./helpers.cjs');
++
++const THIRD = Math.ceil(OVER_THRESHOLD / 3);
++const QUORUM_UNMET = /did not meet quorum .*Review quorum was attempted but unmet/;
++
++// A manifest genuinely bound to the staged change (staged_patch_sha256 is a
++// binding field the gate reads) whose review did not reach quorum.
++function plantQuorumUnmetManifest(repo) {
++  const manifestDir = path.join(repo, '.planning', 'research', 'review-test');
++  fs.mkdirSync(manifestDir, { recursive: true });
++  fs.writeFileSync(path.join(manifestDir, 'gsd-ar-manifest-test.json'), JSON.stringify({
++    slug: 'test', round: 1,
++    quorum: { met: false, selected: 3, reviewed: 1, min_reviewed: 3, min_fraction: 0.6 },
++    reviewers: { a: { outcome: 'reviewed', findings: 0 } },
++    staged_patch_sha256: _patchSha256(repo, ['--cached']),
++  }));
++}
++
++// --- no hook/test-source self-exemption ---
++
++test('hooks/-only commit is gated', t => runCase(t.name, () => {
++  const repo = initRepo('hooks-only');
++  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', OVER_THRESHOLD, 'hook code');
++  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs']);
++  assertBlocked(runHook('git commit -m "hooks only"', { cwd: repo }), NO_REVIEW_REASON,
++    'hook source must require cross-review like any code');
++}, line => t.diagnostic(line)));
++
++test('tests/-only commit is gated', t => runCase(t.name, () => {
++  const repo = initRepo('tests-only');
++  writeLines(repo, 'get-shit-done/tests/my-test.cjs', OVER_THRESHOLD, 'test code');
++  git(repo, ['add', '--', 'get-shit-done/tests/my-test.cjs']);
++  assertBlocked(runHook('git commit -m "tests only"', { cwd: repo }), NO_REVIEW_REASON,
++    'test source must require cross-review like any code');
++}, line => t.diagnostic(line)));
++
++test('hooks/ + tests/ combined commit is gated', t => runCase(t.name, () => {
++  const repo = initRepo('hooks-tests-combined');
++  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', HALF, 'hook code');
++  writeLines(repo, 'get-shit-done/tests/my-test.cjs', HALF, 'test code');
++  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs', 'get-shit-done/tests/my-test.cjs']);
++  assertBlocked(runHook('git commit -m "hooks and tests"', { cwd: repo }), NO_REVIEW_REASON,
++    'combined hooks/ + tests/ commit must require cross-review');
++}, line => t.diagnostic(line)));
++
++test('hooks/ + tests/ + .md combined commit is gated (not docs-only)', t => runCase(t.name, () => {
++  const repo = initRepo('hooks-tests-md');
++  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', THIRD, 'hook code');
++  writeLines(repo, 'get-shit-done/tests/my-test.cjs', THIRD, 'test code');
++  writeLines(repo, 'README.md', THIRD, 'docs');
++  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs', 'get-shit-done/tests/my-test.cjs', 'README.md']);
++  assertBlocked(runHook('git commit -m "hooks tests and docs"', { cwd: repo }), NO_REVIEW_REASON,
++    'a payload with code beside .md must not take the docs-only exemption');
++}, line => t.diagnostic(line)));
++
++test('tests/ + code mixed commit is gated', t => runCase(t.name, () => {
++  const repo = initRepo('tests-code-mixed');
++  writeLines(repo, 'get-shit-done/tests/my-test.cjs', HALF, 'test code');
++  writeLines(repo, 'src/main.js', HALF, 'app code');
++  git(repo, ['add', '--', 'get-shit-done/tests/my-test.cjs', 'src/main.js']);
++  assertBlocked(runHook('git commit -m "mixed"', { cwd: repo }), NO_REVIEW_REASON,
++    'tests/ + non-exempt code commit must require cross-review');
++}, line => t.diagnostic(line)));
++
++test('compound git-add && git-commit of tests/-only files is gated', t => runCase(t.name, () => {
++  const repo = initRepo('compound-tests-only');
++  writeLines(repo, 'get-shit-done/tests/my-test.cjs', OVER_THRESHOLD, 'test code');
++  assertBlocked(
++    runHook('git add -- get-shit-done/tests/my-test.cjs && git commit -m "compound tests"', {
++      cwd: repo, toolName: 'Bash',
++    }),
++    NO_REVIEW_REASON,
++    'the simulated index of a compound add+commit must be gated like a staged one');
++}, line => t.diagnostic(line)));
++
++// --- no GSD-only advisory fallback ---
++
++test('GSD-only payload with a quorum-unmet manifest is blocked', t => runCase(t.name, () => {
++  const repo = initRepo('gsd-fallback-removed');
++  writeLines(repo, 'get-shit-done/bin/tool.py', OVER_THRESHOLD, 'tool code');
++  git(repo, ['add', '--', 'get-shit-done/bin/tool.py']);
++  plantQuorumUnmetManifest(repo);
++  assertBlocked(runHook('git commit -m "gsd tool"', { cwd: repo }), QUORUM_UNMET,
++    'quorum-unmet evidence must not admit GSD-owned code');
++}, line => t.diagnostic(line)));
++
++test('non-GSD payload with a quorum-unmet manifest is blocked', t => runCase(t.name, () => {
++  const repo = initRepo('gsd-fallback-non-gsd');
++  writeLines(repo, 'src/main.js', OVER_THRESHOLD, 'app code');
++  git(repo, ['add', '--', 'src/main.js']);
++  plantQuorumUnmetManifest(repo);
++  assertBlocked(runHook('git commit -m "app code"', { cwd: repo }), QUORUM_UNMET,
++    'quorum-unmet evidence never admits a payload');
++}, line => t.diagnostic(line)));
++
++test('hook-source-only payload with a quorum-unmet manifest is blocked', t => runCase(t.name, () => {
++  const repo = initRepo('gsd-fallback-hookonly');
++  writeLines(repo, 'get-shit-done/hooks/my-hook.cjs', OVER_THRESHOLD, 'hook code');
++  git(repo, ['add', '--', 'get-shit-done/hooks/my-hook.cjs']);
++  plantQuorumUnmetManifest(repo);
++  assertBlocked(runHook('git commit -m "hook only"', { cwd: repo }), QUORUM_UNMET,
++    'hook source gets neither self-exemption nor advisory fallback');
++}, line => t.diagnostic(line)));
++
++test('mixed GSD + non-GSD payload with a quorum-unmet manifest is blocked', t => runCase(t.name, () => {
++  const repo = initRepo('gsd-fallback-mixed');
++  writeLines(repo, 'get-shit-done/bin/tool.py', HALF, 'tool code');
++  writeLines(repo, 'src/main.js', HALF, 'app code');
++  git(repo, ['add', '--', 'get-shit-done/bin/tool.py', 'src/main.js']);
++  plantQuorumUnmetManifest(repo);
++  assertBlocked(runHook('git commit -m "mixed gsd and app"', { cwd: repo }), QUORUM_UNMET,
++    'mixed GSD + non-GSD payload must not be admitted by quorum-unmet evidence');
++}, line => t.diagnostic(line)));
++
++after(cleanup);
+diff --git a/get-shit-done/tests/commit-gate/test_retry.cjs b/get-shit-done/tests/commit-gate/test_retry.cjs
+index 29bd0db..db45031 100644
+--- a/get-shit-done/tests/commit-gate/test_retry.cjs
++++ b/get-shit-done/tests/commit-gate/test_retry.cjs
+@@ -3,7 +3,7 @@
+ const { test, after } = require('node:test');
+ const {
+   assert, initRepo, context, assertAllowed, assertBlocked, runCase,
+-  probeFailureFixture, cleanup,
++  probeFailureFixture, cleanup, noReviewReason, THRESHOLD, OVER_THRESHOLD,
+ } = require('./helpers.cjs');
+ 
+ test('timeout deny cannot satisfy a logic deny', t => runCase(t.name, () => {
+@@ -39,10 +39,10 @@ test('one rerun recovers allow and logic deny outcomes', t => runCase(t.name, ()
+   const timeout = probeFailureFixture();
+   const allowed = { hookSpecificOutput: { additionalContext: 'advisory' } };
+   const denied = { hookSpecificOutput: { permissionDecision: 'deny',
+-    permissionDecisionReason: 'BLOCKED: 40 lines changed (threshold: 20). No recent cross-review found' } };
++    permissionDecisionReason: `BLOCKED: ${OVER_THRESHOLD} lines changed (threshold: ${THRESHOLD}). No recent cross-review found` } };
+   for (const [name, check, result] of [
+     ['allow', assertAllowed, allowed],
+-    ['logic deny', value => assertBlocked(value, /40 lines changed.*No recent cross-review found/), denied],
++    ['logic deny', value => assertBlocked(value, noReviewReason(OVER_THRESHOLD)), denied],
+   ]) {
+     const logs = [];
+     const repos = [];
+diff --git a/get-shit-done/tests/hooks/test_hook_argument_refusals.cjs b/get-shit-done/tests/hooks/test_hook_argument_refusals.cjs
+index 06dc8d1..17ee37b 100644
+--- a/get-shit-done/tests/hooks/test_hook_argument_refusals.cjs
++++ b/get-shit-done/tests/hooks/test_hook_argument_refusals.cjs
+@@ -10,30 +10,40 @@ const { parseCommandLine, analyzeGitCommand } = require('../../hooks/lib/shell-c
+ const { spawnBudgetMs } = require('../lib/hook-spawn.cjs');
+ 
+ const hook = path.resolve(__dirname, '../../hooks/commit-gate.cjs');
++const { OVER_THRESHOLD: LARGE_LINES, GATE_SPAWN_WEIGHT } = require('../lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('../lib/hermetic-hook-env.cjs');
++// The gate sees only this sandbox, never the live ~/.gsd-state review history
++// or review receipts.
++const sandboxHome = fs.mkdtempSync(path.join(os.tmpdir(), 'test-hook-refusals-home-'));
++process.on('exit', () => fs.rmSync(sandboxHome, { recursive: true, force: true }));
++const HOOK_ENV = hermeticHookEnv(sandboxHome);
+ const commitMessage = String.raw`Write output to $env:TEMP\csmcp_auth.json
+ 
+ Co-Authored-By: Claude <noreply@anthropic.com>`;
+ const commit = `git commit -m "$(cat <<'EOF'\n${commitMessage}\nEOF\n)"`;
+ const staticCall = String.raw`[System.IO.File]::WriteAllText("C:\Users\bedit\output.txt", $content, [System.Text.UTF8Encoding]::new($false))`;
+ 
++// Every repository() fixture stages this many lines in small.txt.
++const SMALL_STAGED_LINES = 1;
++
+ function repository(t) {
+   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'test-hook-refusals-'));
+   t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+   git(repo, ['init', '--quiet']);
+   git(repo, ['config', 'core.autocrlf', 'false']);
+-  fs.writeFileSync(path.join(repo, 'small.txt'), 'small change\n');
++  fs.writeFileSync(path.join(repo, 'small.txt'), 'small change\n'.repeat(SMALL_STAGED_LINES));
+   git(repo, ['add', '--', 'small.txt']);
+   return repo;
+ }
+ 
+ function git(repo, args) {
+-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true });
++  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true, env: HOOK_ENV });
+ }
+ 
+ function runHook(source, shell, repo) {
+   const result = spawnSync(process.execPath, [hook], {
+     input: JSON.stringify({ tool_name: shell, cwd: repo, tool_input: { command: source } }),
+-    encoding: 'utf8', timeout: spawnBudgetMs(), windowsHide: true,
++    encoding: 'utf8', timeout: spawnBudgetMs(GATE_SPAWN_WEIGHT), windowsHide: true, env: HOOK_ENV,
+   });
+   assert.ifError(result.error);
+   assert.equal(result.status, 0, result.stderr);
+@@ -94,12 +104,14 @@ test('literal heredoc bodies stay opaque and cannot bypass the payload threshold
+   assert.equal(parsed.commands.length, 1);
+   assert.equal(analyzeGitCommand(parsed.commands[0]).noVerify, false);
+   assert.equal(analyzeGitCommand(parsed.commands[0]).messages[0].value, message);
+-  fs.writeFileSync(path.join(repo, 'large.txt'), 'large change\n'.repeat(30));
++  fs.writeFileSync(path.join(repo, 'large.txt'), 'large change\n'.repeat(LARGE_LINES));
+   git(repo, ['add', '--', 'large.txt']);
++  // large.txt plus the small.txt every repository() fixture stages.
++  const staged = LARGE_LINES + SMALL_STAGED_LINES;
+   for (const [command, shell] of [[source, 'Bash'], [`${staticCall}; git commit -m check`, 'PowerShell']]) {
+     const result = runHook(command, shell, repo);
+     assert.equal(result.permissionDecision, 'deny');
+-    assert.match(result.permissionDecisionReason, /31 lines changed/);
++    assert.match(result.permissionDecisionReason, new RegExp(`\\b${staged} lines changed`));
+   }
+ });
+ 
+diff --git a/get-shit-done/tests/hooks/test_hook_spawn_helper.cjs b/get-shit-done/tests/hooks/test_hook_spawn_helper.cjs
+index cd8631e..e9184e5 100644
+--- a/get-shit-done/tests/hooks/test_hook_spawn_helper.cjs
++++ b/get-shit-done/tests/hooks/test_hook_spawn_helper.cjs
+@@ -85,6 +85,97 @@ test('CI override wins even below the floor', () => {
+   assert.ok(helper.calls[0][2].timeout > 7, 'tiny hook override must not time out calibration');
+ });
+ 
++// A hook that runs many git processes (the commit gate: 12-65 per call) is not
++// modelled by one calibrated node spawn; a declared git-process weight adds
++// that many calibrated git spawns to the calibration the budget scales from.
++test('a declared git-process weight adds the calibrated git spawn cost', () => {
++  const measured = 50;
++  const gitProcesses = 20;
++  const helper = loadHelper({ measured });
++  const {
++    spawn_factor: factor, spawn_git_factor: gitFactor, spawn_ceiling_ms: ceiling, spawn_floor_ms: floor,
++  } = defaults.test_hooks;
++  assert.equal(helper.spawnBudgetMs({ gitProcesses }), Math.ceil(Math.min(ceiling,
++    Math.max(floor, factor * measured + gitFactor * gitProcesses * measured))));
++  assert.equal(helper.calls.length, 2, 'node and git are each calibrated once');
++  assert.equal(helper.calls[1][0], 'git');
++  assert.deepEqual(Array.from(helper.calls[1][1]), ['--version']);
++});
++
++test('git calibration runs once and only when a weight is declared', () => {
++  const helper = loadHelper({ measured: 30 });
++  const unweighted = helper.spawnBudgetMs();
++  assert.equal(helper.calls.length, 1, 'an unweighted budget never spawns git');
++  helper.spawnBudgetMs({ gitProcesses: 4 });
++  helper.spawnBudgetMs({ gitProcesses: 9 });
++  assert.equal(helper.calls.length, 2, 'git is calibrated once and cached');
++  assert.equal(helper.spawnBudgetMs(), unweighted, 'a weighted call leaves the unweighted budget alone');
++});
++
++test('the git load factor is separate from the node factor', () => {
++  // 70 git spawns at 50 ms: the node factor alone would saturate a 120 s
++  // ceiling (40 * 3.5 s); the git factor keeps the budget on the workload.
++  const config = { ...defaults.test_hooks, spawn_factor: 40, spawn_git_factor: 10 };
++  assert.equal(loadHelper({ measured: 50, config }).spawnBudgetMs({ gitProcesses: 70 }),
++    40 * 50 + 10 * 70 * 50);
++});
++
++test('an invalid git load factor fails explicitly', () => {
++  for (const value of [undefined, 0, -1, 1.5]) {
++    const config = { ...defaults.test_hooks, spawn_git_factor: value };
++    assert.throws(() => loadHelper({ config }).spawnBudgetMs({ gitProcesses: 3 }),
++      /test_hooks.spawn_git_factor/);
++  }
++});
++
++test('a weighted budget is bounded by the ceiling', () => {
++  const config = { ...defaults.test_hooks, spawn_ceiling_ms: 30000 };
++  assert.equal(loadHelper({ measured: 100, config }).spawnBudgetMs({ gitProcesses: 500 }), 30000);
++});
++
++test('the CI override also wins for weighted budgets', () => {
++  const helper = loadHelper({ measured: 2000, env: { GSD_HOOK_SPAWN_BUDGET_MS: '7' } });
++  assert.equal(helper.spawnBudgetMs({ gitProcesses: 30 }), 7);
++});
++
++test('invalid git-process weights fail explicitly', () => {
++  for (const gitProcesses of [-1, 1.5, NaN, Infinity, '3']) {
++    assert.throws(() => loadHelper().spawnBudgetMs({ gitProcesses }), /gitProcesses/);
++  }
++});
++
++test('failed git calibration surfaces the error and is never retried', () => {
++  const failure = Object.assign(new Error('git unavailable'), { code: 'ENOENT' });
++  const helper = loadHelper({
++    spawn: executable => (executable === 'git' ? { error: failure, status: null }
++      : { status: 0, stdout: '', stderr: '' }),
++  });
++  assert.throws(() => helper.spawnBudgetMs({ gitProcesses: 2 }), /git unavailable/);
++  assert.throws(() => helper.spawnBudgetMs({ gitProcesses: 2 }), /git unavailable/);
++  assert.equal(helper.calls.filter(call => call[0] === 'git').length, 1);
++});
++
++test('runHookProcess applies the declared weight to the spawned hook', () => {
++  let received;
++  const measured = 400;
++  const helper = loadHelper({ measured, exec: (...args) => { received = args; return 'output'; } });
++  helper.runHookProcess(['hook.cjs'], { encoding: 'utf8' }, { gitProcesses: 10 });
++  const {
++    spawn_factor: factor, spawn_git_factor: gitFactor, spawn_ceiling_ms: ceiling, spawn_floor_ms: floor,
++  } = defaults.test_hooks;
++  assert.equal(received[2].timeout,
++    Math.ceil(Math.min(ceiling, Math.max(floor, factor * measured + gitFactor * 10 * measured))));
++});
++
++test('a weighted failure names its weight and git calibration', () => {
++  const failure = Object.assign(new Error('child failed'), { status: 2 });
++  const helper = loadHelper({ measured: 25, exec: () => { throw failure; } });
++  assert.throws(() => helper.runHookProcess(['hook.cjs'], {}, { gitProcesses: 12 }), error => {
++    assert.match(error.message, /calibration=25 budget=\d+ gitProcesses=12 git_calibration=25$/);
++    return true;
++  });
++});
++
+ test('first use calibrates exactly once and prints one attributable line', () => {
+   const helper = loadHelper({ measured: 900 });
+   assert.equal(helper.calls.length, 0);
+diff --git a/get-shit-done/tests/lib/commit-gate-sizes.cjs b/get-shit-done/tests/lib/commit-gate-sizes.cjs
+new file mode 100644
+index 0000000..7a0ca57
+--- /dev/null
++++ b/get-shit-done/tests/lib/commit-gate-sizes.cjs
+@@ -0,0 +1,45 @@
++'use strict';
++
++// Commit-gate test payload sizes, derived from the hook's own review threshold so
++// a threshold change (2520c7b raised it 20 -> 200) can't silently turn a gated
++// case into an under-threshold pass. Requiring this module creates no fixtures.
++
++const path = require('node:path');
++
++const COMMIT_GATE_PATH = path.resolve(__dirname, '../../hooks/commit-gate.cjs');
++const { HARD_BLOCK_LINE_THRESHOLD: THRESHOLD } = require(COMMIT_GATE_PATH);
++if (!Number.isSafeInteger(THRESHOLD) || THRESHOLD <= 0) {
++  throw new Error(`commit-gate.cjs must export a positive HARD_BLOCK_LINE_THRESHOLD; got ${THRESHOLD}`);
++}
++
++// Comfortably over the threshold; HALF is half of it, so two halves are too.
++const OVER_THRESHOLD = THRESHOLD + 10;
++const HALF = Math.ceil(OVER_THRESHOLD / 2);
++
++// Fix-round fixtures: a seed file of SEED_LINES whose first REVIEWED_LINES
++// are rewritten for review. Each rewritten line is one deletion plus one
++// insertion, so the reviewed diff (2 * REVIEWED_LINES) exceeds the threshold,
++// and the seed keeps unreviewed lines after the rewritten region.
++const REVIEWED_LINES = Math.ceil(THRESHOLD / 2) + 5;
++const SEED_LINES = REVIEWED_LINES * 2;
++
++// The git-process weight for one commit-gate run's spawn budget
++// (hook-spawn.cjs spawnBudgetMs). Measured 12-65 git processes per run across
++// the gate suites; the fix-round push path is the heaviest (65).
++const COMMIT_GATE_GIT_PROCESSES = 70;
++const GATE_SPAWN_WEIGHT = Object.freeze({ gitProcesses: COMMIT_GATE_GIT_PROCESSES });
++
++// The deny text for an over-threshold payload with no review evidence. Use
++// NO_REVIEW_REASON when any line count is acceptable, and noReviewReason(n)
++// when the case knows the exact count and the count is part of what it checks.
++const NO_REVIEW_REASON = new RegExp(`\\d+ lines changed \\(threshold: ${THRESHOLD}\\)\\. ` +
++  'No recent cross-review found in \\.planning/research/');
++
++function noReviewReason(lines) {
++  return new RegExp(`\\b${lines} lines changed \\(threshold: ${THRESHOLD}\\)\\. No recent cross-review found`);
++}
++
++module.exports = {
++  COMMIT_GATE_PATH, THRESHOLD, OVER_THRESHOLD, HALF, REVIEWED_LINES, SEED_LINES,
++  COMMIT_GATE_GIT_PROCESSES, GATE_SPAWN_WEIGHT, NO_REVIEW_REASON, noReviewReason,
++};
+diff --git a/get-shit-done/tests/lib/hermetic-hook-env.cjs b/get-shit-done/tests/lib/hermetic-hook-env.cjs
+new file mode 100644
+index 0000000..920d3cc
+--- /dev/null
++++ b/get-shit-done/tests/lib/hermetic-hook-env.cjs
+@@ -0,0 +1,49 @@
++'use strict';
++
++// One sandboxed environment for GSD hooks in tests, and for every git call a
++// suite makes (so fixture git and the hook read the same config): HOME, USERPROFILE,
++// GSD_HOME, GSD_STATE_HOME and the review-history search path all point under
++// `root`, and every other inherited GSD_* variable is dropped, so neither the
++// developer's live ~/.gsd, ~/.gsd-state (review history, review receipts) nor a
++// GSD_* setting in their shell (e.g. GSD_COMMIT_GATE_MANIFEST_CHECK) can decide
++// a test. A case that needs a GSD_* value passes it through `overrides`.
++
++const fs = require('node:fs');
++const path = require('node:path');
++
++const prepared = new Set();
++
++function hermeticHookEnv(root, overrides = {}) {
++  const home = path.join(root, 'home');
++  const gsdHome = path.join(root, 'gsd-home');
++  const stateHome = path.join(root, 'state-home');
++  if (!prepared.has(root)) {
++    for (const dir of [
++      path.join(home, '.gsd', 'review-history'),
++      path.join(home, '.gsd-state', 'review-history'),
++      path.join(gsdHome, 'review-history'),
++      path.join(stateHome, 'review-history'),
++    ]) {
++      fs.mkdirSync(dir, { recursive: true });
++    }
++    prepared.add(root);
++  }
++  // GSD_* would change gate behaviour; GIT_* (GIT_DIR, GIT_INDEX_FILE, ... as
++  // exported when the suite runs inside a git hook) would point fixture git
++  // and the gate at the outer repository instead of the temp one.
++  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => {
++    const upper = key.toUpperCase();
++    return !upper.startsWith('GSD_') && !upper.startsWith('GIT_');
++  }));
++  return {
++    ...inherited,
++    HOME: home,
++    USERPROFILE: home,
++    GSD_HOME: gsdHome,
++    GSD_STATE_HOME: stateHome,
++    GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
++    ...overrides,
++  };
++}
++
++module.exports = { hermeticHookEnv };
+diff --git a/get-shit-done/tests/lib/hook-spawn.cjs b/get-shit-done/tests/lib/hook-spawn.cjs
+index 80578f5..4b4bade 100644
+--- a/get-shit-done/tests/lib/hook-spawn.cjs
++++ b/get-shit-done/tests/lib/hook-spawn.cjs
+@@ -5,6 +5,7 @@ const { performance } = require('node:perf_hooks');
+ const {
+   spawn_floor_ms: HOOK_SPAWN_FLOOR_MS,
+   spawn_factor: HOOK_SPAWN_FACTOR,
++  spawn_git_factor: HOOK_SPAWN_GIT_FACTOR,
+   spawn_ceiling_ms: HOOK_SPAWN_CEILING_MS,
+ } = require('../../config/defaults.json').test_hooks;
+ 
+@@ -21,7 +22,54 @@ function diagnostic() {
+   return `calibration=${Number(calibration.measured.toFixed(3))} budget=${calibration.budget}`;
+ }
+ 
+-function spawnBudgetMs() {
++// One `git --version` spawn, measured once and only when a caller declares a
++// git-process weight. Failures are cached and rethrown, never retried.
++let gitCalibration;
++function gitSpawnMs() {
++  if (!gitCalibration) {
++    gitCalibration = {};
++    try {
++      const start = performance.now();
++      const result = spawnSync('git', ['--version'], {
++        encoding: 'utf8', windowsHide: true, timeout: HOOK_SPAWN_CEILING_MS,
++      });
++      const measured = performance.now() - start;
++      if (result.error || result.status !== 0) {
++        throw result.error || Object.assign(new Error(
++          `git calibration exited with status=${result.status}: ${result.stderr}`), { status: result.status });
++      }
++      gitCalibration.measured = measured;
++    } catch (error) {
++      gitCalibration.error = error;
++    }
++  }
++  if (gitCalibration.error) throw gitCalibration.error;
++  return gitCalibration.measured;
++}
++
++// The spawn budget for one hook run. A hook that runs many git processes (the
++// commit gate runs 12-65 per call) declares that weight, so the budget scales
++// with its real workload instead of a single node spawn:
++//   clamp(floor, factor * node spawn + git_factor * gitProcesses * git spawn, ceiling).
++// spawn_git_factor is the load headroom per git spawn; it is separate from the
++// node factor so a heavy hook's budget tracks its workload instead of
++// saturating the ceiling. The GSD_HOOK_SPAWN_BUDGET_MS override still wins.
++function spawnBudgetMs({ gitProcesses = 0 } = {}) {
++  if (!Number.isSafeInteger(gitProcesses) || gitProcesses < 0) {
++    throw new Error(`[hook-spawn] gitProcesses must be a non-negative safe integer; got ${gitProcesses}`);
++  }
++  const base = unweightedBudgetMs();
++  if (process.env.GSD_HOOK_SPAWN_BUDGET_MS !== undefined || gitProcesses === 0) return base;
++  positiveInteger(HOOK_SPAWN_GIT_FACTOR, 'test_hooks.spawn_git_factor');
++  return positiveInteger(Math.ceil(Math.min(
++    HOOK_SPAWN_CEILING_MS,
++    Math.max(HOOK_SPAWN_FLOOR_MS,
++      HOOK_SPAWN_FACTOR * calibration.measured
++        + HOOK_SPAWN_GIT_FACTOR * gitProcesses * gitSpawnMs()),
++  )), 'derived weighted spawn budget');
++}
++
++function unweightedBudgetMs() {
+   if (!calibration) {
+     // Cache failures too: another caller must never retry a failed calibration.
+     calibration = {};
+@@ -65,8 +113,8 @@ function spawnBudgetMs() {
+ 
+ // execFileSync semantics: return stdout; throw on timeout, spawn error, or
+ // nonzero exit, preserving the original code/status/stdout/stderr diagnostics.
+-function runHookProcess(args, options = {}) {
+-  const timeout = spawnBudgetMs();
++function runHookProcess(args, options = {}, weight = {}) {
++  const timeout = spawnBudgetMs(weight);
+   try {
+     return execFileSync(process.execPath, args, {
+       windowsHide: true, ...options, timeout,
+@@ -76,7 +124,12 @@ function runHookProcess(args, options = {}) {
+       error.flakeRerun = true;
+       error.message += ` [hook-spawn] ETIMEDOUT budget=${timeout}`;
+     }
+-    error.message += ` [hook-spawn] ${diagnostic()}`;
++    // diagnostic() reports the unweighted node calibration; a weighted run
++    // also names its weight and the git calibration its budget came from.
++    const weighted = weight.gitProcesses && gitCalibration && gitCalibration.measured !== undefined
++      ? ` gitProcesses=${weight.gitProcesses} git_calibration=${Number(gitCalibration.measured.toFixed(3))}`
++      : '';
++    error.message += ` [hook-spawn] ${diagnostic()}${weighted}`;
+     throw error;
+   }
+ }
+diff --git a/get-shit-done/tests/test_commit_gate.cjs b/get-shit-done/tests/test_commit_gate.cjs
+index 517ae69..33ce0f3 100644
+--- a/get-shit-done/tests/test_commit_gate.cjs
++++ b/get-shit-done/tests/test_commit_gate.cjs
+@@ -16,24 +16,14 @@ const { after, describe, it } = require('node:test');
+ 
+ const HOOK_PATH = path.resolve(__dirname, '../hooks/commit-gate.cjs');
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
++const { OVER_THRESHOLD, GATE_SPAWN_WEIGHT } = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
+ 
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-stale-'));
+ // The machine-global review-history stores are default evidence roots; point
+ // HOME at an empty sandbox so the suite measures only the evidence it plants.
+-const homeDir = path.join(tmpDir, 'home');
+-const gsdHome = path.join(tmpDir, 'gsd-home');
+-const stateHome = path.join(tmpDir, 'state-home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(gsdHome, 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
+-const HOOK_ENV = {
+-  USERPROFILE: homeDir,
+-  HOME: homeDir,
+-  GSD_HOME: gsdHome,
+-  GSD_STATE_HOME: stateHome,
+-  GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-};
++const HOOK_ENV = hermeticHookEnv(tmpDir);
++const stateHome = HOOK_ENV.GSD_STATE_HOME;
+ 
+ after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+ 
+@@ -41,7 +31,7 @@ function git(repo, args, options = {}) {
+   return execFileSync('git', args, {
+     cwd: repo,
+     encoding: options.encoding === null ? null : 'utf8',
+-    env: { ...process.env, ...HOOK_ENV },
++    env: HOOK_ENV,
+   });
+ }
+ 
+@@ -128,8 +118,8 @@ function runHook(command, opts = {}) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: opts.cwd || process.cwd(),
+-    env: { ...process.env, ...HOOK_ENV, ...(opts.env || {}) },
+-  });
++    env: { ...HOOK_ENV, ...(opts.env || {}) },
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()).hookSpecificOutput : null;
+ }
+ 
+@@ -145,9 +135,9 @@ function allowContext(result) {
+   return result.additionalContext;
+ }
+ 
+-// Stage a payload that the gate measures (>= 20 lines) and return its identity.
++// Stage a payload over the gate threshold and return its identity.
+ function stageGatedPayload(repo, prefix = 'current') {
+-  writeLines(repo, 'current.txt', 40, prefix);
++  writeLines(repo, 'current.txt', OVER_THRESHOLD, prefix);
+   git(repo, ['add', '--', 'current.txt']);
+   return stagedPatchSha256(repo);
+ }
+@@ -155,7 +145,7 @@ function stageGatedPayload(repo, prefix = 'current') {
+ describe('commit-gate quorum enforcement', () => {
+   it('denies a GSD-only payload when its matching review quorum is unmet', () => {
+     const repo = initRepo('gsd-only-quorum-unmet');
+-    writeLines(repo, 'get-shit-done/payload.cjs', 220, 'current');
++    writeLines(repo, 'get-shit-done/payload.cjs', OVER_THRESHOLD, 'current');
+     git(repo, ['add', '--', 'get-shit-done/payload.cjs']);
+     const manifest = plantManifest(repo, 'cross-review-quorum-unmet', {
+       quorum: { met: false },
+@@ -171,7 +161,7 @@ describe('commit-gate quorum enforcement', () => {
+ 
+   it('denies a hook-source payload when its matching review quorum is unmet', () => {
+     const repo = initRepo('hook-source-quorum-unmet');
+-    writeLines(repo, 'get-shit-done/hooks/payload.cjs', 220, 'current');
++    writeLines(repo, 'get-shit-done/hooks/payload.cjs', OVER_THRESHOLD, 'current');
+     git(repo, ['add', '--', 'get-shit-done/hooks/payload.cjs']);
+     plantManifest(repo, 'cross-review-hook-source-quorum-unmet', {
+       quorum: { met: false },
+@@ -240,14 +230,15 @@ describe('commit-gate stale review artifacts (#1699)', () => {
+     const manifestPath = plantManifest(repo, 'cross-review-fresh-mismatch', {
+       staged_patch_sha256: reviewedHash,
+     });
+-    const currentHash = stageGatedPayload(repo, 'rewritten');
++    stageGatedPayload(repo, 'rewritten');
+ 
+     const reason = denyReason(runHook('git commit -m "gated change"', { cwd: repo }));
+ 
+-    assert.match(reason, /review evidence mismatch/i);
++    // 02258b4: a manifest bound to another change is skipped, not blamed as
++    // the deny reason, but the deny still names it (42c1056).
++    assert.match(reason, /Review evidence: none found/);
++    assert.match(reason, /1 review artifact bound to a different change/);
+     assert.match(reason, new RegExp(path.basename(manifestPath)));
+-    assert.match(reason, new RegExp(reviewedHash));
+-    assert.match(reason, new RegExp(currentHash));
+   });
+ 
+   it('skips an uncommitted status file whose review output was deleted', () => {
+diff --git a/get-shit-done/tests/test_commit_gate_binding.cjs b/get-shit-done/tests/test_commit_gate_binding.cjs
+index 286ac4f..6b1fa74 100644
+--- a/get-shit-done/tests/test_commit_gate_binding.cjs
++++ b/get-shit-done/tests/test_commit_gate_binding.cjs
+@@ -12,29 +12,13 @@ const { after, describe, it } = require('node:test');
+ 
+ const HOOK_PATH = path.resolve(__dirname, '../hooks/commit-gate.cjs');
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
+-// Evidence is only consulted above the gate's review threshold; size every
+-// gated change from the hook's own constant so a threshold change (2520c7b
+-// raised it 20 -> 200) can't silently turn these into under-threshold passes.
+-const { HARD_BLOCK_LINE_THRESHOLD } = require(HOOK_PATH);
+-const OVER_THRESHOLD = HARD_BLOCK_LINE_THRESHOLD + 10;
++const { THRESHOLD, OVER_THRESHOLD, GATE_SPAWN_WEIGHT } = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
+ 
+ const MANIFEST_REL = 'get-shit-done/bin/ue/ue_catalog_manifest.json';
+ const FIXTURE_REL = 'get-shit-done/tests/fixtures/catalog-sources/snapshot.json';
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-binding-'));
+-const homeDir = path.join(tmpDir, 'home');
+-const gsdHome = path.join(tmpDir, 'gsd-home');
+-const stateHome = path.join(tmpDir, 'state-home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(gsdHome, 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
+-const HOOK_ENV = {
+-  USERPROFILE: homeDir,
+-  HOME: homeDir,
+-  GSD_HOME: gsdHome,
+-  GSD_STATE_HOME: stateHome,
+-  GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-};
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+ 
+@@ -42,7 +26,7 @@ function git(repo, args, options = {}) {
+   return execFileSync('git', args, {
+     cwd: repo,
+     encoding: options.encoding === null ? null : 'utf8',
+-    env: { ...process.env, ...HOOK_ENV },
++    env: HOOK_ENV,
+   });
+ }
+ 
+@@ -109,8 +93,8 @@ function runHook(command, opts = {}) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: opts.cwd || process.cwd(),
+-    env: { ...process.env, ...HOOK_ENV, ...(opts.env || {}) },
+-  });
++    env: { ...HOOK_ENV, ...(opts.env || {}) },
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()).hookSpecificOutput : null;
+ }
+ 
+@@ -196,13 +180,16 @@ describe('commit-gate review evidence binding', () => {
+     const result = runHook('git commit -m "small"', { cwd: repo });
+     assert.ok(result);
+     assert.notStrictEqual(result.permissionDecision, 'deny');
+-    assert.match(result.additionalContext, /1 line changed.*below.*threshold: 20/i);
++    assert.match(result.additionalContext,
++      new RegExp(`\\b1 line changed, below review threshold: ${THRESHOLD}\\b`, 'i'));
+     assert.match(result.additionalContext, /review evidence: not required/i);
+   });
+ 
+   it('still allows the checker-verified generated-artifact exemption', () => {
+     const repo = initRepo('generated');
+-    writeLines(repo, FIXTURE_REL, 60);
++    // Over the threshold, so the generated-artifact branch (not the size
++    // exemption) is what allows it.
++    writeLines(repo, FIXTURE_REL, OVER_THRESHOLD);
+     writeFile(repo, MANIFEST_REL, '{"actions":["a.one","a.two"],"content_hash":"z"}\n');
+     git(repo, ['add', '--', MANIFEST_REL, FIXTURE_REL]);
+ 
+@@ -212,7 +199,7 @@ describe('commit-gate review evidence binding', () => {
+     });
+     assert.ok(result);
+     assert.notStrictEqual(result.permissionDecision, 'deny', result.permissionDecisionReason);
+-    assert.match(result.additionalContext, /generated-artifact exemption/i);
++    assert.match(result.additionalContext, /lines changed under the generated-artifact exemption/i);
+     assert.match(result.additionalContext, /review evidence: not required/i);
+   });
+ 
+diff --git a/get-shit-done/tests/test_commit_gate_f06.cjs b/get-shit-done/tests/test_commit_gate_f06.cjs
+index 1932cc4..d0e0494 100644
+--- a/get-shit-done/tests/test_commit_gate_f06.cjs
++++ b/get-shit-done/tests/test_commit_gate_f06.cjs
+@@ -14,25 +14,14 @@ const {
+   _inspectRecentReview,
+ } = require(HOOK_PATH);
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
++const { OVER_THRESHOLD, GATE_SPAWN_WEIGHT } = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
+ 
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-f06-'));
+-const homeDir = path.join(tmpDir, 'home');
+-const gsdHome = path.join(tmpDir, 'gsd-home');
+-const stateHome = path.join(tmpDir, 'state-home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(gsdHome, 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
+-const HOOK_ENV = {
+-  USERPROFILE: homeDir,
+-  HOME: homeDir,
+-  GSD_HOME: gsdHome,
+-  GSD_STATE_HOME: stateHome,
+-  GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-};
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ function git(repo, args) {
+-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
++  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', env: HOOK_ENV }).trim();
+ }
+ 
+ function initRepo(name) {
+@@ -79,7 +68,7 @@ function stagedPatchSha256(repo) {
+   const patch = execFileSync('git', [
+     'diff', '--cached', '--binary', '--full-index', '--no-ext-diff', '--no-textconv', '--',
+     ':(exclude,glob).planning/**', ':(exclude,glob)**/.planning/**',
+-  ], { cwd: repo, encoding: null });
++  ], { cwd: repo, encoding: null, env: HOOK_ENV });
+   return crypto.createHash('sha256').update(patch).digest('hex');
+ }
+ 
+@@ -93,8 +82,8 @@ function runHook(command, opts = {}) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: opts.cwd || process.cwd(),
+-    env: { ...process.env, ...HOOK_ENV, ...(opts.env || {}) },
+-  });
++    env: { ...HOOK_ENV, ...(opts.env || {}) },
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()) : null;
+ }
+ 
+@@ -210,7 +199,7 @@ describe('commit-gate integration with linked worktrees', () => {
+   it('allows a large commit in a worktree when main-checkout evidence binds its patch', () => {
+     const main = initRepo('int-main');
+     const wt = addWorktree(main, 'int-wt', 'fork-branch');
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+     plantReview(main, 'cross-review-test', true, false, {
+       staged_patch_sha256: stagedPatchSha256(wt),
+@@ -241,14 +230,15 @@ describe('commit-gate integration with linked worktrees', () => {
+   }
+ 
+   function stageBigChange(wt) {
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+   }
+ 
+   function assertAllowedWithReview(ctx) {
+     assert.strictEqual(ctx.permissionDecision, undefined,
+       `expected allow, got: ${ctx.permissionDecisionReason || JSON.stringify(ctx)}`);
+-    assert.match(ctx.additionalContext || '', /40 lines changed\. Review evidence matched/,
++    assert.match(ctx.additionalContext || '',
++      new RegExp(`\\b${OVER_THRESHOLD} lines changed\\. Review evidence matched`),
+       'should report the measured worktree payload and worktree-local evidence');
+   }
+ 
+@@ -344,7 +334,7 @@ describe('commit-gate integration with linked worktrees', () => {
+   it('blocks a large commit in a worktree when no review exists', () => {
+     const main = initRepo('int-main-nr');
+     const wt = addWorktree(main, 'int-wt-nr', 'fork-no-review');
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+     const result = runHook('git commit -m "big fork no review"', { cwd: wt });
+     assert.ok(result && result.hookSpecificOutput);
+@@ -371,7 +361,7 @@ describe('commit-gate integration with linked worktrees', () => {
+       path.join(reviewDir, 'gsd-ar-opus5-r1-cross-review.md'),
+       '# Review\n');
+     const wt = addWorktree(main, 'int-wt-qu', 'fork-quorum-unmet');
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+     const result = runHook('git commit -m "quorum unmet"', { cwd: wt });
+     assert.ok(result && result.hookSpecificOutput);
+@@ -400,7 +390,7 @@ describe('commit-gate integration with linked worktrees', () => {
+     const main = initRepo('legacy-only-deny');
+     plantReview(main, 'cross-review-legacy', true, false);
+     const wt = addWorktree(main, 'legacy-only-deny-wt', 'legacy-only-deny-branch');
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+     const ctx = runHook('git commit -m "legacy evidence only"', { cwd: wt }).hookSpecificOutput;
+     assert.strictEqual(ctx.permissionDecision, 'deny');
+@@ -415,7 +405,7 @@ describe('commit-gate integration with linked worktrees', () => {
+     const main = initRepo('legacy-plus-bound');
+     plantReview(main, 'cross-review-aaa-legacy', true, false);
+     const wt = addWorktree(main, 'legacy-plus-bound-wt', 'legacy-plus-bound-branch');
+-    writeLines(wt, 'big.txt', 40);
++    writeLines(wt, 'big.txt', OVER_THRESHOLD);
+     git(wt, ['add', '--', 'big.txt']);
+     plantReview(main, 'cross-review-zzz-current', true, false, {
+       staged_patch_sha256: stagedPatchSha256(wt),
+diff --git a/get-shit-done/tests/test_commit_gate_fix_round.cjs b/get-shit-done/tests/test_commit_gate_fix_round.cjs
+index 89ff9df..f598520 100644
+--- a/get-shit-done/tests/test_commit_gate_fix_round.cjs
++++ b/get-shit-done/tests/test_commit_gate_fix_round.cjs
+@@ -10,21 +10,10 @@ const { after, describe, it } = require('node:test');
+ 
+ const HOOK_PATH = path.resolve(__dirname, '../hooks/commit-gate.cjs');
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
++const { REVIEWED_LINES, SEED_LINES, GATE_SPAWN_WEIGHT } = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-fix-round-'));
+-const homeDir = path.join(tmpDir, 'home');
+-const gsdHome = path.join(tmpDir, 'gsd-home');
+-const stateHome = path.join(tmpDir, 'state-home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(gsdHome, 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
+-const HOOK_ENV = {
+-  USERPROFILE: homeDir,
+-  HOME: homeDir,
+-  GSD_HOME: gsdHome,
+-  GSD_STATE_HOME: stateHome,
+-  GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-};
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+ 
+@@ -32,7 +21,7 @@ function git(repo, args, options = {}) {
+   return execFileSync('git', args, {
+     cwd: repo,
+     encoding: options.encoding === null ? null : 'utf8',
+-    env: { ...process.env, ...HOOK_ENV },
++    env: HOOK_ENV,
+   });
+ }
+ 
+@@ -49,7 +38,7 @@ function initRepo(name) {
+   git(repo, ['config', 'user.name', 'Test']);
+   git(repo, ['config', 'core.autocrlf', 'false']);
+   writeFile(repo, 'src/app.js',
+-    Array.from({ length: 50 }, (_, index) => `const value${index + 1} = ${index + 1};`).join('\n') + '\n');
++    Array.from({ length: SEED_LINES }, (_, index) => `const value${index + 1} = ${index + 1};`).join('\n') + '\n');
+   git(repo, ['add', '--', '.']);
+   git(repo, ['commit', '--no-verify', '--quiet', '-m', 'seed']);
+   return repo;
+@@ -65,8 +54,8 @@ function stagedPatchSha256(repo) {
+ 
+ function stageReviewedDiff(repo) {
+   const lines = fs.readFileSync(path.join(repo, 'src/app.js'), 'utf8').trimEnd().split('\n');
+-  for (let index = 0; index < 25; index += 1) {
+-    lines[index] = `const value${index + 1} = ${index + 101};`;
++  for (let index = 0; index < REVIEWED_LINES; index += 1) {
++    lines[index] = `const value${index + 1} = ${index + 1001};`;
+   }
+   writeFile(repo, 'src/app.js', `${lines.join('\n')}\n`);
+   git(repo, ['add', '--', 'src/app.js']);
+@@ -118,8 +107,8 @@ function runHook(repo, message) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: repo,
+-    env: { ...process.env, ...HOOK_ENV },
+-  });
++    env: HOOK_ENV,
++  }, GATE_SPAWN_WEIGHT);
+   return JSON.parse(stdout.trim()).hookSpecificOutput;
+ }
+ 
+diff --git a/get-shit-done/tests/test_commit_gate_manifest.cjs b/get-shit-done/tests/test_commit_gate_manifest.cjs
+index 63f972d..1403be4 100644
+--- a/get-shit-done/tests/test_commit_gate_manifest.cjs
++++ b/get-shit-done/tests/test_commit_gate_manifest.cjs
+@@ -14,19 +14,17 @@ const { describe, it } = require('node:test');
+ 
+ const HOOK_PATH = path.resolve(__dirname, '../hooks/commit-gate.cjs');
+ const { _generatedArtifactPaths, _manifestCheckCommand } = require(HOOK_PATH);
++const { OVER_THRESHOLD, GATE_SPAWN_WEIGHT } = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
+ 
+ const MANIFEST_REL = 'get-shit-done/bin/ue/ue_catalog_manifest.json';
+ const FIXTURE_REL = 'get-shit-done/tests/fixtures/catalog-sources/snapshot.json';
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-manifest-'));
+-const homeDir = fs.mkdtempSync(path.join(tmpDir, 'home-'));
+-const stateHome = fs.mkdtempSync(path.join(tmpDir, 'state-'));
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(stateHome, 'review-history'), { recursive: true });
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ function git(repo, args) {
+-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
++  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', env: HOOK_ENV }).trim();
+ }
+ 
+ function initRepo(name) {
+@@ -64,20 +62,12 @@ function runHook(command, opts = {}) {
+     tool_input: { command },
+     ...(opts.payloadCwd ? { cwd: opts.payloadCwd } : {}),
+   });
+-  const env = {
+-    ...process.env,
+-    USERPROFILE: homeDir,
+-    HOME: homeDir,
+-    GSD_STATE_HOME: stateHome,
+-    GSD_REVIEW_HISTORY_PATHS: path.join(stateHome, 'review-history'),
+-    ...(opts.env || {}),
+-  };
+-  if (!opts.env || !('GSD_COMMIT_GATE_MANIFEST_CHECK' in opts.env)) {
+-    delete env.GSD_COMMIT_GATE_MANIFEST_CHECK;
+-  }
++  // hermeticHookEnv already drops inherited GSD_* (e.g. a developer's
++  // GSD_COMMIT_GATE_MANIFEST_CHECK); a case opts in through opts.env.
++  const env = { ...HOOK_ENV, ...(opts.env || {}) };
+   const stdout = runHookProcess([HOOK_PATH], {
+     input: payload, encoding: 'utf8', cwd: opts.cwd || process.cwd(), env,
+-  });
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()) : null;
+ }
+ 
+@@ -151,7 +141,7 @@ describe('commit-gate manifest check', () => {
+ 
+   it('exempts a checker-verified generated-only payload from the review requirement', () => {
+     const repo = initRepo('regen-large');
+-    writeLines(repo, FIXTURE_REL, 60);
++    writeLines(repo, FIXTURE_REL, OVER_THRESHOLD);
+     writeFile(repo, MANIFEST_REL, '{"actions": ["a.one", "a.two"], "content_hash": "z"}\n');
+     git(repo, ['add', '--', MANIFEST_REL, FIXTURE_REL]);
+     const out = runHook('git commit -m "regen large"', {
+@@ -161,12 +151,12 @@ describe('commit-gate manifest check', () => {
+     const d = decision(out);
+     assert.ok(d, 'hook should emit output');
+     assert.notStrictEqual(d.permissionDecision, 'deny', d.permissionDecisionReason);
+-    assert.match(String(d.additionalContext), /generated-artifact exemption/i);
++    assert.match(String(d.additionalContext), /lines changed under the generated-artifact exemption/i);
+   });
+ 
+   it('does not exempt a mixed payload: generated plus code still needs review evidence', () => {
+     const repo = initRepo('mixed');
+-    writeLines(repo, FIXTURE_REL, 60);
++    writeLines(repo, FIXTURE_REL, OVER_THRESHOLD);
+     writeLines(repo, 'get-shit-done/bin/ue/ue_action.py', 30);
+     git(repo, ['add', '--', '.']);
+     const out = runHook('git commit -m "mixed"', {
+diff --git a/get-shit-done/tests/test_commit_gate_push_range.cjs b/get-shit-done/tests/test_commit_gate_push_range.cjs
+index f0f7888..cda5730 100644
+--- a/get-shit-done/tests/test_commit_gate_push_range.cjs
++++ b/get-shit-done/tests/test_commit_gate_push_range.cjs
+@@ -18,20 +18,23 @@ const { describe, it } = require('node:test');
+ const HOOK_PATH = path.resolve(__dirname, '../hooks/commit-gate.cjs');
+ const { runHookProcess } = require('./lib/hook-spawn.cjs');
+ const { _patchSha256 } = require(HOOK_PATH);
++const {
++  THRESHOLD, OVER_THRESHOLD: OVER, NO_REVIEW_REASON, REVIEWED_LINES, SEED_LINES, GATE_SPAWN_WEIGHT,
++} = require('./lib/commit-gate-sizes.cjs');
++const { hermeticHookEnv } = require('./lib/hermetic-hook-env.cjs');
++// Three of these are each under the threshold but together exceed it.
++const SMALL = Math.floor(THRESHOLD / 3) + 1;
+ 
+ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cg-push-range-'));
+ // The machine-global review-history stores are default evidence roots; point
+ // HOME at an empty sandbox so the suite measures only the evidence it plants.
+-const homeDir = path.join(tmpDir, 'home');
+-fs.mkdirSync(path.join(homeDir, '.gsd', 'review-history'), { recursive: true });
+-fs.mkdirSync(path.join(homeDir, '.gsd-state', 'review-history'), { recursive: true });
+-const HOOK_ENV = { USERPROFILE: homeDir, HOME: homeDir };
++const HOOK_ENV = hermeticHookEnv(tmpDir);
+ 
+ function git(repo, args, options = {}) {
+   return execFileSync('git', args, {
+     cwd: repo,
+     encoding: options.encoding === null ? null : 'utf8',
+-    env: { ...process.env, ...HOOK_ENV },
++    env: HOOK_ENV,
+   });
+ }
+ 
+@@ -92,7 +95,7 @@ function plantManifest(repo, name, extra = {}) {
+ // The exact hash commit-gate.cjs computes for a single commit's own patch
+ // (candidate.git.subcommand !== "commit" branch: `_patchBytes(cwd, [sha^..sha])`).
+ function commitPatchSha256(repo, sha) {
+-  return _patchSha256(repo, [`${sha}^..${sha}`]);
++  return _patchSha256(repo, [`${sha}^..${sha}`], [], HOOK_ENV);
+ }
+ 
+ function runHook(command, opts = {}) {
+@@ -105,8 +108,8 @@ function runHook(command, opts = {}) {
+     input: payload,
+     encoding: 'utf8',
+     cwd: opts.cwd || process.cwd(),
+-    env: { ...process.env, ...HOOK_ENV, ...(opts.env || {}) },
+-  });
++    env: { ...HOOK_ENV, ...(opts.env || {}) },
++  }, GATE_SPAWN_WEIGHT);
+   return stdout.trim() ? JSON.parse(stdout.trim()).hookSpecificOutput : null;
+ }
+ 
+@@ -122,39 +125,37 @@ function allowContext(result) {
+   return result.additionalContext;
+ }
+ 
+-const NO_REVIEW_REASON = /\d+ lines changed \(threshold: 20\)\. No recent cross-review found in \.planning\/research\//;
+-
+ describe('commit-gate push-range per-commit evidence', () => {
+-  it('exempts a push whose every commit is individually under the 20-line threshold', () => {
+-    // Aggregate exceeds the threshold (3 x 7 = 21 lines) so the top-level
++  it('exempts a push whose every commit is individually under the review threshold', () => {
++    // Aggregate exceeds the threshold (3 x SMALL lines) so the top-level
+     // exemption cannot fire; only the per-commit under-threshold check can.
+     const repo = initRepoWithRemote('under-threshold-range');
+-    commitLines(repo, 'a.js', 7, 'small a');
+-    commitLines(repo, 'b.js', 7, 'small b');
+-    commitLines(repo, 'c.js', 7, 'small c');
++    commitLines(repo, 'a.js', SMALL, 'small a');
++    commitLines(repo, 'b.js', SMALL, 'small b');
++    commitLines(repo, 'c.js', SMALL, 'small c');
+ 
+     const ctx = allowContext(runHook('git push', { cwd: repo }));
+     assert.match(ctx, /gated push \(each commit individually gated/);
+-    assert.match(ctx, /7 lines \(under threshold\)/);
++    assert.match(ctx, new RegExp(`\\b${SMALL} lines \\(under threshold\\)`));
+   });
+ 
+   it('allows an over-threshold commit in the push range that carries its own review evidence', () => {
+     const repo = initRepoWithRemote('individually-reviewed-range');
+-    const sha = commitLines(repo, 'large.js', 40, 'large reviewed change');
++    const sha = commitLines(repo, 'large.js', OVER, 'large reviewed change');
+     plantManifest(repo, 'per-commit-review', {
+       staged_patch_sha256: commitPatchSha256(repo, sha),
+     });
+ 
+     const ctx = allowContext(runHook('git push', { cwd: repo }));
+     assert.match(ctx, /gated push \(each commit individually gated/);
+-    assert.match(ctx, /40 lines \(individually reviewed\)/);
++    assert.match(ctx, new RegExp(`\\b${OVER} lines \\(individually reviewed\\)`));
+   });
+ 
+   it('exempts a merge-only push (I-23)', () => {
+     const repo = initRepoWithRemote('merge-only-push');
+     const baseBranch = git(repo, ['branch', '--show-current']).trim();
+     git(repo, ['checkout', '--quiet', '-b', 'feature']);
+-    commitLines(repo, 'feature.js', 40, 'feature work');
++    commitLines(repo, 'feature.js', OVER, 'feature work');
+     git(repo, ['checkout', '--quiet', baseBranch]);
+     git(repo, ['merge', '--no-ff', '--no-edit', '--quiet', 'feature']);
+ 
+@@ -164,22 +165,22 @@ describe('commit-gate push-range per-commit evidence', () => {
+ 
+   it('exempts a mixed push range: one reviewed commit and one under-threshold commit', () => {
+     const repo = initRepoWithRemote('mixed-range');
+-    commitLines(repo, 'small.js', 7, 'small change');
+-    const sha = commitLines(repo, 'large.js', 33, 'large reviewed change');
++    commitLines(repo, 'small.js', SMALL, 'small change');
++    const sha = commitLines(repo, 'large.js', OVER, 'large reviewed change');
+     plantManifest(repo, 'mixed-review', {
+       staged_patch_sha256: commitPatchSha256(repo, sha),
+     });
+ 
+     const ctx = allowContext(runHook('git push', { cwd: repo }));
+     assert.match(ctx, /gated push \(each commit individually gated/);
+-    assert.match(ctx, /7 lines \(under threshold\)/);
+-    assert.match(ctx, /33 lines \(individually reviewed\)/);
++    assert.match(ctx, new RegExp(`\\b${SMALL} lines \\(under threshold\\)`));
++    assert.match(ctx, new RegExp(`\\b${OVER} lines \\(individually reviewed\\)`));
+   });
+ 
+   it('blocks a push range with no per-commit or aggregate evidence', () => {
+     const repo = initRepoWithRemote('no-evidence-range');
+-    commitLines(repo, 'first.js', 25, 'first unreviewed change');
+-    commitLines(repo, 'second.js', 25, 'second unreviewed change');
++    commitLines(repo, 'first.js', OVER, 'first unreviewed change');
++    commitLines(repo, 'second.js', OVER, 'second unreviewed change');
+ 
+     const reason = denyReason(runHook('git push', { cwd: repo }));
+     assert.match(reason, NO_REVIEW_REASON);
+@@ -199,7 +200,7 @@ function stagedPatchSha256(repo) {
+ function initFixRoundRepo(name) {
+   const repo = initRepoWithRemote(name);
+   writeFile(repo, 'src/app.js',
+-    Array.from({ length: 50 }, (_, i) => `const value${i + 1} = ${i + 1};`).join('\n') + '\n');
++    Array.from({ length: SEED_LINES }, (_, i) => `const value${i + 1} = ${i + 1};`).join('\n') + '\n');
+   git(repo, ['add', '--', 'src/app.js']);
+   git(repo, ['commit', '--no-verify', '--quiet', '-m', 'add src/app.js']);
+   git(repo, ['push', '--quiet', 'origin', 'HEAD']);
+@@ -208,8 +209,8 @@ function initFixRoundRepo(name) {
+ 
+ function stageReviewedDiff(repo) {
+   const lines = fs.readFileSync(path.join(repo, 'src/app.js'), 'utf8').trimEnd().split('\n');
+-  for (let i = 0; i < 25; i++) {
+-    lines[i] = `const value${i + 1} = ${i + 101};`;
++  for (let i = 0; i < REVIEWED_LINES; i++) {
++    lines[i] = `const value${i + 1} = ${i + 1001};`;
+   }
+   writeFile(repo, 'src/app.js', `${lines.join('\n')}\n`);
+   git(repo, ['add', '--', 'src/app.js']);
+@@ -269,11 +270,15 @@ describe('commit-gate push fix-round', () => {
+     stageReviewedDiff(repo);
+     plantFixRoundReview(repo, 'cross-review-push-reject', 10);
+ 
+-    // Change line 40 — well outside the 3-line window of finding at line 10
+-    changeLine(repo, 40, 'const value40 = 999;');
++    // Change a seed line the review never saw, far outside the 3-line
++    // window of the finding at line 10.
++    const outside = REVIEWED_LINES + 10;
++    changeLine(repo, outside, `const value${outside} = 999;`);
+     git(repo, ['commit', '--no-verify', '--quiet', '-m', 'unreviewed extra change']);
+ 
+     const reason = denyReason(runHook('git push', { cwd: repo }));
+-    assert.match(reason, /\d+ lines changed/);
++    assert.match(reason, /Review evidence: none found/);
++    assert.match(reason,
++      /1 review artifact bound to a different change \(gsd-ar-manifest-cross-review-push-reject\.json/);
+   });
+ });
