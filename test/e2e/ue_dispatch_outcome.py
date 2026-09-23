@@ -8,27 +8,42 @@ out-of-order execution into test violations.
 """
 import json
 import os
+import re
 import time
 
 FINAL_TIMEOUT_ERROR = "TIMEOUT: dispatch log never produced a final result"
+MAX_CONSECUTIVE_READ_ERRORS = 5
+
+
+def _as_result(candidate):
+    """The result object starting at candidate; text after it (trailing log lines) is ignored."""
+    try:
+        doc, _ = json.JSONDecoder().raw_decode(candidate)
+    except json.JSONDecodeError:
+        return None
+    return doc if isinstance(doc, dict) and "success" in doc else None
 
 
 def parse_final_result(text):
     """Return the dispatcher's final JSON result from log/tool text, or None if pending.
 
     Logs hold single-line {"status": "waiting", ...} heartbeats and plain
-    lock messages, followed by one pretty-printed result object.
+    lock messages, followed by one result object: pretty-printed with its
+    opening brace at column 0, or compact on a single line. Indented braces
+    belong to nested objects and never start a result (a half-written log
+    must not yield a nested action).
     """
     lines = (text or "").splitlines()
     for start in range(len(lines) - 1, -1, -1):
-        if lines[start].strip() != "{":
+        line = lines[start]
+        if line.rstrip() == "{":
+            result = _as_result("\n".join(lines[start:]))
+        elif line.startswith("{") and line.rstrip().endswith("}"):
+            result = _as_result(line)
+        else:
             continue
-        try:
-            doc = json.loads("\n".join(lines[start:]))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(doc, dict) and "success" in doc:
-            return doc
+        if result is not None:
+            return result
     return None
 
 
@@ -63,36 +78,60 @@ def dispatch_refs(events):
 
 
 def _read(path):
+    """(text, mtime) of the log; (None, None) while it does not exist yet. Other I/O errors raise."""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            return f.read()
-    except OSError:
-        return ""
+            return f.read(), os.fstat(f.fileno()).st_mtime
+    except FileNotFoundError:
+        return None, None
+
+
+def _tail(text, lines=3):
+    return " | ".join((text or "").strip().splitlines()[-lines:])[:300]
 
 
 def resolve_outcomes(steps, timeout_s=900, poll_s=2.0):
     """Wait for every pending dispatch log to finish.
 
-    steps: {step_id: [ref, ...]} from dispatch_refs (refs may carry finished_at).
-    Returns {step_id: [{log_path, result, error, finished_at}, ...]}.
+    steps: {step_id: [ref, ...]} from dispatch_refs.
+    Returns {step_id: [{log_path, result, error, finished_at}, ...]}. finished_at
+    is the log's final mtime, set only for dispatches whose log completed
+    (inline results never queued, so they take no part in order checks).
     """
-    outcomes = {step: [dict(ref, finished_at=ref.get("finished_at")) for ref in refs]
-                for step, refs in steps.items()}
+    outcomes = {step: [dict(ref, finished_at=None) for ref in refs] for step, refs in steps.items()}
     pending = [o for refs in outcomes.values() for o in refs
                if o["log_path"] and o["result"] is None and o["error"] is None]
+    last_text, read_errors = {}, {}
     deadline = time.monotonic() + timeout_s
     while pending:
         for o in list(pending):
-            result = parse_final_result(_read(o["log_path"]))
+            try:
+                text, mtime = _read(o["log_path"])
+            except OSError as e:
+                # The dispatcher may hold the log open mid-write; only a persistent error is final.
+                errors = read_errors.setdefault(id(o), [])
+                errors.append(e)
+                if len(errors) >= MAX_CONSECUTIVE_READ_ERRORS:
+                    o["error"] = f"READ_ERROR: {o['log_path']}: {e}"
+                    pending.remove(o)
+                continue
+            read_errors.pop(id(o), None)
+            last_text[id(o)] = text
+            result = parse_final_result(text) if text is not None else None
             if result is not None:
-                o["result"] = result
-                o["finished_at"] = os.path.getmtime(o["log_path"])
+                o["result"], o["finished_at"] = result, mtime
                 pending.remove(o)
         if not pending or time.monotonic() >= deadline:
             break
         time.sleep(poll_s)
     for o in pending:
-        o["error"] = FINAL_TIMEOUT_ERROR
+        text = last_text.get(id(o))
+        if read_errors.get(id(o)):
+            o["error"] = f"READ_ERROR: {o['log_path']}: {read_errors[id(o)][-1]}"
+        elif text is None:
+            o["error"] = f"{FINAL_TIMEOUT_ERROR} (log file never appeared: {o['log_path']})"
+        else:
+            o["error"] = f"{FINAL_TIMEOUT_ERROR}; log tail: {_tail(text)}"
     return outcomes
 
 
@@ -124,17 +163,77 @@ def outcome_violations(outcomes):
     return violations
 
 
+def count_violations(outcomes):
+    """A UE step must produce exactly one ue_dispatch outcome."""
+    if not outcomes:
+        return ["NO_OUTCOME: no ue_dispatch result to judge"]
+    if len(outcomes) > 1:
+        return [f"MULTIPLE_DISPATCH: {len(outcomes)} ue_dispatch calls"]
+    return []
+
+
 def order_violations(step_ids, outcomes):
-    """FIFO check: a step's dispatches must not finish before an earlier step's did."""
+    """FIFO check: none of a step's dispatches may finish before an earlier step's last one."""
     violations = {}
     latest, latest_step = None, None
     for step in step_ids:
         times = [o["finished_at"] for o in outcomes.get(step, []) if o.get("finished_at") is not None]
         if not times:
             continue
-        finished = max(times)
-        if latest is not None and finished < latest:
+        if latest is not None and min(times) < latest:
             violations[step] = [f"OUT_OF_ORDER: finished before earlier step '{latest_step}'"]
-        if latest is None or finished >= latest:
-            latest, latest_step = finished, step
+        if latest is None or max(times) >= latest:
+            latest, latest_step = max(times), step
     return violations
+
+
+def _norm_path(value):
+    return (value or "").replace("\\", "/").rstrip("/").casefold()
+
+
+def parse_editor_rows(out):
+    """[{pid, cmd}] from Get-CimInstance ... | ConvertTo-Json output. Raises ValueError if malformed."""
+    rows = json.loads(out) if out.strip() else []  # JSONDecodeError is a ValueError
+    rows = rows if isinstance(rows, list) else [rows]
+    if not all(isinstance(r, dict) and "ProcessId" in r for r in rows):
+        raise ValueError(f"unexpected editor listing: {out[:200]}")
+    return [{"pid": r["ProcessId"], "cmd": r.get("CommandLine")} for r in rows]
+
+
+def select_owned_editors(before_pids, procs, project_dir):
+    """PIDs of editor processes this run started: new since the snapshot and opened on project_dir.
+
+    before_pids or procs of None means the listing failed; ownership is then
+    unknown and nothing is selected. project_dir must match as a whole path
+    (D:/Trees/Game never matches D:/Trees/GameBackup).
+    """
+    project = _norm_path(project_dir)
+    if before_pids is None or procs is None or not project:
+        return []
+    owned = re.compile(r"(?:^|(?<=[\s\"'=]))" + re.escape(project) + r"(?=[/\s\"']|$)")
+    return [p["pid"] for p in procs
+            if p["pid"] not in before_pids and owned.search(_norm_path(p.get("cmd")))]
+
+
+def stop_owned_editors(before_pids, procs, project_dir, kill):
+    """Kill editors this run started via kill(pid) -> exit code. Returns report lines.
+
+    A failed kill is reported and does not stop the remaining ones.
+    """
+    if before_pids is None or procs is None:
+        return ["Editor cleanup skipped: editor listing failed, so test-owned editors are unknown"]
+    pids = select_owned_editors(before_pids, procs, project_dir)
+    if not pids:
+        return [f"No test-owned UE editor to stop ({len(procs)} live, none new on {project_dir})"]
+    msgs = []
+    for pid in pids:
+        try:
+            code = kill(pid)
+        except Exception as e:  # noqa: BLE001 - cleanup must reach every editor
+            msgs.append(f"Failed to stop test-owned UE editor PID {pid}: {e}")
+            continue
+        if code:
+            msgs.append(f"Failed to stop test-owned UE editor PID {pid}: taskkill exit {code}")
+        else:
+            msgs.append(f"Stopped test-owned UE editor PID {pid} ({project_dir})")
+    return msgs

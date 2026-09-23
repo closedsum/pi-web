@@ -57,6 +57,24 @@ class LoadTestModelTest(unittest.TestCase):
             orch.load_test_model(env={}, path=self.path)
         self.assertIn("provider, model", str(ctx.exception))
 
+    def test_whitespace_in_file_value_rejected(self):
+        self.write({"provider": "p", "model": "gpt-6-sol ", "effort": "high"})
+        with self.assertRaises(ValueError) as ctx:
+            orch.load_test_model(env={}, path=self.path)
+        self.assertIn("model", str(ctx.exception))
+
+    def test_invalid_override_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            orch.load_test_model(env={"PI_TEST_MODEL": "has space"}, path=self.path)
+        self.assertIn("after PI_TEST_* overrides", str(ctx.exception))
+
+    def test_malformed_json_raises(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        with self.assertRaises(ValueError) as ctx:
+            orch.load_test_model(env={}, path=self.path)
+        self.assertIn("cannot load test model config", str(ctx.exception))
+
     def test_repo_file_loads(self):
         cfg = orch.load_test_model(env={})
         self.assertTrue(all(isinstance(cfg[k], str) and cfg[k] for k in ("provider", "model", "effort")))

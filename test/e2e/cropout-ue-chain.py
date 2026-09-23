@@ -18,7 +18,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 orch = import_module("orchestrator-e2e")
-from ue_dispatch_outcome import dispatch_refs, order_violations, outcome_violations, resolve_outcomes
+from ue_dispatch_outcome import (count_violations, dispatch_refs, order_violations, outcome_violations,
+                                 parse_editor_rows, resolve_outcomes, stop_owned_editors)
 
 PI_WEB_URL = os.environ.get("PI_WEB_URL", "http://127.0.0.1:30141")
 TEST_CWD = os.environ.get("PI_WEB_TEST_CWD", r"D:\Trees\CropoutSampleProject")
@@ -70,44 +71,50 @@ def run_step(session_id, step, turn_timeout):
     print(f"  [{step['id']}] Sending: {step['prompt'][:70]}...")
 
     collected_events = []
-    sse_ready = threading.Event()
+    subscribed, stop = threading.Event(), threading.Event()
 
     def sse_reader():
-        sse_ready.set()
-        collected_events.extend(orch.read_sse_events(session_id, timeout_s=turn_timeout))
+        collected_events.extend(orch.read_sse_events(
+            session_id, timeout_s=turn_timeout, on_connected=subscribed.set, stop_event=stop))
+
+    def abort(violation):
+        # Stop this step's subscription so it cannot overlap the next step's.
+        stop.set()
+        reader.join(timeout=10)
+        return [violation], [], []
 
     reader = threading.Thread(target=sse_reader, daemon=True)
     reader.start()
-    sse_ready.wait(timeout=5)
-    time.sleep(0.5)
+    if not subscribed.wait(timeout=10):
+        return abort("SSE_NOT_CONNECTED: event stream did not subscribe within 10s")
 
     try:
         orch.send_prompt(session_id, step["prompt"])
     except Exception as e:
-        return [f"SEND_FAILED: {e}"], [], []
+        return abort(f"SEND_FAILED: {e}")
 
-    reader.join(timeout=turn_timeout)
-    chain = orch.extract_chain(collected_events)
-    refs = dispatch_refs(collected_events)
-    for ref in refs:
-        if ref["log_path"] is None:
-            ref["finished_at"] = time.time()  # finished inline during the turn
-
+    # read_sse_events returns at the turn's completion event or at turn_timeout.
+    reader.join(timeout=turn_timeout + 10)
+    stop.set()
     violations = []
+    if not any(orch.is_turn_complete(e) for e in collected_events):
+        violations.append(f"TURN_TIMEOUT: turn did not complete within {turn_timeout}s")
+    chain = orch.extract_chain(list(collected_events))
+    refs = dispatch_refs(collected_events)
+
     has_text = any(e["type"] == "text" for e in chain)
     tool_calls = [e for e in chain if e["type"] == "tool_call"]
-    dispatches = [e for e in tool_calls if e.get("name") == "DispatchLane"]
+    lane_dispatches = [e for e in tool_calls if e.get("name") == "DispatchLane"]
     ue_dispatches = [e for e in tool_calls if e.get("name") == "ue_dispatch"]
-    status_checks = [e for e in tool_calls if e.get("name") in ("CheckDispatchStatus", "CheckLaneStatus")]
 
     if not has_text:
         violations.append("NO_TEXT: model returned no text")
 
-    if step["expect_tool"] == "ue_dispatch" and len(ue_dispatches) == 0 and len(dispatches) == 0:
-        violations.append(f"NO_DISPATCH: expected ue_dispatch or DispatchLane but got none")
+    if step["expect_tool"] == "ue_dispatch" and not ue_dispatches:
+        violations.append("NO_DISPATCH: expected ue_dispatch but got none")
 
-    if len(dispatches) > 1:
-        violations.append(f"DISPATCH_LOOP: {len(dispatches)} DispatchLane calls")
+    if lane_dispatches:
+        violations.append(f"WRONG_TOOL: {len(lane_dispatches)} DispatchLane call(s) for a UE operation")
 
     if not collected_events:
         violations.append("NO_EVENTS: SSE stream returned nothing (timeout?)")
@@ -137,60 +144,75 @@ def main():
     print(f"CWD: {TEST_CWD}  Delay: {args.delay}s")
     print(f"{'='*60}\n")
 
+    if not os.path.isdir(TEST_CWD):
+        print(f"TEST_CWD not found: {TEST_CWD} (set PI_WEB_TEST_CWD)")
+        sys.exit(2)
+
     orch.PI_WEB_URL = PI_WEB_URL
     orch.TEST_CWD = TEST_CWD  # create_session() reads orch.TEST_CWD, which defaults to the pi-web repo
     orch.TURN_TIMEOUT_S = args.turn_timeout
 
-    print("Creating session...")
-    session_id = orch.create_session(args.provider, args.model, args.effort)
-    print(f"Session: {session_id}\n")
+    procs_before = list_editor_processes()
+    editors_before = None if procs_before is None else {p["pid"] for p in procs_before}
+    results, session_id, passed_count, judged = [], None, 0, False
+    try:
+        print("Creating session...")
+        session_id = orch.create_session(args.provider, args.model, args.effort)
+        print(f"Session: {session_id}\n")
 
-    results = []
-    step_refs = {}
-    for i, step in enumerate(STEPS):
-        if i > 0:
-            print(f"  (waiting {args.delay}s...)")
-            time.sleep(args.delay)
+        step_refs = {}
+        for i, step in enumerate(STEPS):
+            if i > 0:
+                print(f"  (waiting {args.delay}s...)")
+                time.sleep(args.delay)
 
-        violations, chain, refs = run_step(session_id, step, args.turn_timeout)
-        step_refs[step["id"]] = refs
-        print(f"  [{'TURN OK' if not violations else 'TURN FAIL'}] {step['id']} ({len(refs)} dispatch)")
-        results.append({"step": step["id"], "violations": violations, "chain_length": len(chain)})
+            violations, chain, refs = run_step(session_id, step, args.turn_timeout)
+            step_refs[step["id"]] = refs
+            print(f"  [{'TURN OK' if not violations else 'TURN FAIL'}] {step['id']} ({len(refs)} dispatch)")
+            results.append({"step": step["id"], "violations": violations, "chain_length": len(chain),
+                            "dispatch_logs": [r["log_path"] for r in refs if r["log_path"]], "pass": False})
+            print()
+
+        # The turns only prove the model dispatched; the UE outcome lands in each
+        # dispatch log once the queued work actually runs.
+        pending = sum(1 for refs in step_refs.values() for r in refs if r["log_path"])
+        print(f"Waiting up to {args.dispatch_timeout}s for {pending} queued dispatch(es) to finish...")
+        outcomes = resolve_outcomes(step_refs, timeout_s=args.dispatch_timeout)
+        out_of_order = order_violations([s["id"] for s in STEPS], outcomes)
+        expect = {s["id"]: s["expect_tool"] for s in STEPS}
+        for r in results:
+            step_outcomes = outcomes[r["step"]]
+            if expect[r["step"]] == "ue_dispatch":
+                r["violations"] += count_violations(step_outcomes)
+            r["violations"] += outcome_violations(step_outcomes) + out_of_order.get(r["step"], [])
+            r["dispatch_logs"] = [o["log_path"] for o in step_outcomes if o["log_path"]]
+            r["pass"] = not r["violations"]
+            print(f"  [{'PASS' if r['pass'] else 'FAIL'}] {r['step']}")
+            for v in r["violations"]:
+                print(f"    ✗ {v}")
         print()
+        passed_count = sum(1 for r in results if r.get("pass"))
+        judged = True
+    finally:
+        total = len(STEPS)
+        try:
+            print(f"{'='*60}")
+            print(f"Results: {passed_count}/{total} steps passed")
+            failed = [s["id"] for s in STEPS if not any(r["step"] == s["id"] and r.get("pass") for r in results)]
+            if failed:
+                print(f"Failed: {', '.join(failed)}")
+            print(f"{'='*60}")
 
-    # The turns only prove the model dispatched; the UE outcome lands in each
-    # dispatch log once the queued work actually runs.
-    pending = sum(1 for refs in step_refs.values() for r in refs if r["log_path"])
-    print(f"Waiting up to {args.dispatch_timeout}s for {pending} queued dispatch(es) to finish...")
-    outcomes = resolve_outcomes(step_refs, timeout_s=args.dispatch_timeout)
-    out_of_order = order_violations([s["id"] for s in STEPS], outcomes)
-    for r in results:
-        r["violations"] += outcome_violations(outcomes[r["step"]]) + out_of_order.get(r["step"], [])
-        r["dispatch_logs"] = [o["log_path"] for o in outcomes[r["step"]] if o["log_path"]]
-        r["pass"] = not r["violations"]
-        print(f"  [{'PASS' if r['pass'] else 'FAIL'}] {r['step']}")
-        for v in r["violations"]:
-            print(f"    ✗ {v}")
-    print()
-
-    passed_count = sum(1 for r in results if r["pass"])
-    total = len(results)
-    print(f"{'='*60}")
-    print(f"Results: {passed_count}/{total} steps passed")
-    if passed_count < total:
-        failed = [r["step"] for r in results if not r["pass"]]
-        print(f"Failed: {', '.join(failed)}")
-    print(f"{'='*60}")
-
-    results_dir = os.path.join(os.path.dirname(__file__), "results",
-                               f"cropout-chain-{args.model}-{time.strftime('%Y%m%d-%H%M%S')}")
-    os.makedirs(results_dir, exist_ok=True)
-    with open(os.path.join(results_dir, "summary.json"), "w") as f:
-        json.dump({"session": session_id, "steps": results,
-                   "passed": passed_count, "total": total}, f, indent=2)
-    print(f"Results: {results_dir}")
-
-    cleanup_stale_processes()
+            results_dir = os.path.join(os.path.dirname(__file__), "results",
+                                       f"cropout-chain-{args.model}-{time.strftime('%Y%m%d-%H%M%S')}")
+            os.makedirs(results_dir, exist_ok=True)
+            with open(os.path.join(results_dir, "summary.json"), "w", encoding="utf-8") as f:
+                # complete: every step ran AND every dispatch outcome was judged.
+                json.dump({"session": session_id, "steps": results, "passed": passed_count, "total": total,
+                           "complete": judged and len(results) == total}, f, indent=2)
+            print(f"Results: {results_dir}")
+        finally:
+            cleanup_owned_editors(editors_before)
 
     if passed_count == total:
         import shutil
@@ -200,26 +222,35 @@ def main():
     sys.exit(0 if passed_count == total else 1)
 
 
-def cleanup_stale_processes():
-    """Kill any orphaned UE editor processes left by the test."""
+def list_editor_processes():
+    """[{pid, cmd}] for running UnrealEditor processes; [] off Windows; None if the listing failed."""
     import subprocess
     if sys.platform != "win32":
-        return
+        return []
+    query = ("Get-CimInstance Win32_Process -Filter \"Name='UnrealEditor.exe'\" | "
+             "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
     try:
-        result = subprocess.run(
-            ["tasklist", "/fi", "imagename eq UnrealEditor.exe", "/fo", "csv", "/nh"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.strip().split("\n"):
-            if "UnrealEditor" in line:
-                parts = line.strip('"').split('","')
-                if len(parts) >= 2:
-                    pid = parts[1].strip('"')
-                    print(f"  Cleaning up stale UE editor PID {pid}")
-                    subprocess.run(["taskkill", "/f", "/pid", pid],
-                                   capture_output=True, timeout=5)
-    except Exception as e:
-        print(f"  Cleanup warning: {e}")
+        proc = subprocess.run(["powershell", "-NoProfile", "-Command", query],
+                              capture_output=True, text=True, timeout=20)
+        if proc.returncode != 0:
+            raise OSError(f"powershell exit {proc.returncode}: {proc.stderr.strip()[:200]}")
+        return parse_editor_rows(proc.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        print(f"  Editor listing warning: {e}")
+        return None
+
+
+def cleanup_owned_editors(before_pids):
+    """Stop only editors this run started on TEST_CWD; never touch other projects' editors."""
+    import subprocess
+
+    def kill(pid):
+        # /t: the editor's child processes (shader workers) go with it.
+        return subprocess.run(["taskkill", "/f", "/t", "/pid", str(pid)],
+                              capture_output=True, timeout=10).returncode
+
+    for msg in stop_owned_editors(before_pids, list_editor_processes(), TEST_CWD, kill):
+        print(f"  {msg}")
 
 
 if __name__ == "__main__":

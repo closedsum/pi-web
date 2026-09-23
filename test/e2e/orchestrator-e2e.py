@@ -37,18 +37,26 @@ def load_test_model(env=None, path=TEST_MODEL_PATH):
             cfg = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         raise ValueError(f"cannot load test model config {path}: {e}") from e
+    _validate_test_model(cfg, path)
+    resolved = {key: env.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
+    return _validate_test_model(resolved, "test model after PI_TEST_* overrides")
+
+
+def _validate_test_model(cfg, source):
+    """Object with non-empty, whitespace-free provider/model/effort strings (mirrors _config.mjs)."""
     if not isinstance(cfg, dict):
-        raise ValueError(f"{path} must be a JSON object with provider, model, effort")
-    bad = [k for k in ("provider", "model", "effort") if not isinstance(cfg.get(k), str) or not cfg[k]]
+        raise ValueError(f"{source} must be a JSON object with provider, model, effort")
+    bad = [k for k in ("provider", "model", "effort")
+           if not isinstance(cfg.get(k), str) or not cfg[k] or any(c.isspace() for c in cfg[k])]
     if bad:
-        raise ValueError(f"{path} missing or invalid: {', '.join(bad)}")
-    return {key: env.get(f"PI_TEST_{key.upper()}") or cfg[key] for key in ("provider", "model", "effort")}
+        raise ValueError(f"{source} missing or invalid: {', '.join(bad)}")
+    return cfg
 
 
 try:
     TEST_MODEL = load_test_model()
 except ValueError as e:
-    raise SystemExit(str(e))
+    raise SystemExit(str(e)) from e
 
 # ---------------------------------------------------------------------------
 # Test scenarios — same 5 from the contract tests, plus expected verdicts
@@ -261,8 +269,13 @@ def api_post(path, body):
 
 VERBOSE_SSE = os.environ.get("PI_WEB_VERBOSE_SSE", "0") == "1"
 
-def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S):
-    """Read SSE events via raw socket, stripping chunked transfer encoding."""
+def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S, on_connected=None, stop_event=None):
+    """Read SSE events via raw socket, stripping chunked transfer encoding.
+
+    on_connected, if given, is called once the response headers arrive, i.e.
+    the event stream is subscribed and a prompt sent now will not be missed.
+    stop_event, if given, ends the read early (checked at least every 3s).
+    """
     import socket as _socket
     from urllib.parse import urlparse
 
@@ -286,7 +299,7 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S):
 
         all_bytes = b""
         header_done = False
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and not (stop_event and stop_event.is_set()):
             try:
                 chunk = sock.recv(8192)
             except _socket.timeout:
@@ -299,6 +312,8 @@ def read_sse_events(session_id, timeout_s=TURN_TIMEOUT_S):
                 if b"\r\n\r\n" in all_bytes:
                     _, all_bytes = all_bytes.split(b"\r\n\r\n", 1)
                     header_done = True
+                    if on_connected:
+                        on_connected()
                     if VERBOSE_SSE:
                         print(f"    [SSE] headers done, body starts", flush=True)
                 continue
