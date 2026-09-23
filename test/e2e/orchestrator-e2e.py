@@ -1,8 +1,8 @@
 """Live e2e tests for orchestrator behavior across models.
 
 Usage:
-    python test/e2e/orchestrator-e2e.py                              # defaults: claude/opus, max effort
-    python test/e2e/orchestrator-e2e.py --provider openai --model gpt-6-sol --effort high
+    python test/e2e/orchestrator-e2e.py                              # defaults: openai-codex/gpt-6-sol, high effort
+    python test/e2e/orchestrator-e2e.py --provider openai-codex --model gpt-6-luna --effort medium
     python test/e2e/orchestrator-e2e.py --scenario implementation-request   # run one scenario
     python test/e2e/orchestrator-e2e.py --list                       # list available scenarios
 

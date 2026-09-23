@@ -43,7 +43,11 @@ test("does not trigger for non-commit output", () => {
   assert.equal(result, undefined);
 });
 
-test("test config defaults to gpt-6-sol high", () => {
-  assert.equal(TEST_CONFIG.model, process.env.PI_TEST_MODEL || "gpt-6-sol");
-  assert.equal(TEST_CONFIG.effort, process.env.PI_TEST_EFFORT || "high");
+test("test config defaults to gpt-6-sol high", (t) => {
+  if (process.env.PI_TEST_MODEL || process.env.PI_TEST_EFFORT) {
+    t.skip("PI_TEST_MODEL/PI_TEST_EFFORT override set");
+    return;
+  }
+  assert.equal(TEST_CONFIG.model, "gpt-6-sol");
+  assert.equal(TEST_CONFIG.effort, "high");
 });

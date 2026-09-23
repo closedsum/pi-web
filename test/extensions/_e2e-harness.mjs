@@ -1,13 +1,12 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { TEST_CONFIG } from "./_config.mjs";
 
 const HOOKS_DIR = join(homedir(), "gsd-config", "get-shit-done", "hooks");
 
 export const E2E_CONFIG = {
-  model: process.env.PI_TEST_MODEL || "gpt-6-sol",
-  effort: process.env.PI_TEST_EFFORT || "high",
-  provider: process.env.PI_TEST_PROVIDER || "openai",
+  ...TEST_CONFIG,
   hooksDir: process.env.PI_TEST_HOOKS_DIR || HOOKS_DIR,
   timeout: parseInt(process.env.PI_TEST_TIMEOUT || "10000", 10),
 };
