@@ -33,6 +33,7 @@ import {
   preferPiWebSubagentExtension,
 } from "./subagent-extension";
 import { createGsdLaneExtension, ORCH_ALLOW } from "./gsd-lane-extension";
+import { createGsdExtension } from "./extensions/index";
 import {
   listSubagentProfiles,
   readSubagentRun,
@@ -2412,6 +2413,7 @@ export async function startRpcSession(
                 isBuiltInSubagentsEnabled,
               ),
               createGsdLaneExtension({ cwd: sessionCwd }),
+              createGsdExtension(),
             ],
             extensionsOverride: (base) => preferUserBashExtension(preferPiWebSubagentExtension(base)),
           },

@@ -113,10 +113,53 @@ function sanitize(text: string): string {
 }
 ```
 
+## Modular Extension Framework (`lib/extensions/`)
+
+Reusable, scope-isolated extension modules with a shared test harness. Each module is a pure function or factory — no shared mutable state between modules.
+
+| File | Purpose |
+|------|---------|
+| `_test-harness.mjs` | `createMockPi()`, `assertBlocks()`, `assertAllows()` for dry-run testing |
+| `tool-blockers.ts` | 16 `BlockRule` functions ported from Claude PreToolUse hooks |
+| `index.ts` | `createGsdExtension()` — unified `InlineExtension` composing all modules |
+
+### Tool Blockers
+
+Each rule is `(toolName, input) => BlockResult | undefined`. Rules are individually testable and composable via `evaluateBlockRules(toolName, input, rules?)`.
+
+```typescript
+import { evaluateBlockRules, ALL_RULES } from "./tool-blockers";
+const result = evaluateBlockRules("Bash", { command: "git push" });
+// result?.block === true, result?.reason === "Git push is blocked..."
+```
+
+Custom subsets: `evaluateBlockRules(name, input, [blockForkPush, blockBashPython])`.
+
+### Pi Event Mapping
+
+| Claude Hook | Pi Event | Module |
+|---|---|---|
+| `PreToolUse` block-* | `tool_call` | `tool-blockers.ts` |
+| `PreToolUse` orchestrator-allowlist | `tool_call` | `gsd-lane-extension.ts` |
+| `PostToolUse` | `tool_result` | *(future)* |
+| `UserPromptSubmit` | `input` | *(future)* |
+| `SessionStart` | `session_start` | `gsd-lane-extension.ts` |
+
+### Mid-Conversation System Messages (pi 1.0)
+
+Pi extensions can inject transcript-aware messages and swap tools mid-conversation:
+
+- `pi.sendMessage({...}, { triggerTurn: true })` — steering message visible to the model
+- `inner.setActiveToolsByName([...])` — swap active tool set mid-conversation
+- `before_agent_start` handler — override system prompt per-run with transcript access
+
 ## Existing Extensions
 
 | Extension | File | Tool(s) | Purpose |
 |-----------|------|---------|---------|
 | Bash | SDK built-in | `Bash`, `PowerShell` | Shell commands |
 | Subagent | `lib/subagent-extension.ts` | `Agent` | Delegate tasks to subagent sessions |
-| GSD Lane | `lib/gsd-lane-extension.ts` | `DispatchLane` | Dispatch to autonomous GSD lanes |
+| GSD Lane | `lib/gsd-lane-extension.ts` | `DispatchLane`, `CheckLaneStatus`, `CheckDispatchStatus` | Dispatch to autonomous GSD lanes |
+| GSD Unified | `lib/extensions/index.ts` | *(event handlers)* | Tool blockers, session lifecycle |
+| Exact Prompt | `lib/exact-system-prompt.ts` | *(event handler)* | System prompt override for chat-only/subagent |
+| MCP Policy | `lib/mcp-read-only-policy.ts` | *(event handler)* | MCP read-only filter |

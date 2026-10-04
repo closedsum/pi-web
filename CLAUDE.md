@@ -53,6 +53,9 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags; passes `key={cwd:sessionId}` to DispatchSection |
 | `components/task-panel/DispatchSection.tsx` | Lanes section — filters pre-existing terminal lanes via baseline snapshot; resets on fetch-recovery (server restart) |
 | `components/ModelSelector.tsx` | Model dropdown with per-provider color coding |
+| `lib/extensions/` | Modular pi extension framework — tool blockers, shared test harness, composable rules |
+| `lib/extensions/tool-blockers.ts` | 16 `BlockRule` pure functions ported from Claude PreToolUse hooks; `evaluateBlockRules()` |
+| `lib/extensions/_test-harness.mjs` | `createMockPi()`, `assertBlocks()`, `assertAllows()` for extension dry-run testing |
 
 ## Orchestrator Mode
 
