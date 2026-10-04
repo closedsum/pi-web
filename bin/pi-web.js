@@ -18,9 +18,10 @@ const fs = require("fs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getHelpText, parseLaunchOptions } = require("./pi-web-options");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { wireChildProcessLifecycle } = require("./process-lifecycle");
+const { getNextNodeArgs } = require("./pi-web-node-args");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { checkPortAvailable } = require("./port-check");
+const { wireChildProcessLifecycle } = require("./process-lifecycle");
+
 
 let launchOptions;
 try {
@@ -78,54 +79,48 @@ if (!loopbackHostnames.has(hostname)) {
   }
 }
 
-checkPortAvailable(Number(port), hostname).then(launch).catch((err) => {
-  fs.writeSync(process.stderr.fd, `${err.message}\n`);
-  process.exit(1);
+const nextArgs = ["start", "-p", port];
+nextArgs.push("-H", hostname);
+
+const child = spawn(process.execPath, getNextNodeArgs(nextBin, nextArgs), {
+  cwd: pkgDir,
+  stdio: ["inherit", "pipe", "inherit"],
+  env: { ...process.env, PI_WEB_HOSTNAME: hostname },
 });
+wireChildProcessLifecycle(child);
 
-function launch() {
-  const nextArgs = ["start", "-p", port, "-H", hostname];
+let browserOpened = false;
+const url = `http://${hostname}:${port}`;
 
-  const child = spawn(process.execPath, [nextBin, ...nextArgs], {
-    cwd: pkgDir,
-    stdio: ["inherit", "pipe", "inherit"],
-    env: { ...process.env, PI_WEB_HOSTNAME: hostname },
-  });
-  wireChildProcessLifecycle(child);
-
-  let browserOpened = false;
-  const url = `http://${hostname}:${port}`;
-
-  child.stdout.on("data", (chunk) => {
-    const text = chunk.toString();
-    process.stdout.write(text);
-    if (openBrowser && !browserOpened && text.includes("Ready")) {
-      browserOpened = true;
-      const isWindows = process.platform === "win32";
-      const isMac = process.platform === "darwin";
-      let opener;
-      if (isWindows) {
-        opener = spawn(process.env.ComSpec || "cmd.exe", ["/c", "start", "", url], {
-          stdio: "ignore",
-          detached: true,
-        });
-      } else if (isMac) {
-        opener = spawn("open", [url], {
-          stdio: "ignore",
-          detached: true,
-        });
-      } else {
-        opener = spawn("xdg-open", [url], {
-          stdio: "ignore",
-          detached: true,
-        });
-      }
-
-      opener.on("error", (error) => {
-        console.warn(`Could not open browser automatically: ${error.message}`);
+child.stdout.on("data", (chunk) => {
+  const text = chunk.toString();
+  process.stdout.write(text);
+  if (openBrowser && !browserOpened && text.includes("Ready")) {
+    browserOpened = true;
+    const isWindows = process.platform === "win32";
+    const isMac = process.platform === "darwin";
+    let opener;
+    if (isWindows) {
+      opener = spawn(process.env.ComSpec || "cmd.exe", ["/c", "start", "", url], {
+        stdio: "ignore",
+        detached: true,
       });
-
-      opener.unref();
+    } else if (isMac) {
+      opener = spawn("open", [url], {
+        stdio: "ignore",
+        detached: true,
+      });
+    } else {
+      opener = spawn("xdg-open", [url], {
+        stdio: "ignore",
+        detached: true,
+      });
     }
-  });
-}
+
+    opener.on("error", (error) => {
+      console.warn(`Could not open browser automatically: ${error.message}`);
+    });
+
+    opener.unref();
+  }
+});
