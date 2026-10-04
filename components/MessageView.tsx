@@ -898,7 +898,7 @@ function AssistantMessageView({
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         {message.provider && (
           <span style={{ color: getModelFamilyColor(message.model), fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", flexShrink: 0 }}>
-            {message.model}
+            {getModelDisplayName(message.provider, message.model, modelNames)}
           </span>
         )}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
