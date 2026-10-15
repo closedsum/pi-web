@@ -1,91 +1,118 @@
-# Requirements: Pi Web — Orchestration Hook Porting
+# Requirements: Pi Web — Enhanced Orchestration
 
 **Defined:** 2026-10-15
 **Core Value:** Agent sessions execute with the same safety rules and orchestration enforcement as the CLI
 
-## v1 Requirements
+## v2 Requirements
 
 Requirements for this milestone. Each maps to roadmap phases.
 
-### Foundation Infrastructure
+### PID Resilience
 
-- [ ] **INFRA-01**: State home path is resolvable from GSD_STATE_HOME env var or default ~/.gsd
-- [ ] **INFRA-02**: PID liveness can be checked cross-platform (process.kill signal-zero)
-- [ ] **INFRA-03**: Git queries (rev-parse, log) can be executed synchronously with timeout protection
-- [ ] **INFRA-04**: Shell commands can be parsed to extract named arguments (--params-file)
+- [ ] **PID-01**: Lock schema v2 writes `{pid, proc_start, boot_id, instance_nonce, heartbeat_seq, heartbeat_at, state, last_error}` atomically via `os.replace`
+- [ ] **PID-02**: Python-side `verify_identity()` helper validates PID + proc_start match before any signal
+- [ ] **PID-03**: Pre-v2 lock files report `unverified` status (backward compatibility)
+- [ ] **PID-04**: Heartbeat advances from the work loop, not a separate thread
 
-### BlockRule Context Extension
+### Lane Driver Status UI
 
-- [ ] **CTX-01**: BlockRule type accepts an optional context parameter with cwd, isSubagent, sessionId, stateHome
-- [ ] **CTX-02**: evaluateBlockRules passes context when available, undefined when not
-- [ ] **CTX-03**: Existing 21 rules continue to work unchanged (backward compatible)
+- [ ] **UI-01**: Read-only Next.js API route returns daemon snapshot DTO with `force-dynamic` + `no-store`
+- [ ] **UI-02**: Parse failures return `unknown` status, distinct from `stopped`
+- [ ] **UI-03**: React status badge uses discriminated union (`running | stopped | errored | stale | unknown`) with heartbeat age
+- [ ] **UI-04**: Client uses single-flight `setTimeout` polling (5s visible, paused hidden, backoff on errors)
 
-### Tool-Call Gates
+### Block Rule Telemetry
 
-- [ ] **GATE-01**: Probe commands (gsd_probe.py/gsd-probe) are blocked when caller is a subagent
-- [ ] **GATE-02**: TaskUpdate(completed) is blocked when fork result state file is missing or invalid
-- [ ] **GATE-03**: Integration commands (git cherry-pick, git merge, integrate) are blocked when autopilot daemon is active
-- [ ] **GATE-04**: Pipeline redispatch is blocked when prior pipeline failed and no fix commit exists in write scope
+- [ ] **TEL-01**: Per-session collector decorates rules at registration with timing and block counts
+- [ ] **TEL-02**: Only invoked rules are counted; short-circuited rules excluded
+- [ ] **TEL-03**: Snapshots written atomically and debounced; API reads them
+- [ ] **TEL-04**: Telemetry failures never change authorization decisions
+- [ ] **TEL-05**: No raw tool arguments, command strings, or absolute paths in telemetry output
 
-### Session Services
+### Async Block Rules
 
-- [ ] **SVC-01**: Lane driver daemon is checked/spawned at session start for eligible projects
-- [ ] **SVC-02**: Audit scope extension intercepts Write/Edit from audit sessions and enforces scope boundaries
+- [ ] **ASYNC-01**: `evaluateBlockRulesAsync` prefetches git facts asynchronously into frozen context, then runs rules sync
+- [ ] **ASYNC-02**: Sync `evaluateBlockRules` unchanged; throws if a rule returns a thenable
+- [ ] **ASYNC-03**: Async git queries use promisified `execFile` with AbortSignal, timeout, windowsHide, no shell
+- [ ] **ASYNC-04**: Per-rule timeout with explicit fail-closed/fail-open policy
 
 ### Testing
 
-- [ ] **TEST-01**: Each utility module has co-located unit tests with edge cases
-- [ ] **TEST-02**: Each block rule has allow/block test cases using existing test harness
-- [ ] **TEST-03**: Sync git operations complete within 50ms on representative repos
-- [ ] **TEST-04**: PID liveness checks handle ESRCH, EPERM, and stale PID scenarios
+- [ ] **TEST-01**: Each new module has co-located `.test.mjs` with edge cases
+- [ ] **TEST-02**: Lock schema v2 tested with pre-v2 lock files, stale PIDs, identity mismatch
+- [ ] **TEST-03**: Telemetry tested with concurrent sessions, snapshot isolation
 
-## v2 Requirements
+## v1 Requirements (Validated)
 
-Deferred to future milestone. Tracked but not in current roadmap.
+Completed in v1.0 Orchestration Hook Porting milestone (shipped 2026-10-15).
 
-### Enhanced Orchestration
+### Foundation Infrastructure
+- [x] **INFRA-01**: State home path resolvable from GSD_STATE_HOME or default ~/.gsd
+- [x] **INFRA-02**: PID liveness checked cross-platform (process.kill signal-zero)
+- [x] **INFRA-03**: Git queries executed synchronously with timeout protection
+- [x] **INFRA-04**: Shell commands parsed to extract named arguments
 
-- **ENH-01**: Async block rule support (non-blocking git queries for high-latency repos)
-- **ENH-02**: Block rule telemetry (count blocks per rule per session)
-- **ENH-03**: proc_start matching for PID reuse detection on all platforms
-- **ENH-04**: Real-time lane driver status in UI (running/stopped indicator)
+### BlockRule Context Extension
+- [x] **CTX-01**: BlockRule type accepts optional context parameter
+- [x] **CTX-02**: evaluateBlockRules passes context when available
+- [x] **CTX-03**: 21 existing rules backward compatible
+
+### Tool-Call Gates
+- [x] **GATE-01**: Probe commands blocked for subagents
+- [x] **GATE-02**: TaskUpdate(completed) blocked when fork result missing/invalid
+- [x] **GATE-03**: Integration commands blocked when autopilot daemon active
+- [x] **GATE-04**: Pipeline redispatch blocked without fix commit
+
+### Session Services
+- [x] **SVC-01**: Lane driver daemon checked/spawned at session start
+- [x] **SVC-02**: Audit scope extension enforces scope boundaries
+
+### Testing (v1)
+- [x] **TEST-v1-01**: Each utility module has co-located unit tests
+- [x] **TEST-v1-02**: Each block rule has allow/block test cases
+- [x] **TEST-v1-03**: Sync git operations complete within 50ms
+- [x] **TEST-v1-04**: PID liveness handles ESRCH, EPERM, stale PID scenarios
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Full shell parser | Regex on known invocation patterns is sufficient; full parser is overkill |
-| Cross-platform proc_start | signal-zero PID check is adequate for v1; proc_start is defense-in-depth |
-| Audit scope UI | Audit fixers in pi-web are future work; the extension just needs the gate |
-| Hook hot-reload | Extensions load at session start; restarting the session reloads |
+| Start/stop daemon buttons in UI | Anti-feature without auth/CSRF protection (research consensus) |
+| WebSocket/SSE for status updates | Polling is sufficient for daemon heartbeats (research consensus) |
+| OpenTelemetry SDK | Too heavy; decorator pattern with fixed-bucket histograms suffices |
+| Cross-platform Node.js PID probing | Python-first rule — Python owns process identity |
+| Async rule evaluation with concurrent execution | Sequential avoids unnecessary git subprocesses after early block |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1: Foundation Infrastructure | Pending |
-| INFRA-02 | Phase 1: Foundation Infrastructure | Pending |
-| INFRA-03 | Phase 1: Foundation Infrastructure | Pending |
-| INFRA-04 | Phase 1: Foundation Infrastructure | Pending |
-| CTX-01 | Phase 2: BlockRule Context + Simple Gates | Pending |
-| CTX-02 | Phase 2: BlockRule Context + Simple Gates | Pending |
-| CTX-03 | Phase 2: BlockRule Context + Simple Gates | Pending |
-| GATE-01 | Phase 2: BlockRule Context + Simple Gates | Pending |
-| GATE-02 | Phase 2: BlockRule Context + Simple Gates | Pending |
-| GATE-03 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
-| GATE-04 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
-| SVC-01 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
-| SVC-02 | Phase 4: Audit Scope Extension | Pending |
-| TEST-01 | Phase 1, 3 | Pending |
-| TEST-02 | Phase 2, 3 | Pending |
-| TEST-03 | Phase 1: Foundation Infrastructure | Pending |
-| TEST-04 | Phase 1: Foundation Infrastructure | Pending |
+| PID-01 | Phase 5: PID Resilience | Pending |
+| PID-02 | Phase 5: PID Resilience | Pending |
+| PID-03 | Phase 5: PID Resilience | Pending |
+| PID-04 | Phase 5: PID Resilience | Pending |
+| UI-01 | Phase 6: Lane Driver Status UI | Pending |
+| UI-02 | Phase 6: Lane Driver Status UI | Pending |
+| UI-03 | Phase 6: Lane Driver Status UI | Pending |
+| UI-04 | Phase 6: Lane Driver Status UI | Pending |
+| TEL-01 | Phase 7: Block Rule Telemetry | Pending |
+| TEL-02 | Phase 7: Block Rule Telemetry | Pending |
+| TEL-03 | Phase 7: Block Rule Telemetry | Pending |
+| TEL-04 | Phase 7: Block Rule Telemetry | Pending |
+| TEL-05 | Phase 7: Block Rule Telemetry | Pending |
+| ASYNC-01 | Phase 8: Async Block Rules | Pending |
+| ASYNC-02 | Phase 8: Async Block Rules | Pending |
+| ASYNC-03 | Phase 8: Async Block Rules | Pending |
+| ASYNC-04 | Phase 8: Async Block Rules | Pending |
+| TEST-01 | Phase 5, 6, 7, 8 | Pending |
+| TEST-02 | Phase 5 | Pending |
+| TEST-03 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 16 total
-- Mapped to phases: 16
+- v2 requirements: 20 total
+- Mapped to phases: 20
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-15*
-*Last updated: 2026-10-15 after initialization*
+*Last updated: 2026-10-15 — milestone v2.0*
