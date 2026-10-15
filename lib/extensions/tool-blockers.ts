@@ -247,6 +247,35 @@ export const blockSettingsHookWrite: BlockRule = {
   },
 };
 
+export const blockPipelineStateTamper: BlockRule = {
+  name: "block-pipeline-state-tamper",
+  test(toolName, input) {
+    if (toolName !== "Write" && toolName !== "Edit") return;
+    const filePath = inputStr(input, "file_path").replace(/\\/g, "/");
+    if (!filePath) return;
+    const PROTECTED = [
+      /lane-events\.jsonl/i,
+      /\/\.planning\/impl-lanes\/[^/]+\/events\.jsonl/i,
+      /\/\.planning\/impl-lanes\/[^/]+\/manifest\.json/i,
+      /\.pipeline\.out/i,
+    ];
+    if (PROTECTED.some((p) => p.test(filePath))) {
+      return { block: true, reason: "Writing to pipeline state files is blocked. These are managed by the lane driver." };
+    }
+  },
+};
+
+export const blockLaneBranchDelete: BlockRule = {
+  name: "block-lane-branch-delete",
+  test(toolName, input) {
+    if (toolName !== "Bash" && toolName !== "PowerShell") return;
+    const cmd = commandStr(input);
+    if (/\bgit\b/.test(cmd) && /\bbranch\b/.test(cmd) && /(?:-[Dd]|--delete)\b/.test(cmd) && /impl-lane[/\\]/.test(cmd)) {
+      return { block: true, reason: "Deleting impl-lane branches is blocked. Lane branches are managed by the pipeline." };
+    }
+  },
+};
+
 // --- Rule registry ---
 
 export const ALL_RULES: readonly BlockRule[] = [
@@ -255,9 +284,11 @@ export const ALL_RULES: readonly BlockRule[] = [
   blockDirectConsoleHttp,
   blockDirectEditorLaunch,
   blockForkPush,
+  blockLaneBranchDelete,
   blockLaunchPortOverride,
   blockLivecoding,
   blockMonitorKillSignal,
+  blockPipelineStateTamper,
   blockPsUtf8Bom,
   blockRawUeConsole,
   blockResearchFork,
