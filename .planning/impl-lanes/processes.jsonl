@@ -22,3 +22,12 @@
 {"pid":57128,"create_time":134356242798244326,"owner":"cross-review","job":"opus55","recorder_pid":63476,"recorder_create_time":134356242741295379,"ts":"2026-10-04T21:51:19.835+00:00"}
 {"pid":16088,"create_time":134356245471785729,"owner":"cross-review","job":"qwen38","recorder_pid":63476,"recorder_create_time":134356242741295379,"ts":"2026-10-04T21:55:47.182+00:00"}
 {"pid":69052,"create_time":134356246424121612,"owner":"cross-review","job":"qwen38:condensed-retry","recorder_pid":63476,"recorder_create_time":134356242741295379,"ts":"2026-10-04T21:57:22.415+00:00"}
+{"pid":35348,"create_time":134356262812014258,"owner":"cross-review","job":"gpt","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:41.206+00:00"}
+{"pid":21256,"create_time":134356262813775694,"owner":"cross-review","job":"sonnet5","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:41.392+00:00"}
+{"pid":27348,"create_time":134356262816683689,"owner":"cross-review","job":"qwen38","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:41.678+00:00"}
+{"pid":36752,"create_time":134356262817595924,"owner":"cross-review","job":"gpt","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:41.769+00:00"}
+{"pid":64832,"create_time":134356262818409924,"owner":"cross-review","job":"sonnet5","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:41.850+00:00"}
+{"pid":67868,"create_time":134356262842922885,"owner":"cross-review","job":"opus55","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:44.295+00:00"}
+{"pid":57788,"create_time":134356262845671172,"owner":"cross-review","job":"opus55","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:24:44.577+00:00"}
+{"pid":35092,"create_time":134356266669382126,"owner":"cross-review","job":"qwen38","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:31:06.952+00:00"}
+{"pid":44552,"create_time":134356268123497577,"owner":"cross-review","job":"qwen38:condensed-retry","recorder_pid":44060,"recorder_create_time":134356262788507292,"ts":"2026-10-04T22:33:32.360+00:00"}

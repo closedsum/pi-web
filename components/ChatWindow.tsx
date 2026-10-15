@@ -86,8 +86,6 @@ interface Props {
   onSoundToggle?: () => void;
   playDoneSound?: () => void;
   unlockAudio?: () => void;
-  onExtensionWidgetsChange?: (widgets: import("@/lib/types").ExtensionWidgetItem[]) => void;
-  onRequestNewSession?: () => void;
   /** Keeps the completion sound's audio running until the returned release is called. */
   holdAudio?: () => () => void;
 }
@@ -193,55 +191,13 @@ function getUserInputText(message: AgentMessage): string | null {
   return text.length > 0 ? text : null;
 }
 
-function withAssistantBlocks(
-  message: AssistantMessage,
-  content: AssistantContentBlock[],
-  options: { omitUsage?: boolean } = {},
-): AssistantMessage {
-  const next = { ...message, content };
-  if (options.omitUsage) next.usage = undefined;
-  return next;
-}
-
-interface ProcessDetailsProps {
-  messageCount: number;
-  toolCallCount: number;
-  toolNames?: string[];
-  usage?: { input: number; output: number; cost: number };
-  elapsedMs?: number;
-  headerColor?: string;
-  headerFont?: "normal" | "mono";
-  hasError?: boolean;
-  isComplete?: boolean;
-  defaultExpanded?: boolean;
-  reveal?: boolean;
-  children: ReactNode;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}
-
-function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, elapsedMs, headerColor, headerFont, hasError, isComplete, defaultExpanded = false, reveal = false, children, t }: ProcessDetailsProps) {
+function ProcessDetailsGroup({ messageCount, toolCallCount, defaultExpanded = false, reveal = false, children, t }: { messageCount: number; toolCallCount: number; defaultExpanded?: boolean; reveal?: boolean; children: ReactNode; t: (key: string, params?: Record<string, string | number>) => string }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   useLayoutEffect(() => {
     if (reveal) setExpanded(true);
   }, [reveal]);
-
-  const mainParts = [t("chat.processDetails")];
-  mainParts.push(`${messageCount} ${t(messageCount === 1 ? "chat.message" : "chat.messages")}`);
-  if (toolCallCount > 0) mainParts.push(`${toolCallCount} ${t(toolCallCount === 1 ? "chat.toolCall" : "chat.toolCalls")}`);
-
-  const toolNameParts = toolNames && toolNames.length > 0 ? toolNames : [];
-  const HIGHLIGHT_TOOLS = new Set(["ue_dispatch", "DispatchLane"]);
-  const statusColor = hasError ? "#f87171" : isComplete ? "#16a34a" : "#3b82f6";
-
-  const usageTag = usage && (usage.input > 0 || usage.output > 0)
-    ? `${usage.input.toLocaleString()} in · ${usage.output.toLocaleString()} out${usage.cost > 0 ? ` · $${usage.cost.toFixed(4)}` : ""}`
-    : "";
-
-  const timeTag = elapsedMs !== undefined && elapsedMs > 0
-    ? elapsedMs >= 60_000
-      ? `${(elapsedMs / 60_000).toFixed(1)}m`
-      : `${(elapsedMs / 1000).toFixed(1)}s`
-    : "";
+  const parts = [t("chat.processDetails"), `${messageCount} ${t(messageCount === 1 ? "chat.message" : "chat.messages")}`];
+  if (toolCallCount > 0) parts.push(`${toolCallCount} ${t(toolCallCount === 1 ? "chat.toolCall" : "chat.toolCalls")}`);
 
   return (
     <div style={{ marginBottom: 14 }}>
@@ -252,54 +208,25 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 8,
           width: "auto",
           minHeight: 24,
           padding: "2px 0",
           border: "none",
           background: "transparent",
-          color: headerColor || "var(--text-muted)",
+          color: "var(--text-muted)",
           cursor: "pointer",
           fontSize: 12,
           textAlign: "left",
-          flexWrap: "wrap",
-          fontFamily: headerFont === "mono" ? "var(--font-mono)" : "inherit",
         }}
         title={expanded ? t("chat.collapseProcess") : t("chat.expandProcess")}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
           <polyline points="4 2.5 7.5 6 4 9.5" />
         </svg>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {mainParts.join(" · ")}
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {parts.join(" · ")}
         </span>
-        {toolNameParts.length > 0 && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
-            [
-            {toolNameParts.map((name, i) => (
-              <span key={name}>
-                {i > 0 && ", "}
-                <span style={HIGHLIGHT_TOOLS.has(name) ? { color: statusColor, fontWeight: 700 } : { color: "var(--text-dim)" }}>
-                  {name}
-                </span>
-              </span>
-            ))}
-            ]
-          </span>
-        )}
-        {usageTag && (
-          <span style={{ color: "var(--text-dim)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
-            {usageTag}
-          </span>
-        )}
-        {usageTag && timeTag && (
-          <span style={{ color: "var(--text-dim)", fontSize: 11 }}>·</span>
-        )}
-        {timeTag && (
-          <span style={{ color: "var(--text-dim)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
-            {timeTag}
-          </span>
-        )}
       </button>
       {(expanded || reveal) && (
         <div style={{ marginTop: 8 }}>
@@ -310,23 +237,10 @@ function ProcessDetailsGroup({ messageCount, toolCallCount, toolNames, usage, el
   );
 }
 
-export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio, onExtensionWidgetsChange, onRequestNewSession }: Props) {
+export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initialScrollPosition, onScrollPositionChange, sessionRunning, newSessionCwd, newSessionDraftKey, newSessionContextBar, initialNewSessionChoices, onNewSessionChoicesChange, onAgentEnd, onToolEnd, onAttentionNeeded, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSystemToolsChange, onSystemInfoLoaderChange, onSessionStatsChange, onSessionStatsPanelOpen, onOpenSettings, onContextUsageChange, onOpenFile, onFilesUploaded, onOpenSubagent, onAskInNewChat, quoteSelectionEnabled = false, initialPrompt, onInitialPromptConsumed, soundEnabled = true, onSoundToggle, playDoneSound = () => {}, unlockAudio, holdAudio }: Props) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const completionNotificationsEnabled = session?.relation?.kind !== "subagent";
-  const [processDetailsCollapsed, setProcessDetailsCollapsed] = useState(true);
-  const [processHeaderColor, setProcessHeaderColor] = useState("var(--text-muted)");
-  const [processHeaderFont, setProcessHeaderFont] = useState<"normal" | "mono">("normal");
-  useEffect(() => {
-    try {
-      const c = window.localStorage.getItem("pi-layout:processDetailsCollapsed");
-      if (c === "false") setProcessDetailsCollapsed(false);
-      const hc = window.localStorage.getItem("pi-layout:processHeaderColor");
-      if (hc) setProcessHeaderColor(hc);
-      const hf = window.localStorage.getItem("pi-layout:processHeaderStyle");
-      if (hf === "mono") setProcessHeaderFont("mono");
-    } catch {}
-  }, []);
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
   // wrapping handleAgentEventRef because useAgentSession overwrites that ref
@@ -369,7 +283,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
     showScrollToBottom,
     sessionIdRef, scrollContainerRef,
     lastUserMsgRef, promptAnchorActive,
-    handleSend, handleAbort, handleFork, handleEditContent, cancelEdit, handleNavigate, handleModelChange, handleModelClear,
+    handleSend, handleAbort, handleFork, handleEditContent, cancelEdit, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handlePromptWithStreamingBehavior, handleAbortCompaction,
     dismissCompactError,
     handleRecallQueue,
@@ -388,68 +302,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
   const hasStreamingContent = useStreamingSelector(streamingStore, selectHasStreamingContent);
   const getStreamingMessage = useCallback(() => streamingStore.getState().streamingMessage, [streamingStore]);
   const sessionBusy = agentRunning || bashRunning;
-
-  const streamingAccRef = useRef({ totalTokens: 0, totalMs: 0, count: 0 });
-  const [sessionAvgTps, setSessionAvgTps] = useState<number | undefined>();
-  const [sessionLiveTps, setSessionLiveTps] = useState<number | null>(null);
-  const pendingStreamTimingRef = useRef<{ streamMs: number; outputTokens: number } | null>(null);
-  const [streamTimings, setStreamTimings] = useState<Map<string, { streamMs: number; outputTokens: number }>>(new Map());
-  const [streamCompleteCount, setStreamCompleteCount] = useState(0);
-  const handleStreamComplete = useCallback((data: { outputTokens: number; streamMs: number }) => {
-    const acc = streamingAccRef.current;
-    acc.totalTokens += data.outputTokens;
-    acc.totalMs += data.streamMs;
-    acc.count += 1;
-    if (acc.totalMs > 0) setSessionAvgTps(acc.totalTokens / (acc.totalMs / 1000));
-    pendingStreamTimingRef.current = data;
-    setStreamCompleteCount(c => c + 1);
-  }, []);
-  const handleLiveTps = useCallback((tps: number | null) => setSessionLiveTps(tps), []);
-  const matchedTimingIdsRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    const pending = pendingStreamTimingRef.current;
-    if (!pending) return;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const eid = entryIds[i];
-      if (messages[i].role === "assistant" && eid && !matchedTimingIdsRef.current.has(eid)) {
-        matchedTimingIdsRef.current.add(eid);
-        setStreamTimings(prev => { const next = new Map(prev); next.set(eid, pending); return next; });
-        pendingStreamTimingRef.current = null;
-        break;
-      }
-    }
-  }, [messages, entryIds, streamCompleteCount]);
-
-  // Lift extension widgets to AppShell so they can render in the sidebar.
-  useEffect(() => {
-    onExtensionWidgetsChange?.(extensionWidgets);
-    return () => onExtensionWidgetsChange?.([]);
-  }, [extensionWidgets, onExtensionWidgetsChange]);
-
-  const onRequestNewSessionRef = useRef(onRequestNewSession);
-  onRequestNewSessionRef.current = onRequestNewSession;
-  const wrappedBuiltinSlashCommand = useCallback(async (text: string) => {
-    if (text === "/new" || text === "/clear") {
-      const handler = onRequestNewSessionRef.current;
-      if (!handler) {
-        return { handled: true, error: `/${text.slice(1)} failed: no session handler available` } as const;
-      }
-      handler();
-      return { handled: true, message: text === "/new" ? "New session" : "Chat cleared" } as const;
-    }
-    return handleBuiltinSlashCommand(text);
-  }, [handleBuiltinSlashCommand]);
-
-  const builtinSlashCommands = useMemo(() => [
-    { name: "new", description: "Start a new session", source: "extension" as const },
-    { name: "clear", description: "Clear chat and start fresh", source: "extension" as const },
-  ], []);
-  const mergedSlashCommands = useMemo(
-    () => [...builtinSlashCommands, ...slashCommands],
-    [builtinSlashCommands, slashCommands],
-  );
-
   // While this session's run is under way its chime may come with the phone
   // locked, where a suspended context cannot start again (#1157).
   useEffect(() => {
@@ -874,19 +726,13 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       sessionStats.tokens.total,
       sessionStats.cost ?? 0,
       sessionStats.totalActiveMs ?? 0,
-      sessionAvgTps ?? "",
     ].join("|")
     : null;
   const sessionStatsRef = useRef(sessionStats);
   sessionStatsRef.current = sessionStats;
   useEffect(() => {
-    const stats = sessionStatsRef.current;
-    if (stats) {
-      onSessionStatsChange?.({ ...stats, avgTps: sessionAvgTps, liveTps: sessionLiveTps });
-    } else {
-      onSessionStatsChange?.(null);
-    }
-  }, [statsKey, onSessionStatsChange, sessionAvgTps, sessionLiveTps]);
+    onSessionStatsChange?.(sessionStatsRef.current);
+  }, [statsKey, onSessionStatsChange]);
   useEffect(() => () => { onSessionStatsChange?.(null); }, [onSessionStatsChange]);
 
   // Push context usage up to AppShell as well.
@@ -1107,8 +953,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       modelError={modelError}
       modelScopeWarnings={modelScopeWarnings}
       onModelChange={handleModelChange}
-      onModelClear={handleModelClear}
-      onClearChat={onRequestNewSession}
       modelSwitching={modelSwitching}
       defaultModel={defaultModel}
       onSetDefaultModel={handleSetDefaultModel}
@@ -1131,10 +975,10 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
       queuedMessages={queuedMessages}
       inputHistory={inputHistory}
       onRecallQueue={handleRecallQueue}
-      slashCommands={mergedSlashCommands}
+      slashCommands={slashCommands}
       slashCommandsLoading={slashCommandsLoading}
       onLoadSlashCommands={loadSlashCommands}
-      onBuiltinCommand={wrappedBuiltinSlashCommand}
+      onBuiltinCommand={handleBuiltinSlashCommand}
       soundEnabled={soundEnabled}
       onSoundToggle={onSoundToggle}
       onAudioUnlock={unlockAudio}
@@ -1304,7 +1148,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                     prevTimestamp={idx > 0 ? (messages[idx - 1] as AgentMessage & { timestamp?: number }).timestamp : undefined}
                     sessionId={session?.id ?? sessionIdRef.current ?? undefined}
                     writtenFiles={options.writtenFiles}
-                    streamTiming={entryIds[idx] ? streamTimings.get(entryIds[idx]) : undefined}
                     onCompact={options.recoverTruncation ? handleCompact : undefined}
                     isCompacting={options.recoverTruncation ? isCompacting : undefined}
                     compactError={options.recoverTruncation ? compactError : undefined}
@@ -1364,13 +1207,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                 let processToolCount = 0;
                 let processRefIdx: number | undefined;
                 let revealProcess = false;
-                const processToolNames: string[] = [];
-                let processHasError = false;
-                let processUsageIn = 0;
-                let processUsageOut = 0;
-                let processUsageCost = 0;
-                let processFirstTs: number | undefined;
-                let processLastTs: number | undefined;
 
                 for (let processIdx = userIdx + 1; processIdx <= finalAssistantIdx; processIdx++) {
                   const processMessage = messages[processIdx];
@@ -1379,10 +1215,6 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                     if (isHiddenCustomMessage(processMessage)) continue;
                     revealProcess ||= Boolean(pendingSearchScroll && pendingSearchScroll.entryId === entryIds[processIdx]);
                     processViews.push(renderMessage(processIdx, { attachRef: false, keyPrefix: "process" }));
-                    if (processMessage.timestamp) {
-                      processFirstTs = processFirstTs === undefined ? processMessage.timestamp : Math.min(processFirstTs, processMessage.timestamp);
-                      processLastTs = processLastTs === undefined ? processMessage.timestamp : Math.max(processLastTs, processMessage.timestamp);
-                    }
                     continue;
                   }
                   if (processMessage.role !== "assistant") continue;
@@ -1390,26 +1222,7 @@ export function ChatWindow({ session, searchTarget, onSearchTargetHandled, initi
                   const blocks = getDisplayableAssistantBlocks(message);
                   if (blocks.length === 0) continue;
                   processRefIdx ??= visibleRefIndexByMessage.get(processIdx);
-                  const toolCount = countToolCallBlocks(blocks);
-                  processToolCount += toolCount;
-                  for (const b of blocks) {
-                    if (b.type === "toolCall" && !processToolNames.includes(b.toolName)) {
-                      processToolNames.push(b.toolName);
-                    }
-                  }
-                  if ((processMessage as AssistantMessage).stopReason === "error" || (processMessage as AssistantMessage).errorMessage) {
-                    processHasError = true;
-                  }
-                  const u = (processMessage as AssistantMessage).usage;
-                  if (u) {
-                    processUsageIn += u.input;
-                    processUsageOut += u.output;
-                    processUsageCost += u.cost?.total || 0;
-                  }
-                  if (processMessage.timestamp) {
-                    processFirstTs = processFirstTs === undefined ? processMessage.timestamp : Math.min(processFirstTs, processMessage.timestamp);
-                    processLastTs = processLastTs === undefined ? processMessage.timestamp : Math.max(processLastTs, processMessage.timestamp);
-                  }
+                  processToolCount += countToolCallBlocks(blocks);
                   revealProcess ||= Boolean(pendingSearchScroll && entryIds[processIdx] === pendingSearchScroll.entryId && (!searchBlock || blocks.includes(searchBlock)));
                   processViews.push(renderMessage(processIdx, {
                     attachRef: false,

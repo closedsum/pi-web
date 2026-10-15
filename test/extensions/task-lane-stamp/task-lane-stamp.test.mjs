@@ -83,7 +83,7 @@ hookTest("strips existing prefix before stamping", () => {
   };
   const manifests = { "my-lane": { provider: "claude", model: "claude-opus-5[1m]", effort: "max" } };
   const result = handleToolCall(event, manifests);
-  assert.equal(result.subject, "[claude opus5 max · lane my-lane] My task");
+  assert.equal(result.subject, `[claude ${modelShort("claude-opus-5[1m]")} max · lane my-lane] My task`);
 });
 
 hookTest("extracts slug from metadata.lane_slug", () => {

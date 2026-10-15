@@ -6,7 +6,8 @@ scanner, reverse reader, sidebar changes, and timing benchmarks are not included
 ```sh
 npm ci
 npx playwright install chromium
-npm run test:e2e
+npm run test:e2e            # headless (CI default)
+E2E_HEADED=1 npm run test:e2e  # visible Chrome window
 ```
 
 The script starts and stops its own Turbopack dev server on an available
@@ -48,8 +49,6 @@ Coverage:
   in a fresh profile; a keyboard Fork puts focus on the copy row's link.
 - A local extension checks dialog keyboard navigation, Esc cancellation,
   collapse/expand draft preservation, countdown display, and server-side expiry.
-- The Recent Projects dropdown opens within the viewport at both desktop and
-  narrow widths, with stable positioning across open/close cycles.
 
 Model prompts, live model streaming, and agent execution are outside this suite.
 Failures save a screenshot, Playwright trace, and server log under
