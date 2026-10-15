@@ -5,6 +5,8 @@
  * Each rule is a pure function: (toolName, input) => BlockResult | undefined.
  * Rules are scope-isolated and individually testable.
  */
+import { readFileSync } from "fs";
+import path from "path";
 import type { BlockResult, BlockRuleContext } from "./types";
 
 export interface BlockRule {
@@ -292,6 +294,35 @@ export const blockProbeInFork: BlockRule = {
   },
 };
 
+const VALID_SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+export const forkCompletionGate: BlockRule = {
+  name: "fork-completion-gate",
+  test(toolName, input, ctx) {
+    if (!ctx) return;
+    if (toolName !== "TaskUpdate") return;
+    if (inputStr(input, "status") !== "completed") return;
+
+    const taskId = inputStr(input, "task_id");
+    if (!taskId) {
+      return { block: true, reason: "fork-completion-gate. TaskUpdate(completed) missing task_id." };
+    }
+
+    const resultPath = path.join(ctx.stateHome, "fork-results", `${taskId}.json`);
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(readFileSync(resultPath, "utf-8"));
+    } catch {
+      return { block: true, reason: `fork-completion-gate. Fork result file missing or unreadable: ${resultPath}` };
+    }
+
+    const sha = typeof data.commit_sha === "string" ? data.commit_sha : "";
+    if (!VALID_SHA_RE.test(sha)) {
+      return { block: true, reason: `fork-completion-gate. Invalid or missing commit SHA in ${resultPath}` };
+    }
+  },
+};
+
 // --- Rule registry ---
 
 export const ALL_RULES: readonly BlockRule[] = [
@@ -317,6 +348,7 @@ export const ALL_RULES: readonly BlockRule[] = [
   blockWildcardProcessKill,
   denyJunctionSurgery,
   blockProbeInFork,
+  forkCompletionGate,
 ];
 
 /**
