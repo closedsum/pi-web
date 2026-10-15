@@ -1,82 +1,84 @@
-# Roadmap: Pi Web — Orchestration Hook Porting
+# Roadmap: Pi Web — Enhanced Orchestration
 
-## Milestone: v1 — Orchestration Parity
+## Milestone: v2.0 — Enhanced Orchestration
 
-**Phases:** 4
-**Requirements:** 16 v1 requirements
-**Coverage:** 100% — all v1 requirements mapped
+**Phases:** 4 (Phase 5–8, continuing from v1.0)
+**Requirements:** 20 v2 requirements
+**Coverage:** 100% — all v2 requirements mapped
 
 ---
 
-### Phase 1: Foundation Infrastructure
+### Phase 5: PID Resilience
 
-**Goal:** Create shared utility modules that the infrastructure-dependent hooks will consume — state-home resolver, process-liveness checker, git-query wrapper, and shell-command parser.
+**Goal:** Upgrade the lane driver lock schema to include process identity (start time, boot ID, nonce) so PID reuse cannot cause false liveness or stale-lock adoption. Python-side implementation per "Python-first" rule.
 
-**Requirements:** INFRA-01, INFRA-02, INFRA-03, INFRA-04, TEST-01, TEST-03, TEST-04
+**Requirements:** PID-01, PID-02, PID-03, PID-04, TEST-01, TEST-02
 
 **Success Criteria:**
-1. `resolveStateHome()` returns a valid directory path from `GSD_STATE_HOME` or falls back to `~/.gsd`
-2. `isProcessAlive(pid)` returns true for the current process PID and false for a known-dead PID
-3. `gitRevParseShowToplevel(cwd)` returns the repo root, and `gitLogLatestInScope(repo, branch, globs)` returns an ISO timestamp or null — both complete within 50ms on the pi-web repo
-4. `parseNamedArg(command, argName)` extracts `--params-file /path/to/file` from a representative dispatch command string
-5. Each module has a co-located `.test.mjs` with edge cases (ESRCH, EPERM, missing env var, timeout, malformed commands)
+1. Lock schema v2 writes `{schema:2, pid, proc_start, boot_id, instance_nonce, heartbeat_seq, heartbeat_at, state, last_error}` atomically via `os.replace`
+2. `verify_identity(lock_data)` returns `True` only when PID exists AND proc_start matches recorded value (±1s on macOS)
+3. Pre-v2 lock files (missing `proc_start`) report status as `unverified` — no crash, no false positive
+4. Heartbeat timestamp advances from the daemon's work loop, not a separate timer thread
+5. Co-located tests cover identity mismatch, stale PID, pre-v2 lock, and atomic write failure
 
-**Depends On:** Nothing (foundation phase)
+**Depends On:** Nothing (foundation for phases 6–8)
 
 **UI hint:** no
 
 ---
 
-### Phase 2: BlockRule Context + Simple Gates
+### Phase 6: Lane Driver Status UI
 
-**Goal:** Extend the BlockRule type with an optional context parameter, then port block-probe-in-fork and fork-completion-gate as context-aware BlockRules.
+**Goal:** Expose lane driver daemon state through a read-only API route and render a real-time status badge in the task panel, with single-flight polling and visibility gating.
 
-**Requirements:** CTX-01, CTX-02, CTX-03, GATE-01, GATE-02, TEST-02
+**Requirements:** UI-01, UI-02, UI-03, UI-04, TEST-01
 
 **Success Criteria:**
-1. `BlockRule.test` accepts an optional third parameter `ctx?: BlockRuleContext` with `{ cwd, isSubagent, sessionId, stateHome }`
-2. All 21 existing rules pass their existing tests unchanged (backward compatibility)
-3. `block-probe-in-fork` blocks Bash/PowerShell calls containing `gsd_probe.py` when `ctx.isSubagent === true`, and allows them when `ctx.isSubagent === false`
-4. `fork-completion-gate` blocks `TaskUpdate(completed)` when the fork-result state file at `{ctx.stateHome}/fork-results/{taskId}.json` is missing, malformed, or lacks a valid commit SHA
-5. Each new rule has allow/block test cases using the existing `_test-harness.mjs` (`assertBlocks`, `assertAllows`)
+1. `GET /api/lane-driver/status` returns a DTO with `{status, heartbeatAge, reason, schema}` using `force-dynamic` + `Cache-Control: no-store`
+2. Parse failures (missing file, malformed JSON, I/O error) return `{status: "unknown", reason: "..."}` — never 500
+3. React `DriverStatusBadge` renders a discriminated union across all 5 states (`running | stopped | errored | stale | unknown`) with heartbeat age display
+4. Client polling uses single-flight `setTimeout` at 5s while visible, pauses while tab is hidden, applies exponential backoff on consecutive errors
+5. Co-located tests cover all 5 status states, polling lifecycle (mount/unmount/visibility), and API error paths
 
-**Depends On:** Phase 1 (state-home resolver for fork-completion-gate)
+**Depends On:** Phase 5 (lock schema v2 provides the snapshot the API reads)
 
-**UI hint:** no
+**UI hint:** yes — status badge in task panel
 
 ---
 
-### Phase 3: InlineExtension Hooks + Lane Driver
+### Phase 7: Block Rule Telemetry
 
-**Goal:** Port block-manual-integrate, block-redispatch-without-fix as InlineExtension tool_call handlers, and ensure-lane-driver as a session-start daemon manager.
+**Goal:** Instrument the block rule evaluation pipeline with per-session timing and block counts, exposed through atomic snapshots — establishing a measured baseline before the async conversion in Phase 8.
 
-**Requirements:** GATE-03, GATE-04, SVC-01, TEST-01, TEST-02
+**Requirements:** TEL-01, TEL-02, TEL-03, TEL-04, TEL-05, TEST-01, TEST-03
 
 **Success Criteria:**
-1. `block-manual-integrate` blocks `git cherry-pick`, `git merge`, and `gsd_impl_lane.py integrate` commands when `.autopilot.lock` contains a live PID — verified by a test with a mocked PID check
-2. `block-redispatch-without-fix` blocks `gsd_impl_lane.py pipeline --params-file` when the prior pipeline record shows `failed`/`blocked`/`review_failed` and no newer commit exists in the write scope on master
-3. Lane driver manager checks daemon liveness at session start and spawns `gsd_lane_driver.py run --detach` for eligible projects (has `.planning/config.json`, not a worktree, not under temp dir)
-4. Lane driver manager respects backoff (3 restarts in 60s), lock file ownership, and stop sentinel
-5. Each hook has co-located tests covering block/allow paths and edge cases (stale lock, dead PID, missing manifest)
+1. A per-session `TelemetryCollector` wraps each rule at registration with timing (`performance.now()`) and block/allow counters
+2. Only rules that execute are counted — rules short-circuited by an earlier block are excluded from the evaluation count
+3. `snapshot()` returns a frozen copy; snapshots are written atomically (temp + rename) and debounced to avoid I/O storms
+4. A telemetry write failure (disk full, permission) never changes an authorization decision — the block/allow verdict is always returned
+5. No raw tool arguments, command strings, or absolute file paths appear in telemetry output (redaction)
 
-**Depends On:** Phase 1 (process-liveness, git-query, shell-command-parser), Phase 2 (for consistency with block rule testing patterns)
+**Depends On:** Phase 5 (state-home for snapshot paths), Phase 6 (pattern for atomic file reads)
 
-**UI hint:** no
+**UI hint:** no (API-only in v2.0; UI dashboard is future work)
 
 ---
 
-### Phase 4: Audit Scope Extension
+### Phase 8: Async Block Rules
 
-**Goal:** Port audit-scope-guard as a file-operation proxy InlineExtension that intercepts Write/Edit/Delete from audit sessions and enforces scope boundaries via scope tokens.
+**Goal:** Add an async evaluation path using the gather-then-decide pattern — prefetch git facts asynchronously, then run existing sync rules over the frozen context. Keeps sync API unchanged.
 
-**Requirements:** SVC-02
+**Requirements:** ASYNC-01, ASYNC-02, ASYNC-03, ASYNC-04, TEST-01
 
 **Success Criteria:**
-1. When an audit session calls Write/Edit targeting a file outside the scope token, the call is blocked with an `OUT_OF_SCOPE` reason
-2. Path traversal attempts (`..`) and symlink scope escapes are detected and blocked
-3. Legitimate writes within scope succeed with atomic temp-file-then-rename semantics
+1. `evaluateBlockRulesAsync(rules, toolCall, ctx)` prefetches git facts (rev-parse, log) via promisified `execFile` with `AbortSignal`, `timeout`, `maxBuffer`, `windowsHide`, and no `shell` — then passes the frozen context to sync rules
+2. Sync `evaluateBlockRules` remains unchanged; throws `TypeError` if any rule returns a thenable (safety net)
+3. Async git queries use `git.exe` directly (not `shell: true`) per CVE-2024-27980 class guidance
+4. Each async rule has an explicit fail-closed or fail-open timeout policy, configurable per rule, with `AbortSignal` killing the child process on timeout
+5. Co-located tests cover: async prefetch success, timeout with abort, mixed sync/async path, thenable rejection in sync path
 
-**Depends On:** Phase 1 (state-home), Phase 3 (InlineExtension pattern established)
+**Depends On:** Phase 7 (telemetry baseline to measure async improvement), Phase 5 (state-home), verification that `pi.on('tool_call')` awaits async handlers
 
 **UI hint:** no
 
@@ -86,11 +88,11 @@
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 1 | Foundation Infrastructure | Shared utility modules | INFRA-01..04, TEST-01,03,04 | 5 |
-| 2 | BlockRule Context + Simple Gates | Extend type, port 2 simple rules | CTX-01..03, GATE-01,02, TEST-02 | 5 |
-| 3 | InlineExtension Hooks + Lane Driver | Port 2 complex rules + daemon manager | GATE-03,04, SVC-01, TEST-01,02 | 5 |
-| 4 | Audit Scope Extension | File-op proxy for audits | SVC-02 | 3 |
+| 5 | PID Resilience | Lock schema v2 + identity verification | PID-01..04, TEST-01,02 | 5 |
+| 6 | Lane Driver Status UI | API route + React status badge | UI-01..04, TEST-01 | 5 |
+| 7 | Block Rule Telemetry | Per-session instrumentation + snapshots | TEL-01..05, TEST-01,03 | 5 |
+| 8 | Async Block Rules | Gather-then-decide async evaluation | ASYNC-01..04, TEST-01 | 5 |
 
 ---
 *Roadmap created: 2026-10-15*
-*Last updated: 2026-10-15 after initialization*
+*Last updated: 2026-10-15 — milestone v2.0*
