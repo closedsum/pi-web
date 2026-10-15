@@ -21,6 +21,7 @@ import { resolveStateHome } from "../state-home";
 import { checkManualIntegrate } from "./block-manual-integrate";
 import { checkRedispatchWithoutFix } from "./block-redispatch";
 import { ensureLaneDriver } from "./lane-driver-manager";
+import { checkAuditScope } from "./audit-scope-extension";
 
 export const GSD_EXTENSION_NAME = "pi-web-gsd-unified";
 
@@ -49,6 +50,7 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
   const onTiming = options.onTiming;
 
   let blockRuleCtx: BlockRuleContext | undefined;
+  let auditScopeToken: string | undefined;
 
   return {
     name: GSD_EXTENSION_NAME,
@@ -61,6 +63,7 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
           sessionId: ev.sessionId,
           stateHome: resolveStateHome(),
         };
+        auditScopeToken = process.env.GSD_AUDIT_SCOPE_TOKEN || undefined;
         try {
           ensureLaneDriver(blockRuleCtx.cwd, blockRuleCtx.stateHome);
         } catch {
@@ -94,6 +97,13 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
         pi.on("tool_call", (ev: ToolCallEvent) => {
           const start = performance.now();
           const cwd = blockRuleCtx?.cwd ?? process.cwd();
+          const scopeResult = auditScopeToken ? checkAuditScope(ev.toolName, ev.input ?? {}, auditScopeToken) : undefined;
+          if (scopeResult) {
+            if (onTiming) {
+              onTiming({ event: "tool_call", handlerName: "audit-scope", durationMs: performance.now() - start, blocked: true, timestamp: Date.now() });
+            }
+            return scopeResult;
+          }
           const result = checkManualIntegrate(ev.toolName, ev.input ?? {}, cwd)
                       ?? checkRedispatchWithoutFix(ev.toolName, ev.input ?? {}, cwd);
           const durationMs = performance.now() - start;
