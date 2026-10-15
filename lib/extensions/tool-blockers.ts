@@ -363,6 +363,9 @@ export function evaluateBlockRules(
 ): BlockResult | undefined {
   for (const rule of rules) {
     const result = rule.test(toolName, input, ctx);
+    if (result && typeof (result as any).then === "function") {
+      throw new TypeError(`BlockRule "${rule.name}" returned a thenable — use evaluateBlockRulesAsync for async rules`);
+    }
     if (result) return result;
   }
   return undefined;
