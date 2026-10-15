@@ -63,23 +63,23 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| CTX-01 | Phase 2 | Pending |
-| CTX-02 | Phase 2 | Pending |
-| CTX-03 | Phase 2 | Pending |
-| GATE-01 | Phase 2 | Pending |
-| GATE-02 | Phase 2 | Pending |
-| GATE-03 | Phase 3 | Pending |
-| GATE-04 | Phase 3 | Pending |
-| SVC-01 | Phase 3 | Pending |
-| SVC-02 | Phase 4 | Pending |
-| TEST-01 | Phase 1-3 | Pending |
-| TEST-02 | Phase 2-3 | Pending |
-| TEST-03 | Phase 1 | Pending |
-| TEST-04 | Phase 1 | Pending |
+| INFRA-01 | Phase 1: Foundation Infrastructure | Pending |
+| INFRA-02 | Phase 1: Foundation Infrastructure | Pending |
+| INFRA-03 | Phase 1: Foundation Infrastructure | Pending |
+| INFRA-04 | Phase 1: Foundation Infrastructure | Pending |
+| CTX-01 | Phase 2: BlockRule Context + Simple Gates | Pending |
+| CTX-02 | Phase 2: BlockRule Context + Simple Gates | Pending |
+| CTX-03 | Phase 2: BlockRule Context + Simple Gates | Pending |
+| GATE-01 | Phase 2: BlockRule Context + Simple Gates | Pending |
+| GATE-02 | Phase 2: BlockRule Context + Simple Gates | Pending |
+| GATE-03 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
+| GATE-04 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
+| SVC-01 | Phase 3: InlineExtension Hooks + Lane Driver | Pending |
+| SVC-02 | Phase 4: Audit Scope Extension | Pending |
+| TEST-01 | Phase 1, 3 | Pending |
+| TEST-02 | Phase 2, 3 | Pending |
+| TEST-03 | Phase 1: Foundation Infrastructure | Pending |
+| TEST-04 | Phase 1: Foundation Infrastructure | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total

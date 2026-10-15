@@ -84,3 +84,60 @@ Current status tools: `CheckLaneStatus` — deterministic JSON from lane manifes
 | **Doc Chain Index** | [`docs/INDEX.md`](docs/INDEX.md) — full doc tree: UI framework, extensions, settings, test matrix, ADRs |
 | **Host vs Project** | [`CONTEXT.md`](CONTEXT.md) — runtime isolation between web server and project commands |
 | **Dev Notes** | [`AGENTS.md`](AGENTS.md) — development quick-start and agent configuration |
+
+<!-- GSD:project-start source:PROJECT.md -->
+## Project
+
+**Pi Web**
+
+Web UI for the Pi coding agent — a full-stack Next.js application that hosts coding-agent sessions with chat, terminal, file explorer, model selector, task panel, and a modular extension system. Used by a single developer to run GSD-orchestrated coding sessions through a browser interface instead of the CLI.
+
+**Core Value:** Agent sessions execute with the same safety rules and orchestration enforcement as the CLI — no tool call bypasses the extension system.
+
+### Constraints
+
+- **Runtime:** Node.js >=22.19.0 with `--experimental-strip-types`
+- **Framework:** Next.js 16 App Router — no Pages Router
+- **SDK:** Must use `@earendil-works/pi-*` v1.2.0 APIs for session and extension management
+- **Extensions:** Block rules must be pure functions in `tool-blockers.ts` with the existing `BlockRule` signature
+- **Testing:** Co-located `.test.mjs` files using `node --test` with jiti fallback for TS imports
+<!-- GSD:project-end -->
+
+<!-- GSD:stack-start source:codebase/STACK.md -->
+## Technology Stack
+
+> **Reference:** Read [`.planning/codebase/STACK.md`](.planning/codebase/STACK.md) before making stack-level decisions (adding plugins, adopting libraries, changing frameworks). Sections: Languages & Runtime, Framework, Core Dependencies, Dev Dependencies, Configuration Files, Runtime Configuration.
+<!-- GSD:stack-end -->
+
+<!-- GSD:conventions-start source:CONVENTIONS.md -->
+## Conventions
+
+> **Reference:** Read [`.planning/codebase/CONVENTIONS.md`](.planning/codebase/CONVENTIONS.md) before writing new assets, tests, or code that must follow project conventions. Sections: TypeScript, React Patterns, Component Organization, Extension System, Error Handling, Naming, Imports, CSS.
+<!-- GSD:conventions-end -->
+
+<!-- GSD:architecture-start source:ARCHITECTURE.md -->
+## Architecture
+
+> **Reference:** Read [`.planning/codebase/ARCHITECTURE.md`](.planning/codebase/ARCHITECTURE.md) for architecture documentation. Sections: Pattern, Layers, Data Flow, Key Abstractions, Entry Points.
+<!-- GSD:architecture-end -->
+
+<!-- GSD:workflow-start source:GSD defaults -->
+## GSD Workflow Enforcement
+
+Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+
+Use these entry points:
+- `/gsd:quick` for small NON-bug tasks (docs, config, cleanup)
+- `/gsd:bug-fix` for broken behavior of any size (deterministic loop with cross-review)
+- `/gsd:debug` for investigation when the cause is unknown (hands off to bug-fix once diagnosed)
+- `/gsd:execute-phase` for planned phase work
+
+Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+<!-- GSD:workflow-end -->
+
+<!-- GSD:profile-start -->
+## Developer Profile
+
+> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
+> This section is managed by `generate-claude-profile` -- do not edit manually.
+<!-- GSD:profile-end -->
