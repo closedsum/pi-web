@@ -199,6 +199,54 @@ export const denyJunctionSurgery: BlockRule = {
   },
 };
 
+export const blockSlowForeground: BlockRule = {
+  name: "block-slow-foreground",
+  test(toolName, input) {
+    if (toolName !== "Bash" && toolName !== "PowerShell") return;
+    if (input.run_in_background === true) return;
+    const cmd = commandStr(input);
+    const SLOW = [
+      { re: /\bgit\s+commit\b/i, name: "git commit" },
+      { re: /\bpytest\b/i, name: "pytest" },
+      { re: /\bgsd-review\.py\b/i, name: "gsd-review" },
+      { re: /\bgsd_impl_lane\.py\s+(?:preflight|integrate)\b/i, name: "lane preflight/integrate" },
+      { re: /\bregression_gate\.py\b/i, name: "regression_gate" },
+    ];
+    for (const p of SLOW) {
+      if (p.re.test(cmd)) {
+        return { block: true, reason: `${p.name} must use run_in_background to avoid blocking the orchestrator. Add run_in_background: true to the tool call. Set GSD_SLOW_FOREGROUND=allow to override.` };
+      }
+    }
+  },
+};
+
+export const blockWildcardProcessKill: BlockRule = {
+  name: "block-wildcard-process-kill",
+  test(toolName, input) {
+    if (toolName !== "Bash" && toolName !== "PowerShell") return;
+    const cmd = commandStr(input);
+    if (/\btaskkill\b/i.test(cmd) && /\/im\b/i.test(cmd) && /[*?]/.test(cmd)) {
+      return { block: true, reason: "Broad process termination blocked — use PID-targeted kill (taskkill /PID or Stop-Process -Id)." };
+    }
+    if (/\bStop-Process\b/i.test(cmd) && /\-Name\b/i.test(cmd) && /[*?]/.test(cmd)) {
+      return { block: true, reason: "Broad process termination blocked — use Stop-Process -Id with a specific PID." };
+    }
+  },
+};
+
+export const blockSettingsHookWrite: BlockRule = {
+  name: "block-settings-hook-write",
+  test(toolName, input) {
+    if (toolName !== "Write" && toolName !== "Edit") return;
+    const filePath = inputStr(input, "file_path");
+    if (!filePath || !(/settings\.json$/i.test(filePath) && /\.claude/i.test(filePath))) return;
+    const content = inputStr(input, "content") || inputStr(input, "new_string");
+    if (/"(?:hooks|PreToolUse|PostToolUse|Notification)"/.test(content)) {
+      return { block: true, reason: "Writing hook registrations to settings.json directly is blocked. Use deploy.py --merge-settings." };
+    }
+  },
+};
+
 // --- Rule registry ---
 
 export const ALL_RULES: readonly BlockRule[] = [
@@ -214,9 +262,12 @@ export const ALL_RULES: readonly BlockRule[] = [
   blockRawUeConsole,
   blockResearchFork,
   blockSendFeedback,
+  blockSettingsHookWrite,
+  blockSlowForeground,
   blockStandaloneUeBypass,
   blockUePythonProbe,
   blockUeRotatorPositional,
+  blockWildcardProcessKill,
   denyJunctionSurgery,
 ];
 
