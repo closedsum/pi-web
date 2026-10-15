@@ -51,7 +51,7 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
     name: GSD_EXTENSION_NAME,
     hidden: true,
     factory: (pi) => {
-      pi.on("session_start", (ev: SessionStartEvent) => {
+      (pi as any).on("session_start", (ev: SessionStartEvent) => {
         blockRuleCtx = {
           cwd: ev.cwd ?? process.cwd(),
           isSubagent: options.isSubagent ?? false,
