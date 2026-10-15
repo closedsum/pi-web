@@ -14,6 +14,13 @@ export interface BlockResult {
   terminate?: boolean;
 }
 
+export interface BlockRuleContext {
+  cwd: string;
+  isSubagent: boolean;
+  sessionId?: string;
+  stateHome: string;
+}
+
 export interface ExtensionTiming {
   event: string;
   handlerName: string;
