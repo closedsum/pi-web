@@ -29,6 +29,13 @@ export interface PollerDeps {
   maxMs?: number;
 }
 
+export function formatHeartbeatAge(ms: number | null): string | null {
+  if (ms == null || ms < 0) return null;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
+  return `${Math.floor(ms / 3_600_000)}h`;
+}
+
 export function nextDelay(errors: number): number {
   if (errors <= 0) return BASE_POLL_MS;
   return Math.min(BASE_POLL_MS * 2 ** errors, MAX_POLL_MS);

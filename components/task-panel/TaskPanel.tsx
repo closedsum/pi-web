@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import type { BoardTask, TaskBoardData } from "@/lib/task-board";
 import { useLayoutPreferences } from "@/hooks/useLayoutPreferences";
+import { DriverStatusBadge } from "./DriverStatusBadge";
 import { DispatchSection } from "./DispatchSection";
 import { resolveModelDisplayName, getModelFamilyColor } from "@/lib/model-registry";
 
@@ -381,6 +382,7 @@ export function TaskPanel({ cwd, sessionId, onCollapse, onTaskCounts }: { cwd: s
         >
           Tasks
         </span>
+        <DriverStatusBadge cwd={cwd} />
         {data && data.tasks.length > 0 && (
           <span style={{ fontSize: 10, display: "flex", gap: 6, whiteSpace: "nowrap" }}>
             {sessionCompletedCount > 0 && <span style={{ color: "#22c55e" }}><b>{sessionCompletedCount}</b> done</span>}
