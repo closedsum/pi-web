@@ -16,7 +16,8 @@ import { evaluateBlockRules, ALL_RULES, type BlockRule } from "./tool-blockers";
 import { evaluateResultRules, ALL_RESULT_RULES, createResultState, type ResultRule } from "./tool-results";
 import { evaluateInputRules, ALL_INPUT_RULES } from "./input-handlers";
 import { fireSessionStart, fireSessionEnd, trackToolCall, ALL_SESSION_RULES, createSessionState } from "./session-lifecycle";
-import type { ToolCallEvent, ToolResultEvent, InputEvent, SessionStartEvent, SessionEndEvent, ExtensionTiming, InputRule, SessionRule } from "./types";
+import type { ToolCallEvent, ToolResultEvent, InputEvent, SessionStartEvent, SessionEndEvent, ExtensionTiming, InputRule, SessionRule, BlockRuleContext } from "./types";
+import { resolveStateHome } from "../state-home";
 
 export const GSD_EXTENSION_NAME = "pi-web-gsd-unified";
 
@@ -25,6 +26,7 @@ export interface GsdExtensionOptions {
   enableResultRules?: boolean;
   enableInputRules?: boolean;
   enableSessionRules?: boolean;
+  isSubagent?: boolean;
   blockRules?: readonly BlockRule[];
   resultRules?: readonly ResultRule[];
   inputRules?: readonly InputRule[];
@@ -43,14 +45,25 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
   const sessionRules = options.sessionRules ?? ALL_SESSION_RULES;
   const onTiming = options.onTiming;
 
+  let blockRuleCtx: BlockRuleContext | undefined;
+
   return {
     name: GSD_EXTENSION_NAME,
     hidden: true,
     factory: (pi) => {
+      pi.on("session_start", (ev: SessionStartEvent) => {
+        blockRuleCtx = {
+          cwd: ev.cwd ?? process.cwd(),
+          isSubagent: options.isSubagent ?? false,
+          sessionId: ev.sessionId,
+          stateHome: resolveStateHome(),
+        };
+      });
+
       if (enableBlockRules) {
         pi.on("tool_call", (ev: ToolCallEvent) => {
           const start = performance.now();
-          const result = evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules);
+          const result = evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx);
           const durationMs = performance.now() - start;
 
           if (onTiming) {
