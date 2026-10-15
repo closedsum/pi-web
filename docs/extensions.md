@@ -120,7 +120,7 @@ Reusable, scope-isolated extension modules with a shared test harness. Each modu
 | File | Purpose |
 |------|---------|
 | `_test-harness.mjs` | `createMockPi()`, `assertBlocks()`, `assertAllows()` for dry-run testing |
-| `tool-blockers.ts` | 16 `BlockRule` functions ported from Claude PreToolUse hooks |
+| `tool-blockers.ts` | 23 `BlockRule` functions ported from Claude PreToolUse hooks |
 | `index.ts` | `createGsdExtension()` — unified `InlineExtension` composing all modules |
 
 ### Tool Blockers

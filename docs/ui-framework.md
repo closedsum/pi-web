@@ -52,10 +52,15 @@ To add a new panel: create a directory, add the component + test + types + API r
 
 Edit `getResultSummary()` in `MessageView.tsx`:
 ```typescript
-function getResultSummary(result: ToolResultMessage | undefined): string {
+interface ResultSummary {
+  verb: string;
+  timing?: string;
+}
+
+function getResultSummary(result: ToolResultMessage | undefined): ResultSummary | null {
   // ... existing JSON parsing ...
   // Add your pattern:
-  if (json.your_field) return `→ ${json.your_field}`;
+  if (json.your_field) return { verb: `→ ${json.your_field}` };
 }
 ```
 

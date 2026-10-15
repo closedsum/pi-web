@@ -30,6 +30,15 @@
 | [ADR-0001](adr/0001-isolate-project-command-environments.md) | Isolate project command environments |
 | [ADR-0002](adr/0002-chat-only-tool-selection.md) | Chat-only tool selection |
 | [ADR-0003](adr/0003-built-in-subagent-toggle.md) | Built-in subagent toggle |
+| [ADR-0004](adr/0004-enabled-models-toggles.md) | Enabled models toggles |
+| [ADR-0005](adr/0005-built-in-subagent-disable.md) | Built-in subagent disable |
+| [ADR-0006](adr/0006-mcp-and-code-mode.md) | MCP and code mode |
+
+## Agent Notes
+
+| Document | Purpose |
+|----------|---------|
+| [docs/agents/](agents/) | Reference docs: client-platform, files-and-access, mcp-add, mcp-runtime, mcp-settings, mcp-test-sign-in, models, sessions, settings-ui, subagents, tools |
 
 ## Upstream
 

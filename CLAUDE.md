@@ -54,7 +54,7 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `components/task-panel/DispatchSection.tsx` | Lanes section — filters pre-existing terminal lanes via baseline snapshot; resets on fetch-recovery (server restart) |
 | `components/ModelSelector.tsx` | Model dropdown with per-provider color coding |
 | `lib/extensions/` | Modular pi extension framework — tool blockers, shared test harness, composable rules |
-| `lib/extensions/tool-blockers.ts` | 16 `BlockRule` pure functions ported from Claude PreToolUse hooks; `evaluateBlockRules()` |
+| `lib/extensions/tool-blockers.ts` | 23 `BlockRule` pure functions ported from Claude PreToolUse hooks; `evaluateBlockRules()` |
 | `lib/extensions/_test-harness.mjs` | `createMockPi()`, `assertBlocks()`, `assertAllows()` for extension dry-run testing |
 
 ## Orchestrator Mode
@@ -73,7 +73,7 @@ Current status tools: `CheckLaneStatus` — deterministic JSON from lane manifes
 ## Architecture
 
 - **Host vs Project:** Pi Web's runtime environment is separate from the project command environment (see `CONTEXT.md`)
-- **Extensions:** Plugin system via `lib/sidebar-extensions/` and RPC manager
+- **Extensions:** Sidebar actions via `lib/sidebar-actions.ts` and `lib/sidebar-prefs.ts`
 - **Settings:** User prefs in `~/.pi/agent/settings.json`, layout prefs in localStorage via `hooks/useLayoutPreferences.ts`
 - **Models:** Configured in `~/.pi/agent/models.json`, filtered by `enabledModels` in settings
 
