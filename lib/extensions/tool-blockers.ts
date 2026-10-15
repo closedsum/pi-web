@@ -5,11 +5,11 @@
  * Each rule is a pure function: (toolName, input) => BlockResult | undefined.
  * Rules are scope-isolated and individually testable.
  */
-import type { BlockResult } from "./types";
+import type { BlockResult, BlockRuleContext } from "./types";
 
 export interface BlockRule {
   name: string;
-  test: (toolName: string, input: Record<string, unknown>) => BlockResult | undefined;
+  test: (toolName: string, input: Record<string, unknown>, ctx?: BlockRuleContext) => BlockResult | undefined;
 }
 
 const inputStr = (input: Record<string, unknown>, key: string): string =>
@@ -310,9 +310,10 @@ export function evaluateBlockRules(
   toolName: string,
   input: Record<string, unknown>,
   rules: readonly BlockRule[] = ALL_RULES,
+  ctx?: BlockRuleContext,
 ): BlockResult | undefined {
   for (const rule of rules) {
-    const result = rule.test(toolName, input);
+    const result = rule.test(toolName, input, ctx);
     if (result) return result;
   }
   return undefined;
