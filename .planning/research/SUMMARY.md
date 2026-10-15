@@ -1,40 +1,47 @@
-# Research Summary: Orchestration Hook Porting
+# Research Summary: v2.0 Enhanced Orchestration
 
-## Key Findings
+## Source
+Cross-research pipeline — 3 models participated (opus55, gpt6, qwen38), synthesis produced.
+Full outputs: `.planning/research/cross-research/`
 
-**Stack:** Pi-web needs 5 new modules — state-home resolver, process-liveness checker, git-query wrapper, lane-driver manager, and audit-scope extension. All use standard Node.js APIs already available in the gsd-lane-extension pattern.
+## Consensus Findings (high confidence)
 
-**Table Stakes:** All 6 hooks are must-have for full orchestration parity. However, audit-scope-guard (540 lines) can be deferred if audit fixers don't yet run in pi-web.
+- **Gather-then-decide pattern:** prefetch git facts asynchronously once per tool call into a frozen context, then run all 23 existing rules as pure sync functions — only the context builder is async, no rule rewrites needed
+- **Keep sync `evaluateBlockRules` unchanged**, add separate `evaluateBlockRulesAsync` — changing the return type breaks callers and tests
+- **Python owns process identity:** `psutil.Process(pid).create_time()` on the Python side, matching "Python-first" rule. Lock schema v2: `{pid, proc_start, boot_id, instance_nonce, heartbeat_seq}`
+- **Async git:** promisified `execFile` with `signal`, `timeout`, `maxBuffer`, `windowsHide`, no shell — wrapping `execFileSync` in Promise does nothing
+- **Telemetry:** per-session collector, decorator at registration, fixed-bucket histograms, count only invoked rules, redact paths/args, failures isolated from verdicts
+- **Daemon status:** atomic snapshot from Python daemon, read-only Next.js route (`force-dynamic` + `no-store`), `unknown` distinct from `stopped`
+- **UI polling:** single-flight `setTimeout` (5s visible, paused hidden, backoff on errors), discriminated union for status badge
 
-**Watch Out For:** Sync git/process operations blocking the event loop. Missing session context in BlockRules. Concurrent session state races. Windows-specific PID checks.
+## Unique Findings (flag for review)
 
-## Classification
+- `wmic` removed in Windows 11 24H2 (this machine) — must use CIM or psutil
+- `node:diagnostics_channel` as zero-dependency telemetry bus
+- Start/stop buttons are anti-feature until auth/CSRF — read-only status only in v2.0
+- Advance heartbeat from work loop (separate thread masks deadlocks)
+- Exiting old daemon can delete replacement's files — check ownership via nonce
 
-The 6 hooks split into two categories:
+## Conflicts & Resolution
 
-**Tool-call gates (4 hooks)** — intercept specific tool calls and block conditionally:
-- fork-completion-gate, block-probe-in-fork, block-manual-integrate, block-redispatch-without-fix
+1. **Process identity probe location:** Python (consensus) vs Node. Resolved: Python, per "Python-first" rule
+2. **Async rule evaluation order:** Sequential (consensus) — avoids unnecessary git subprocesses after early block
+3. **evaluateBlockRules signature:** Keep sync, add separate async function
+4. **Build order:** PID/lock v2 → status API/UI → telemetry baseline → async prefetch
 
-**Session services (2 hooks)** — not tool-call filters at all:
-- ensure-lane-driver (daemon lifecycle), audit-scope-guard (file-op proxy)
+## Unified Recommendation
 
-## Architecture Decision
+1. **Phase 0 gate:** Verify `pi.on('tool_call')` awaits async handlers (blocks ENH-01)
+2. **Lock schema v2:** `{schema:2, pid, proc_start, boot_id, instance_nonce, heartbeat_seq, heartbeat_at, state, last_error}` — atomic `os.replace`, Python-side identity verification
+3. **Status API:** Read-only route → snapshot DTO, parse failures → `unknown`, single-flight poll with discriminated-union badge
+4. **Telemetry:** Session-scoped decorator, fixed-bucket histograms, atomic debounced snapshots
+5. **Async:** Memoized lazy `prefetchGitFacts` with promisified `execFile`, rules stay sync over frozen context
 
-**Hybrid approach:** Extend BlockRule context for simple sync checks (probe-in-fork, fork-completion-gate). Use InlineExtension handlers for async/stateful hooks (manual-integrate, redispatch-without-fix, lane-driver, audit-scope).
+## Gaps & Open Questions
 
-## Build Order
-
-1. Foundation utilities (state-home, process-liveness, git-query)
-2. BlockRule context extension + 2 simple rules
-3. InlineExtension hooks (3 tool-call handlers + lane-driver)
-4. Audit scope extension (deferred)
-
-## Risk Summary
-
-| Risk | Severity | Mitigation |
-|------|----------|-----------|
-| Event loop blocking | High | Timeout on all sync exec, benchmark first |
-| Missing context bypass | High | Explicit context extension, fail-open with warning |
-| PID reuse false positives | Medium | proc_start matching, TTL on checks |
-| Concurrent state races | Medium | proper-lockfile, atomic reads, no caching |
-| Command parser drift | Low | Regex on known invocation patterns |
+- Does `pi.on('tool_call')` await async handlers? (Blocks ENH-01)
+- Daemon runtime: native Windows Python or WSL? (Affects PID identity checks)
+- Spawned vs adopted daemon (spawned → process handle removes PID-reuse problem)
+- Whether psutil is already a lane-driver dependency
+- Whether the web UI already uses SWR or TanStack Query
+- No measured baseline for git/rule latency — timeout values unvalidated
