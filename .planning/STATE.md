@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-last_updated: "2026-10-15T08:44:54.084Z"
+milestone: v2.0
+milestone_name: Enhanced Orchestration
+status: defining_requirements
+last_updated: "2026-10-15"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,17 +18,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-15)
 
 **Core value:** Agent sessions execute with the same safety rules and orchestration enforcement as the CLI
-**Current focus:** Phase 04 — Audit Scope Extension
+**Current focus:** Defining requirements for v2.0 Enhanced Orchestration
 
-## Current Phase
+## Current Position
 
-Phase: 04
-Name: Foundation Infrastructure
-Status: Executing Phase 01
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-10-15 — Milestone v2.0 started
 
 ## Phase History
 
-(None — project just initialized)
+v1.0 — Orchestration Hook Porting (shipped 2026-10-15): 4 phases, 11 plans, 16/16 requirements
 
 ## Active Decisions
 
@@ -36,7 +37,6 @@ Status: Executing Phase 01
 |----------|------|---------|
 | Hybrid extension pattern | 2026-10-15 | Simple gates as BlockRules with context; complex hooks as InlineExtension handlers |
 | Coarse 4-phase structure | 2026-10-15 | Foundation → context + simple gates → complex hooks + driver → audit scope |
-| Audit scope deferred to Phase 4 | 2026-10-15 | 540-line proxy is most complex; audit fixers may not run in pi-web yet |
 
 ## Blockers
 
@@ -44,4 +44,4 @@ Status: Executing Phase 01
 
 ---
 *State initialized: 2026-10-15*
-*Last updated: 2026-10-15 after initialization*
+*Last updated: 2026-10-15 — milestone v2.0 started*

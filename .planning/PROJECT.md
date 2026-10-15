@@ -38,7 +38,20 @@ Agent sessions execute with the same safety rules and orchestration enforcement 
 
 ### Active
 
-(None — next milestone TBD)
+- ENH-01: Async block rule support (non-blocking git queries for high-latency repos)
+- ENH-02: Block rule telemetry (count blocks per rule per session)
+- ENH-03: proc_start matching for PID reuse detection on all platforms
+- ENH-04: Real-time lane driver status in UI (running/stopped indicator)
+
+## Current Milestone: v2.0 Enhanced Orchestration
+
+**Goal:** Harden the orchestration extension system with async support, telemetry, PID resilience, and real-time driver visibility.
+
+**Target features:**
+- Async block rule evaluation with non-blocking git queries
+- Block rule telemetry and session-level instrumentation
+- Defense-in-depth PID reuse detection via proc_start matching
+- Real-time lane driver status indicator in the UI
 
 ### Out of Scope
 
@@ -49,9 +62,11 @@ Agent sessions execute with the same safety rules and orchestration enforcement 
 
 ## Context
 
-Pi-web wraps the `@earendil-works/pi-*` SDK (v1.2.0) and exposes coding-agent sessions through a Next.js App Router application. The extension system has 23 BlockRules (21 original + 2 context-aware) plus 3 InlineExtension handlers and a lane driver manager. All 6 orchestration hooks from the CLI are now ported.
+Pi-web wraps the `@earendil-works/pi-*` SDK (v1.2.0) and exposes coding-agent sessions through a Next.js App Router application. The extension system has 23 BlockRules (21 original + 2 context-aware) plus 3 InlineExtension handlers and a lane driver manager. All 6 orchestration hooks from the CLI are now ported as of v1.0.
 
 Foundation utilities in `lib/`: state-home resolver, process liveness checker, git query wrapper, shell command parser. These are consumed by the context-aware rules and InlineExtension handlers. The audit scope extension intercepts Write/Edit in audit sessions and enforces scope boundaries via base64url scope tokens.
+
+v2.0 targets: async evaluation path for block rules (ENH-01), telemetry instrumentation (ENH-02), proc_start PID resilience (ENH-03), and lane driver UI status (ENH-04).
 
 ## Constraints
 
@@ -89,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-15 after v1.0 milestone (Orchestration Hook Porting)*
+*Last updated: 2026-10-15 after v2.0 milestone start (Enhanced Orchestration)*
