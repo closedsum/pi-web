@@ -13,6 +13,8 @@
  */
 import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import { evaluateBlockRules, ALL_RULES, type BlockRule } from "./tool-blockers";
+import { TelemetryCollector, evaluateBlockRulesInstrumented } from "./telemetry-collector";
+import { DebouncedWriter } from "./telemetry-writer";
 import { evaluateResultRules, ALL_RESULT_RULES, createResultState, type ResultRule } from "./tool-results";
 import { evaluateInputRules, ALL_INPUT_RULES } from "./input-handlers";
 import { fireSessionStart, fireSessionEnd, trackToolCall, ALL_SESSION_RULES, createSessionState } from "./session-lifecycle";
@@ -36,6 +38,7 @@ export interface GsdExtensionOptions {
   inputRules?: readonly InputRule[];
   sessionRules?: readonly SessionRule[];
   onTiming?: (timing: ExtensionTiming) => void;
+  enableTelemetry?: boolean;
 }
 
 export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExtension {
@@ -48,9 +51,12 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
   const inputRules = options.inputRules ?? ALL_INPUT_RULES;
   const sessionRules = options.sessionRules ?? ALL_SESSION_RULES;
   const onTiming = options.onTiming;
+  const enableTelemetry = options.enableTelemetry ?? true;
 
   let blockRuleCtx: BlockRuleContext | undefined;
   let auditScopeToken: string | undefined;
+  let telemetryCollector: TelemetryCollector | undefined;
+  let telemetryWriter: DebouncedWriter | undefined;
 
   return {
     name: GSD_EXTENSION_NAME,
@@ -64,6 +70,10 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
           stateHome: resolveStateHome(),
         };
         auditScopeToken = process.env.GSD_AUDIT_SCOPE_TOKEN || undefined;
+        if (enableTelemetry && ev.sessionId) {
+          telemetryCollector = new TelemetryCollector(ev.sessionId);
+          telemetryWriter = new DebouncedWriter(telemetryCollector);
+        }
         try {
           ensureLaneDriver(blockRuleCtx.cwd, blockRuleCtx.stateHome);
         } catch {
@@ -74,8 +84,11 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
       if (enableBlockRules) {
         pi.on("tool_call", (ev: ToolCallEvent) => {
           const start = performance.now();
-          const result = evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx);
+          const result = telemetryCollector
+            ? evaluateBlockRulesInstrumented(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx, telemetryCollector)
+            : evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx);
           const durationMs = performance.now() - start;
+          telemetryWriter?.schedule();
 
           if (onTiming) {
             onTiming({
@@ -183,6 +196,7 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
         });
 
         (pi as any).on("session_shutdown", (ev: SessionEndEvent) => {
+          telemetryWriter?.stop();
           const start = performance.now();
           const messages = fireSessionEnd(ev, sessionState, sessionRules);
           const durationMs = performance.now() - start;
