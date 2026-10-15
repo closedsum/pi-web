@@ -19,6 +19,7 @@ export interface BlockRuleContext {
   isSubagent: boolean;
   sessionId?: string;
   stateHome: string;
+  gitFacts?: { latestInScope: string | null; toplevel: string | null };
 }
 
 export interface ExtensionTiming {

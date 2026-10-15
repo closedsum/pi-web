@@ -15,6 +15,7 @@ import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import { evaluateBlockRules, ALL_RULES, type BlockRule } from "./tool-blockers";
 import { TelemetryCollector, evaluateBlockRulesInstrumented } from "./telemetry-collector";
 import { DebouncedWriter } from "./telemetry-writer";
+import { evaluateBlockRulesAsync } from "./async-block-rules";
 import { evaluateResultRules, ALL_RESULT_RULES, createResultState, type ResultRule } from "./tool-results";
 import { evaluateInputRules, ALL_INPUT_RULES } from "./input-handlers";
 import { fireSessionStart, fireSessionEnd, trackToolCall, ALL_SESSION_RULES, createSessionState } from "./session-lifecycle";
@@ -39,6 +40,7 @@ export interface GsdExtensionOptions {
   sessionRules?: readonly SessionRule[];
   onTiming?: (timing: ExtensionTiming) => void;
   enableTelemetry?: boolean;
+  enableAsyncRules?: boolean;
 }
 
 export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExtension {
@@ -52,6 +54,7 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
   const sessionRules = options.sessionRules ?? ALL_SESSION_RULES;
   const onTiming = options.onTiming;
   const enableTelemetry = options.enableTelemetry ?? true;
+  const enableAsyncRules = options.enableAsyncRules ?? false;
 
   let blockRuleCtx: BlockRuleContext | undefined;
   let auditScopeToken: string | undefined;
@@ -82,11 +85,13 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
       });
 
       if (enableBlockRules) {
-        pi.on("tool_call", (ev: ToolCallEvent) => {
+        pi.on("tool_call", async (ev: ToolCallEvent) => {
           const start = performance.now();
-          const result = telemetryCollector
-            ? evaluateBlockRulesInstrumented(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx, telemetryCollector)
-            : evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx);
+          const result = enableAsyncRules
+            ? await evaluateBlockRulesAsync(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx, { collector: telemetryCollector ?? undefined })
+            : telemetryCollector
+              ? evaluateBlockRulesInstrumented(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx, telemetryCollector)
+              : evaluateBlockRules(ev.toolName, ev.input ?? {}, blockRules, blockRuleCtx);
           const durationMs = performance.now() - start;
           telemetryWriter?.schedule();
 
