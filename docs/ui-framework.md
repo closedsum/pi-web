@@ -68,14 +68,7 @@ function getResultSummary(result: ToolResultMessage | undefined): ResultSummary 
 
 `ProcessDetailsGroup` in `ChatWindow.tsx` groups consecutive non-answer messages.
 
-Header shows: message count, tool call count, tool names (highlighted tools bold + status-colored), usage tokens, cost, elapsed time.
-
-### Highlighted tools
-
-The `HIGHLIGHT_TOOLS` set in `ProcessDetailsGroup` controls which tool names get bold + status-colored treatment. Add new tools:
-```typescript
-const HIGHLIGHT_TOOLS = new Set(["ue_dispatch", "DispatchLane", "YourTool"]);
-```
+Header shows: message count, tool call count (clickable to expand/collapse).
 
 ## Auto-Collapse Patterns
 

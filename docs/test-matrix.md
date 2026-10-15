@@ -32,7 +32,7 @@ Many tests read their source file to verify structure (no `style={{`, correct im
 
 ### Component tests
 
-Use a `renderToString` shim (`lib/test-render.mjs`) that produces HTML strings for assertion. No browser DOM — tests verify HTML structure and inline styles.
+Use `renderToStaticMarkup` from `react-dom/server` to produce HTML strings for assertion. No browser DOM — tests verify HTML structure and inline styles.
 
 ### jiti module dedup
 
