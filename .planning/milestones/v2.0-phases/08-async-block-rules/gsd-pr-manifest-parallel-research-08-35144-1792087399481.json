@@ -1,0 +1,16 @@
+{
+  "id": "parallel-research-08-35144-1792087399481",
+  "phase_num": "08",
+  "phase_name": "Async Block Rules",
+  "output": "D:\\Trees\\pi-web\\.planning\\phases\\08-async-block-rules\\08-RESEARCH.md",
+  "status": "ok",
+  "process_ledger": {
+    "owner": "parallel-research-08-35144-1792087399481",
+    "repo": "C:\\Users\\bedit\\gsd-config",
+    "ledger": "C:\\Users\\bedit\\gsd-config\\.planning\\impl-lanes\\processes.jsonl",
+    "evidence_file": "D:\\Trees\\pi-web\\.planning\\phases\\08-async-block-rules\\proc-tree-evidence.json",
+    "errors": [],
+    "_error": null
+  },
+  "proc_tree_evidence": "D:\\Trees\\pi-web\\.planning\\phases\\08-async-block-rules\\proc-tree-evidence.json"
+}

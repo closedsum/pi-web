@@ -1,0 +1,60 @@
+{
+  "id": "parallel-research-06-68116-1792084532630",
+  "phase_num": "06",
+  "phase_name": "Lane Driver Status UI",
+  "output": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\06-RESEARCH.md",
+  "status": "ok",
+  "tracks": [
+    {
+      "track": "minimax",
+      "model": "MiniMax-M3",
+      "status": "ok",
+      "elapsed_s": 32.1,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-minimax-result.md"
+    },
+    {
+      "track": "sonnet5",
+      "model": "claude-sonnet-5-5[1m]",
+      "status": "ok",
+      "elapsed_s": 66.3,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-sonnet5-result.md"
+    },
+    {
+      "track": "opus55",
+      "model": "claude-opus-5-5[1m]",
+      "status": "ok",
+      "elapsed_s": 82.0,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-opus55-result.md"
+    },
+    {
+      "track": "gpt",
+      "model": "gpt-6.1-sol",
+      "status": "ok",
+      "elapsed_s": 85.8,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-gpt-result.md"
+    },
+    {
+      "track": "gpt6",
+      "model": "gpt-6-astra",
+      "status": "ok",
+      "elapsed_s": 115.9,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-gpt6-result.md"
+    },
+    {
+      "track": "qwen38",
+      "model": "qwen3.8-max",
+      "status": "ok",
+      "elapsed_s": 575.4,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-1iz00a74\\gsd-pr-qwen38-result.md"
+    }
+  ],
+  "process_ledger": {
+    "owner": "parallel-research-06-68116-1792084532630",
+    "repo": "C:\\Users\\bedit\\gsd-config",
+    "ledger": "C:\\Users\\bedit\\gsd-config\\.planning\\impl-lanes\\processes.jsonl",
+    "evidence_file": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\proc-tree-evidence.json",
+    "errors": [],
+    "_error": null
+  },
+  "proc_tree_evidence": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\proc-tree-evidence.json"
+}

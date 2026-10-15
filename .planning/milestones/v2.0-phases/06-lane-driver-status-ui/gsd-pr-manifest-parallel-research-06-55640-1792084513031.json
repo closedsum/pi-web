@@ -1,0 +1,16 @@
+{
+  "id": "parallel-research-06-55640-1792084513031",
+  "phase_num": "06",
+  "phase_name": "Lane Driver Status UI",
+  "output": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\06-RESEARCH.md",
+  "status": "ok",
+  "process_ledger": {
+    "owner": "parallel-research-06-55640-1792084513031",
+    "repo": "C:\\Users\\bedit\\gsd-config",
+    "ledger": "C:\\Users\\bedit\\gsd-config\\.planning\\impl-lanes\\processes.jsonl",
+    "evidence_file": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\proc-tree-evidence.json",
+    "errors": [],
+    "_error": null
+  },
+  "proc_tree_evidence": "D:\\Trees\\pi-web\\.planning\\phases\\06-lane-driver-status-ui\\proc-tree-evidence.json"
+}

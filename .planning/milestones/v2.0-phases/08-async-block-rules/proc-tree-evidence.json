@@ -1,0 +1,64 @@
+{
+  "owner": "parallel-research-08-75996-1792088152145",
+  "repo": "C:\\Users\\bedit\\gsd-config",
+  "ledger": "C:\\Users\\bedit\\gsd-config\\.planning\\impl-lanes\\processes.jsonl",
+  "roots": [
+    {
+      "pid": 77160,
+      "create_time": 134365617522668939,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "gpt"
+    },
+    {
+      "pid": 52932,
+      "create_time": 134365617522685559,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "sonnet5"
+    },
+    {
+      "pid": 40852,
+      "create_time": 134365617522683121,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "gpt6"
+    },
+    {
+      "pid": 40920,
+      "create_time": 134365617522721659,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "opus55"
+    },
+    {
+      "pid": 29640,
+      "create_time": 134365617522746279,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "qwen38"
+    },
+    {
+      "pid": 50916,
+      "create_time": 134365617522752307,
+      "actual_create_time": null,
+      "matched": false,
+      "reason": "not_alive",
+      "job": "minimax"
+    }
+  ],
+  "jobs": [],
+  "pids": [],
+  "survivors": [],
+  "waited": true,
+  "errors": [],
+  "eligible_roots": 0,
+  "supervisor_skips": [],
+  "_error": null,
+  "record_errors": []
+}

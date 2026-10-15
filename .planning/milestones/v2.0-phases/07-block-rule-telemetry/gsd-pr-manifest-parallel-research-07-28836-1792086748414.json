@@ -1,0 +1,60 @@
+{
+  "id": "parallel-research-07-28836-1792086748414",
+  "phase_num": "07",
+  "phase_name": "Block Rule Telemetry",
+  "output": "D:\\Trees\\pi-web\\.planning\\phases\\07-block-rule-telemetry\\07-RESEARCH.md",
+  "status": "ok",
+  "tracks": [
+    {
+      "track": "minimax",
+      "model": "MiniMax-M3",
+      "status": "ok",
+      "elapsed_s": 15.9,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-minimax-result.md"
+    },
+    {
+      "track": "gpt",
+      "model": "gpt-6.1-sol",
+      "status": "ok",
+      "elapsed_s": 57.9,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-gpt-result.md"
+    },
+    {
+      "track": "opus55",
+      "model": "claude-opus-5-5[1m]",
+      "status": "ok",
+      "elapsed_s": 58.0,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-opus55-result.md"
+    },
+    {
+      "track": "sonnet5",
+      "model": "claude-sonnet-5-5[1m]",
+      "status": "ok",
+      "elapsed_s": 66.4,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-sonnet5-result.md"
+    },
+    {
+      "track": "gpt6",
+      "model": "gpt-6-astra",
+      "status": "ok",
+      "elapsed_s": 81.1,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-gpt6-result.md"
+    },
+    {
+      "track": "qwen38",
+      "model": "qwen3.8-max",
+      "status": "ok",
+      "elapsed_s": 89.1,
+      "output_file": "C:\\Users\\bedit\\AppData\\Local\\Temp\\gsd-pr-qwesgt5j\\gsd-pr-qwen38-result.md"
+    }
+  ],
+  "process_ledger": {
+    "owner": "parallel-research-07-28836-1792086748414",
+    "repo": "C:\\Users\\bedit\\gsd-config",
+    "ledger": "C:\\Users\\bedit\\gsd-config\\.planning\\impl-lanes\\processes.jsonl",
+    "evidence_file": "D:\\Trees\\pi-web\\.planning\\phases\\07-block-rule-telemetry\\proc-tree-evidence.json",
+    "errors": [],
+    "_error": null
+  },
+  "proc_tree_evidence": "D:\\Trees\\pi-web\\.planning\\phases\\07-block-rule-telemetry\\proc-tree-evidence.json"
+}
