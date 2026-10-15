@@ -14,10 +14,10 @@ export interface BlockRule {
   test: (toolName: string, input: Record<string, unknown>, ctx?: BlockRuleContext) => BlockResult | undefined;
 }
 
-const inputStr = (input: Record<string, unknown>, key: string): string =>
+export const inputStr = (input: Record<string, unknown>, key: string): string =>
   typeof input[key] === "string" ? (input[key] as string) : "";
 
-const commandStr = (input: Record<string, unknown>): string =>
+export const commandStr = (input: Record<string, unknown>): string =>
   inputStr(input, "command") || inputStr(input, "script");
 
 function matchesAny(text: string, patterns: RegExp[]): boolean {
