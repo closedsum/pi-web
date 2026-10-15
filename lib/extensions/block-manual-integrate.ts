@@ -1,5 +1,5 @@
-import { readFileSync } from "fs";
 import path from "path";
+import { parseLockFile, deriveDaemonStatus } from "../lock-schema";
 import { isProcessAlive } from "../process-liveness";
 import { commandStr } from "./tool-blockers";
 import type { BlockResult } from "./types";
@@ -19,19 +19,15 @@ export function checkManualIntegrate(
   if (!INTEGRATE_RE.test(cmd)) return undefined;
 
   const lockPath = path.join(cwd, ".autopilot.lock");
-  let lockData: { pid?: number };
-  try {
-    lockData = JSON.parse(readFileSync(lockPath, "utf-8"));
-  } catch {
-    return undefined;
-  }
+  const lock = parseLockFile(lockPath);
+  if (!lock) return undefined;
 
-  if (typeof lockData.pid !== "number" || !isProcessAlive(lockData.pid)) {
-    return undefined;
-  }
+  const status = deriveDaemonStatus(lock, isProcessAlive);
+  if (status.status !== "running" && status.status !== "stale") return undefined;
 
+  const unverified = !status.identityVerified ? " (unverified — v1 lock)" : "";
   return {
     block: true,
-    reason: `Auto-integration daemon is active (PID ${lockData.pid}). Use 'cancel --autopilot' to stop it first.`,
+    reason: `Auto-integration daemon is active (PID ${lock.data.pid})${unverified}. Use 'cancel --autopilot' to stop it first.`,
   };
 }

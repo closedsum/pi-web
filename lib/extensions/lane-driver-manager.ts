@@ -3,6 +3,8 @@ import path from "path";
 import { createHash } from "crypto";
 import { tmpdir } from "os";
 import { isProcessAlive } from "../process-liveness";
+import { parseLockFile, deriveDaemonStatus } from "../lock-schema";
+import type { DaemonStatusResult } from "../lock-schema";
 
 interface LaneDriverOptions {
   spawner?: (...args: unknown[]) => { pid: number; unref(): void };
@@ -61,11 +63,20 @@ function recordRestart(stateHome: string, hash: string): void {
 
 function isDaemonAlive(stateHome: string, hash: string, aliveCheck: (pid: number) => boolean): boolean {
   const lockPath = path.join(stateHome, "lane-driver", `${hash}.lock`);
-  try {
-    const data = JSON.parse(readFileSync(lockPath, "utf-8"));
-    if (typeof data.pid === "number" && aliveCheck(data.pid)) return true;
-  } catch { /* corrupt or missing — treat as dead */ }
-  return false;
+  const lock = parseLockFile(lockPath);
+  if (!lock) return false;
+  const status = deriveDaemonStatus(lock, aliveCheck);
+  return status.status === "running";
+}
+
+export function getDaemonStatus(
+  stateHome: string,
+  hash: string,
+  aliveCheck?: (pid: number) => boolean,
+): DaemonStatusResult {
+  const lockPath = path.join(stateHome, "lane-driver", `${hash}.lock`);
+  const lock = parseLockFile(lockPath);
+  return deriveDaemonStatus(lock, aliveCheck ?? isProcessAlive);
 }
 
 export function ensureLaneDriver(
