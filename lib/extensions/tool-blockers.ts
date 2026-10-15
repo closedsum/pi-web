@@ -276,6 +276,22 @@ export const blockLaneBranchDelete: BlockRule = {
   },
 };
 
+export const blockProbeInFork: BlockRule = {
+  name: "block-probe-in-fork",
+  test(toolName, input, ctx) {
+    if (!ctx?.isSubagent) return;
+    if (toolName !== "Bash" && toolName !== "PowerShell") return;
+    const cmd = commandStr(input);
+    if (!cmd) return;
+    if (/gsd_probe\.py|gsd-probe/.test(cmd)) {
+      return {
+        block: true,
+        reason: "block-probe-in-fork. Probes must run from the main session, not from forks.",
+      };
+    }
+  },
+};
+
 // --- Rule registry ---
 
 export const ALL_RULES: readonly BlockRule[] = [
@@ -300,6 +316,7 @@ export const ALL_RULES: readonly BlockRule[] = [
   blockUeRotatorPositional,
   blockWildcardProcessKill,
   denyJunctionSurgery,
+  blockProbeInFork,
 ];
 
 /**
