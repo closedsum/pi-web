@@ -89,9 +89,9 @@
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
 | 5 | PID Resilience | Lock schema v2 + identity verification | PID-01..04, TEST-01,02 | 5 |
-| 6 | Lane Driver Status UI | API route + React status badge | UI-01..04, TEST-01 | 5 |
-| 7 | Block Rule Telemetry | Per-session instrumentation + snapshots | TEL-01..05, TEST-01,03 | 5 |
-| 8 | Async Block Rules | Gather-then-decide async evaluation | ASYNC-01..04, TEST-01 | 5 |
+| 6 | Lane Driver Status UI | 2/2 | Complete   | 2026-10-15 |
+| 7 | Block Rule Telemetry | 2/2 | Complete   | 2026-10-15 |
+| 8 | Async Block Rules | 2/2 | Complete   | 2026-10-15 |
 
 ---
 *Roadmap created: 2026-10-15*

@@ -1,304 +1,283 @@
 # Phase 08: Async Block Rules — Research
 
 **Researched:** 2026-10-15
-**Method:** Parallel multi-model research (MiniMax-M3 + claude-opus-5-5[1m] + claude-sonnet-5-5[1m] + gpt-6.1-sol + gpt-6-astra)
+**Method:** Parallel multi-model research (Claude (Explore) + MiniMax-M3 + claude-opus-5-5[1m] + claude-sonnet-5-5[1m] + gpt-6-astra + gpt-6.1-sol + qwen3.8-max)
 **Requirements:** ASYNC-01,ASYNC-02,ASYNC-03,ASYNC-04,TEST-01
 
 ## Research Approach
 
 | Track | Model | Status | Time |
 |-------|-------|--------|------|
-| minimax | MiniMax-M3 | ok | 46.8s |
-| opus55 | claude-opus-5-5[1m] | ok | 83.6s |
-| sonnet5 | claude-sonnet-5-5[1m] | ok | 85.3s |
-| gpt | gpt-6.1-sol | ok | 96.6s |
-| gpt6 | gpt-6-astra | ok | 120.1s |
-| qwen38 | qwen3.8-max | fail | 721.1s |
+| local | Claude (Explore) | ok | — |
+| minimax | MiniMax-M3 | ok | 23.3s |
+| opus55 | claude-opus-5-5[1m] | ok | 72.5s |
+| sonnet5 | claude-sonnet-5-5[1m] | ok | 95.2s |
+| gpt6 | gpt-6-astra | ok | 128.3s |
+| gpt | gpt-6.1-sol | ok | 155.3s |
+| qwen38 | qwen3.8-max | ok | 337.5s |
+
+---
+
+## Local Codebase Analysis (Claude)
+
+## 1. git-query.ts — Sync Git Execution
+
+- `gitRevParseShowToplevel(cwd)` (L8) — execFileSync("git", ..., {timeout: 5000}), no shell
+- `gitLogLatestInScope(repo, branch, globs)` (L20) — execFileSync("git", ..., {timeout: 5000}), no shell
+- Both already safe per CVE-2024-27980 (no shell: true). Phase 8 adds async equivalents.
+
+## 2. tool-blockers.ts — No Rules Import git-query
+
+The 23 BlockRules in ALL_RULES are pure string-matching — pattern-match on git commands but don't call git. Git-calling rules are in separate files called from inline gates in index.ts.
+
+## 3. pi.on("tool_call") — FULLY SUPPORTS ASYNC
+
+ExtensionHandler type: `(event, ctx) => Promise<R | void> | R | void`
+runner.js emitToolCall is async and awaits each handler. Proven by permission-gate.ts using async handler.
+
+## 4. block-redispatch.ts — The Only Git-Calling Rule
+
+- Imports `gitLogLatestInScope` from git-query
+- Call site (L52): `gitCheck(cwd, "master", writeScope)` — injectable via `gitCheck: GitChecker`
+- Already designed for injection. Prefetched result can be passed instead.
+
+## 5. block-manual-integrate.ts — No Git, Filesystem Only
+
+Reads lock files + PID liveness. No git queries. No async needed.
+
+## 6. Architecture for Phase 8
+
+Only ONE function needs async: `gitLogLatestInScope` (used by checkRedispatchWithoutFix).
+`gitRevParseShowToplevel` is session-start only, not per-tool-call.
+
+**Gather-then-decide:**
+1. Prefetch gitLogLatestInScope async via promisified execFile + AbortSignal
+2. Freeze result into context
+3. Pass frozen context to checkRedispatchWithoutFix via injectable gitCheck
+4. Run all sync rules over frozen context
+5. Sync evaluateBlockRules unchanged (ASYNC-02) — add thenable safety net
+6. New evaluateBlockRulesAsync is a separate function
+
 
 ---
 
 ## Minimax Research (MiniMax-M3)
 
-# Phase 8 (Async Block Rules) — Research Findings
+# Phase 8: Async Block Rules — Research Findings
 
-The review material provided is a phase context summary, not raw source files. Per the architecture-level review convention, findings reference module paths, class names, and method signatures rather than file:line.
+## 1. `execFile` with `AbortSignal` — Subprocess Cleanup Gotchas
 
----
+Node's `execFile` does **not** natively propagate `AbortSignal` to kill the child process. You must wire it up manually.
 
-## 1. `pi.on("tool_call")` async handler support — UNVERIFIED-CONTRACT
+```js
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
-The context summary states "Verify `pi.on("tool_call")` supports async return values before proceeding." This is the foundational assumption for ASYNC-01: if the extension host rejects / does not await a Promise return, the gather-then-decide pattern silently degrades to sync-only semantics (the prefetch completes but decisions are made against a stale or empty context).
-
-**Concrete failure scenario:** `tool_call` handler is invoked synchronously by the pi runtime. The handler returns a `Promise<undefined>` from `evaluateBlockRulesAsync`. If the host treats the return value as the literal `thenable` and never awaits it, the rule pass is skipped or the host throws — blocking every tool call after registration.
-
-**Action — verify before planning, then encode in the design:**
-1. Read the extension-host docs / `pi.on` implementation and confirm: (a) whether async listeners are awaited, (b) the resolution order with respect to `preventDefault`/continuation signals, and (c) error propagation (does a rejected Promise block or permit the call?).
-2. If unsupported: do not attempt a single-coroutine gather-then-decide. Either (a) block until prefetch resolves and then run sync, accepting higher per-call latency, or (b) require the host API to be patched first — explicitly out-of-scope risk to flag at kickoff.
-
-**Severity:** CRITICAL (the entire ASYNC-01 premise hinges on it).
-
----
-
-## 2. Sync `evaluateBlockRules` thenable-guard contract
-
-ASYNC-02 requires the sync API to throw `TypeError` if "a rule returns a thenable." The current contract per context summary is "pure sync functions returning `BlockResult | undefined`."
-
-**Two under-specified contracts to lock down:**
-
-1. **Detection predicate.** Use `result != null && typeof result.then === 'function'` (duck-typed thenable check). Do not rely on `result instanceof Promise` — a rule could return a custom thenable. Spec both branches in JSDoc.
-
-2. **Aggregation behavior when multiple rules return thenables.** The context implies short-circuit-on-first-block, but does a type violation in rule #3 (never reached due to short-circuit on rule #1) get reported? Recommendation: only inspect the rules actually evaluated (matches short-circuit semantics). Otherwise authors will see mysterious TypeErrors from rules they didn't write.
-
-```ts
-// Sketch — to be finalized in implementation
-export function evaluateBlockRules(input: BlockInput, rules = ALL_RULES): BlockResult | undefined {
-  for (const rule of rules) {
-    const result = rule(input);
-    if (result != null && typeof (result as any).then === 'function') {
-      throw new TypeError(
-        `Block rule '${rule.name ?? "<anonymous>"}' returned a thenable; ` +
-        `use evaluateBlockRulesAsync for async rules.`
-      );
-    }
-    if (result) return result; // short-circuit
-  }
-}
-```
-
-**Severity:** HIGH (defines a new contract the prior sync consumers depend on stability of).
-
----
-
-## 3. `execFile` async migration — concrete gotcha list for ASYNC-03
-
-The context correctly identifies the CVE-2024-27980 class (shell injection via `shell: true`). Below are the easy-to-miss concrete gotchas when migrating from `execFileSync` to `util.promisify(execFile)`:
-
-1. **`maxBuffer` defaults differ.** `execFileSync` enforces maxBuffer; `promisify(execFile)` does *not* apply Node's default (1 MiB) the same way when `encoding: 'buffer'` is set. Set `{ maxBuffer: 10 * 1024 * 1024 }` explicitly to match `lib/git-query.ts` existing behavior, or document a smaller cap if git log output is bounded.
-
-2. **`AbortSignal` requires `killSignal` config.** `execFile(p, args, { signal, timeout })` on Node ≥ 20 will abort, but by default it sends **SIGTERM without forcibly killing** the child if the child ignores SIGTERM. git.exe on Windows ignores SIGTERM (Windows has no SIGTERM concept). Combine `signal` with `killSignal: 'SIGKILL'` — but note SIGKILL is not delivered on Windows. The reliable kill is to use `windowsHide: true` and `forceKillAfterDelay: true` (Node ≥ 17.3 — verify on the project's engine). If `windowsHide` alone doesn't propagate, fall back to spawning git with an internal timeout (`GIT_TERMINAL_PADDING` does not help) — the realistic answer is that on Windows you cannot kill a git process mid-cat; you can only stop consuming its stdout.
-
-3. **Timeout vs Signal precedence.** When both `timeout` and `signal` are set and the *signal* fires first, `execFile` rejects with an `AbortError`. When *timeout* fires first, the error is a `TimeoutError` with `.code === 'ERR_EXEC'`. Make the rule module normalize these to a single `AbortError` with `cause` set, so downstream code has one error shape to match on.
-
-4. **`windowsHide: true` is mandatory** on Windows to avoid spawning a flashing cmd window for every prefetch. The context already specifies this; flagging as a checklist item because it's easy to omit on the async path.
-
-5. **Argument array vs single string.** CVE-2024-27980 specifically targets argument splitting when a shell is involved. `execFile` with an *array* of args bypasses any shell, but pass `args` as an array literal — never assemble via `concat` with user-controlled strings in the middle. The git-query.ts reviewer should confirm `git` invocation pattern (e.g., `git -C ${repoPath} rev-parse HEAD` — confirm args are passed array-style).
-
-**Recommended async wrapper skeleton** (pseudo, not source):
-```ts
-const { execFile } = await import('node:child_process'); // dynamic if any sync code path needs to avoid top-level await
 const execFileP = promisify(execFile);
 
-async function gitFact(args: string[], opts: { cwd: string; timeoutMs: number; signal?: AbortSignal }) {
+async function gitAsync(args, { signal, timeoutMs } = {}) {
+  let timer;
   try {
-    const { stdout } = await execFileP('git', args, {
-      cwd: opts.cwd,
-      timeout: opts.timeoutMs,
+    if (timeoutMs) {
+      timer = setTimeout(() => signal?.abort(new Error("timeout")), timeoutMs);
+    }
+    const { stdout } = await execFileP("git", args, {
+      signal,
+      timeout: timeoutMs,           // belt
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
-      signal: opts.signal,
-      killSignal: 'SIGKILL',
+      shell: false,                  // explicit per CVE-2024-27980 class
+      cwd: process.cwd(),
     });
-    return stdout.toString();
-  } catch (err: any) {
-    if (err.name === 'AbortError' || err.code === 'ABORT_ERR') throw err; // caller decides fail-open/closed
-    throw err;
+    return stdout;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 ```
 
-**Severity:** MEDIUM (correctness, not data loss — but mis-killed processes may leak under load).
+**Gotcha:** `execFile`'s built-in `timeout` option sends `SIGTERM`, but on Windows it terminates the *parent* shell wrapper only. Combined with `shell: false` (which is correct here) the child receives the signal directly, but `AbortSignal` from `controller.signal` alone does **nothing** — you must call `controller.abort()` from your timeout handler. Without the manual abort, aborting the signal mid-fetch will leak the child process until it exits on its own.
 
----
+**Fix:** Always pair `AbortSignal` with the `timeout` option, and in a `finally` block clear any custom timer to avoid double-kill.
 
-## 4. Per-rule timeout policy (ASYNC-04) — fail-open/fail-closed needs a per-rule field
+## 2. Per-Rule Timeout Semantics — `Promise.race` vs Native Timeout
 
-A single global default will almost certainly be wrong. Recommendations:
+ASYNC-04 demands per-rule timeout. `Promise.race` is the natural choice but has two pitfalls:
 
-1. **Default = fail-closed.** Authors must opt *into* fail-open explicitly — security defaults should not assume availability over correctness.
+```js
+async function runWithTimeout(rule, ctx, { timeoutMs, policy = "fail-closed" }) {
+  let timer;
+  const timeoutP = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("rule-timeout")), timeoutMs);
+  });
+  try {
+    return await Promise.race([rule(ctx), timeoutP]);
+  } catch (err) {
+    if (err.message === "rule-timeout") {
+      return policy === "fail-closed"
+        ? { action: "block", reason: `rule ${rule.name} timed out` }
+        : { action: "allow", reason: `rule ${rule.name} timed out (fail-open)` };
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+```
 
-2. **Encode the policy on the rule itself**, not on the async orchestrator. Proposed shape (re-stating, do not adopt unless planning agrees):
+**Gotcha #1:** If the rule's own promise eventually resolves *after* the timeout fires, the late result is silently discarded — good — but if the rule holds external resources (timers, file handles), the dangling promise will still execute to completion. There's no way to "cancel" a synchronous CPU-bound rule mid-execution; `AbortSignal` is a no-op for sync code.
 
-   ```ts
-   interface AsyncBlockRule extends BlockRule {
-     kind: 'async';
-     timeoutMs: number;       // required, no default
-     onTimeout: 'fail-closed' | 'fail-open';
-   }
-   ```
+**Gotcha #2:** "Fail-open" on a **block** rule means the tool call proceeds when the rule can't decide. For a security-relevant blocker, this is the wrong default. Recommendation: per-rule `policy: "fail-closed" | "fail-open"` field, with **fail-closed as the default** and fail-open requiring an explicit opt-in in the rule definition.
 
-3. **Orchestrator must `AbortSignal.timeout(rule.timeoutMs)` per rule**, then *re-throw* the `AbortError` into the rule's own decision. Do not let one slow rule's timeout propagate and cancel sibling prefetches — use a fresh `AbortController` per rule (or per `Promise.all` group).
+## 3. Sync API Throws on Thenable — Detection Strategy
 
-4. **Distinguish timeout from error.** A git process that exited non-zero is different from one that exceeded `timeoutMs`. Policy should apply identically to both today, but logging/telemetry should distinguish `RULE_TIMEOUT` vs `RULE_GIT_ERROR` — Phase 7's telemetry collector (`evaluateBlockRulesInstrumented`) is the natural place to add counters.
+ASYNC-02 requires `evaluateBlockRules` to throw `TypeError` if a rule returns a thenable. Don't use `result instanceof Promise` — that misses `PromiseLike` from other realms and Bluebird-style thenables.
 
-5. **Uncaught exceptions inside an async rule.** If a rule throws synchronously *before* returning a thenable, the orchestrator's `Promise.all` will reject. Decide now: do you want one failing rule to crash the whole block evaluation (fail-closed) or be reported as `undefined` (fail-open)? Recommend fail-closed with structured logging — users want loud failures during rollout, not silent skipping.
+```js
+function isThenable(v) {
+  return v != null && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
+}
 
-**Severity:** HIGH (this is the entire security boundary of the async path; a default that's wrong in either direction is exploitable or noisy).
+const result = rule(ctx);
+if (isThenable(result)) {
+  throw new TypeError(`Rule ${rule.name} returned a thenable; use evaluateBlockRulesAsync`);
+}
+```
 
----
+Also check *before* invoking the rule, since some rules might be `async function` (always thenable) by accident. Optionally do a one-time lint pass over `ALL_RULES` at module load and assert none are async functions, which is a stronger guarantee.
 
-## 5. Gather-then-decide ordering and cancellation
+## 4. `gather-then-decide` Pattern — Ordering Matters
 
-The "gather-then-decide" pattern has one subtle race:
+ASYNC-01 says "prefetch git facts into frozen context, then run rules sync." Make the contract explicit:
 
-1. All prefetches are launched in parallel (`Promise.all` over `{signal: combinedController.signal}`).
-2. The decision phase runs after *all* prefetches settle.
-3. If the `tool_call` event is cancelled mid-prefetch (e.g., user aborts the prompt), the per-call `AbortSignal` fires. The combined controller should forward cancellation, but **only abort the git subprocesses**, not throw out of the orchestrator — the host may still want to allow the call when the user cancels.
+- The preflight pass must **collect every fact that any rule could need**, not just rules that declare it. Two options:
+  1. **Static analysis** of rules for `ctx.git.<field>` accesses — fragile, regex-based.
+  2. **Prefetch the union of all known facts** (current branch, HEAD, status, diff, recent log) — wasteful but correct.
+  3. **Prefetch on first access with a cache** — best of both, but adds cache invalidation logic.
 
-**Risk:** If the orchestrator rejects when its signal aborts, and the `tool_call` host treats rejection as "block," then user-aborts become silent block-events. Recommendation:
-- Prefetch phase: bind to AbortSignal; on abort, return a frozen context with `null` for cancelled fields, not throw.
-- Decision phase: never throws on its own signal — only throws on the rule-level timeouts above.
+Recommended: option 2 for the initial async pass (bounded, predictable), with a clear `PrefetchedContext` type that *only* exposes the prefetched fields. Any rule that needs a field not in the context throws a clear error pointing the developer to the preflight list.
 
-**Also:** `Promise.all` rejects on the first failure. If two git calls race and one fails non-cancellation, the other may have already populated the context but never surfaces. Use `Promise.allSettled` and capture per-fact `{ ok, value | reason }` so each fact is independently fail-open/closed.
+## 5. `tool_call` Handler Async Support — Verify Before Coding
 
-**Severity:** MEDIUM (affects UX, not security).
+The context summary flags: *"Verify `pi.on("tool_call")` supports async return values before proceeding."* This is a **CRITICAL prerequisite** — if the extension host invokes the handler synchronously (fire-and-forget) and the tool call proceeds without awaiting, the async blocker is worthless.
 
----
+**Research action:** Before implementation, locate the extension host's `tool_call` dispatch. Check:
+- Does it `await` the handler return value?
+- Does it inspect a `then` property on the return?
+- Is there a `tool_call_sync` variant you should use instead?
 
-## 6. Frozen context shape and immutability
+If async is not supported, the phase must include a hook to the dispatch loop — which may not be in this repo's control.
 
-"Pre-fetches into frozen context" is mentioned but the shape is undefined. Two risks:
+## 6. Windows-Specific Process Tree Leaks
 
-1. If the context is a plain `Object.freeze(...)`'d record, downstream rules cannot receive it across module instances after Node's V8 hidden-class transitions. This is fine for pure-functional rules but watch for accidental getter access.
+On Windows, even with `windowsHide: true` and `shell: false`, child processes can spawn grandchildren (e.g., git spawning `ssh.exe` or credential helpers) that survive parent termination. With per-rule timeouts that SIGTERM the immediate child:
 
-2. If the context stores `Buffer` instances (binary git output), `postMessage`/`structuredClone` will eventually be needed if the orchestrator moves off the main thread. Today (main thread), raw buffers are fine — note this constraint so a future worker-thread refactor isn't blocked.
+```js
+import { execFile } from "node:child_process";
+// On Windows, use taskkill /T /F to kill the tree
+signal?.addEventListener("abort", () => {
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
+  } else {
+    child.kill("SIGTERM");
+    setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+  }
+});
+```
 
-**Recommendation:** Define `type AsyncBlockContext = Readonly<{ cwd: string; headSha: string | null; dirtyFiles: readonly string[]; … }>` with all fields `readonly` at the type level *and* `Object.freeze` at runtime. Add a test that mutating any field throws in strict mode (or silently no-ops in sloppy mode — use `'use strict'`).
+The unref'd SIGKILL fallback is important — without it a long-running grandchild can keep the event loop alive past process exit.
 
-**Severity:** LOW.
+## 7. Test File Co-location — `import.meta.url` Pattern
 
----
+TEST-01 requires `.test.mjs` co-located. For git-fact prefetch tests, mock `execFile` via dependency injection rather than mocking `child_process` globally — this keeps tests parallelizable and avoids leaking mocks across files:
 
-## 7. Co-located test placement (TEST-01) — test isolation risks
+```js
+// git-query-async.test.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createGitQueryAsync } from "./git-query-async.ts"; // adjust for your loader
 
-Tests at `.test.mjs` co-located with the modules they cover is straightforward, but the async path has two specific test-design traps:
+const fakeExec = async (cmd, args, opts) => {
+  if (args.includes("rev-parse") && args.includes("--abbrev-ref")) {
+    return { stdout: "main\n" };
+  }
+  if (opts.signal?.aborted) throw new Error("aborted");
+  throw new Error("unexpected args");
+};
 
-1. **Fake timers + `AbortSignal.timeout`.** Node's `setTimeout` mocking via `sinon.useFakeTimers()` does not affect `AbortSignal.timeout` which uses an internal `setTimeout`. Use the native `timers.setTimeout` mock pattern with `MockTimers` from `node:test`'s mock module, or just exercise real timers with small millisecond values.
+test("abort signal cancels pending query", async () => {
+  const gq = createGitQueryAsync({ execFile: fakeExec });
+  const ctrl = new AbortController();
+  ctrl.abort();
+  await assert.rejects(() => gq.currentBranch({ signal: ctrl.signal }));
+});
+```
 
-2. **`execFile` stubbing.** Real `git` is not available in CI sandboxes. Stub `lib/git-query.ts` (or the new async equivalent) at the module boundary, **not** at `execFile` — stubbing `execFile` itself leaks across tests because of the `util.promisify` cache. Use `node:test`'s `mock.module` or a DI seam from day one.
+Edge cases to cover per TEST-01:
+- `AbortSignal` already aborted at call time
+- Timeout fires mid-fetch (verify child is killed on Windows via the taskkill path)
+- Prefetched context with missing field for a given rule
+- Sync `evaluateBlockRules` rejecting both real Promise and custom thenable
+- Per-rule timeout fail-closed vs fail-open, including rule that throws synchronously
 
-**Recommendation:** Add the async git query behind a narrow interface (`interface GitFacts { getHeadSha(): …, listDirtyFiles(): … }`) so tests can inject a stub without touching `child_process`. This also makes TEST-01 fail-safe — if the wrapper has no seam, every test becomes an integration test.
+## 8. Phase 7 Telemetry Baseline Compatibility
 
-**Severity:** MEDIUM (test suite will be flaky without this).
+The context notes Phase 7 measures sync performance. The async path should *also* emit telemetry, but with a new metric namespace (`block.evaluator.async.*`) so historical comparisons stay valid. Specifically:
 
----
+- Record `preflight_duration_ms` separately from `rule_duration_ms`
+- Record `preflight.facts_requested` vs `preflight.facts_used` — surfaces over-fetching
+- Tag each rule invocation with `evaluator: "async" | "sync"` for cohort analysis
 
-## 8. Telemetry baseline comparison (Phase 7 handoff)
+## 9. Risks & Open Questions
 
-Phase 7 measures sync performance. The async path should be instrumented through the same `evaluateBlockRulesInstrumented` so the comparison is apples-to-apples.
-
-**Concrete items to add to the telemetry contract:**
-- `prefetch_duration_ms` histogram per fact type
-- `rule_decision_duration_ms` histogram per rule (the decision phase is now bounded by max(prefetch), not sum)
-- `rule_timeout_count` counter, tagged `fail_open`/`fail_closed`
-- `prefetch_cancelled_count` counter (signal aborted)
-
-**Severity:** LOW (observability, not correctness).
-
----
-
-## 9. Open questions to surface at kickoff
-
-These are explicit unknowns the planning track should resolve before code is written:
-
-| # | Question | Why it matters |
-|---|----------|----------------|
-| 1 | Does `pi.on("tool_call")` await async listeners? | Blocks ASYNC-01 entirely. |
-| 2 | Is `resolveStateHome()` blocking / expensive enough to also be prefetched? | Otherwise the first prefetch still pays that cost. |
-| 3 | Will `thenable` rules be allowed to coexist with sync rules in a single orchestrator, or must all rules share a `kind`? | Affects the API surface for rule authors. |
-| 4 | Is Windows a supported runtime? (governs whether `windowsHide: true` + `killSignal` is sufficient.) | Affects timeout enforcement correctness. |
-| 5 | What Node version is the engine pinned to? (`AbortSignal.timeout` requires ≥ 17.3; `killSignal` on `execFile` requires ≥ 14.17.) | Affects which APIs are available without polyfills. |
-
-**Severity:** varies — findings #1 is CRITICAL until answered; #4 and #5 are MEDIUM; the others are LOW.
-
----
-
-## Summary of recommendations
-
-1. **Gate the entire phase on confirming the async `pi.on("tool_call")` support** (finding #1) — do not proceed past planning otherwise.
-2. **Define rule-level timeout + policy fields now** (finding #4) so rule authors don't get a global-default surprise later.
-3. **Use `Promise.allSettled` with per-fact abort signals** (finding #5) — `Promise.all` will silently drop data on the first rejected prefetch.
-4. **Add a DI seam for the async git wrapper before writing tests** (finding #7) — otherwise TEST-01 forces brittle git-in-CI tests.
-5. **Lock down the thenable-guard predicate and short-circuit interaction** (finding #2) — `result != null && typeof result.then === 'function'`, only inspect evaluated rules.
-
-Findings where confidence is low (due to absent source): findings #1, #4 (timeout semantics on Windows), and #7 (Node version pin) are tagged as needing verifier confirmation during implementation.
+- **CVE-2024-27980 class:** `shell: false` is the right call but is only enforced if you pass it *everywhere*. Audit any existing `git-query.ts` callers before this phase lands — if they pass `shell: true` for "convenience," the async path is more secure than the sync path, which is a code smell.
+- **`maxBuffer` sizing:** `git log` over a large repo can exceed 1MB. 10MB is a reasonable default but document it; consider streaming via `execFile` callback form for log queries.
+- **Concurrent preflight vs rule-short-circuit:** If the preflight discovers *during* the gather phase that an obvious block applies (e.g., on a protected branch), should the preflight itself emit a block? Recommendation: no — keep the seam clean, let rules decide. Otherwise the contract "prefetch only" drifts.
+- **Determinism:** `gather-then-decide` over a frozen snapshot is the correct model for determinism. Make sure the `PrefetchedContext` is `Object.freeze`'d (deep) so a buggy rule cannot mutate it and cause non-deterministic results on retry.
 
 ---
 
 ## Opus55 Research (claude-opus-5-5[1m])
 
-# Phase 8 Research: Async Block Rules
+# Research: Phase 8, Async Block Rules
 
-**Caveat:** The scratch repo has no tracked files. I could not read `tool-blockers.ts`, `git-query.ts`, `telemetry-collector.ts` or `extensions/index.ts`. Anything below about those files comes from the phase context and is marked **UNVERIFIED**. The Node.js API behaviour is well established for Node ≥ 16, but check it against the Node version the project actually runs on.
+I couldn't check any of this against the source. The scratch repo at `gsd-review-scratch-40920` has no tracked files, and `lib/` is missing. So nothing here comes from reading `tool-blockers.ts`, `git-query.ts`, `telemetry-collector.ts` or `extensions/index.ts`. Every claim about those files is tagged **UNVERIFIED-CONTRACT**. The Node.js API facts come from Node's documented behaviour (v18.x through v22.x).
 
-## 1. Gate check: does `pi.on("tool_call")` await async handlers? (UNVERIFIED, blocking)
+Your global CLAUDE.md requires design questions to go through `/gsd:cross-research`, which uses several models. This is a single-model reference pass only. Re-run the pattern decisions below (§3 and §4) through cross-research before you lock the plan.
 
-- **Risk:** If Pi's event emitter calls handlers and ignores what they return, an async handler's Promise is dropped. The block result is then lost, so every block silently allows the tool call. That is fail-open in the worst possible way.
-- **Action before any code:** search Pi's extension runner for how `tool_call` handlers are called, e.g. `grep -rn "tool_call" node_modules/@*/pi*/dist`. Look for `await handler(...)` or for `Promise.all`/`for … await` over the handler list.
-- **Fallback if it does not await:** keep the sync path in `index.ts`. Ship `evaluateBlockRulesAsync` as a library function only, and record that wiring it in is deferred.
-- **Required test:** a fake runner that calls the handler, checks the result is a Promise, and checks it resolves to `{ block: true, reason }`.
+---
 
-## 2. Gather-then-decide architecture
+## 1. Blocking prerequisite: does Pi's `tool_call` hook await promises? (UNVERIFIED-CONTRACT)
 
-```ts
-// lib/extensions/block-context.ts
-export interface GitFacts {
-  readonly branch: string | null;        // null = query failed/timed out
-  readonly isDirty: boolean | null;
-  readonly topLevel: string | null;
-  readonly errors: readonly string[];    // per-fact failure reasons
-}
-export interface BlockContext { readonly toolCall: ToolCall; readonly git: GitFacts; }
+The context file flags this, and it gates the whole phase.
 
-export async function evaluateBlockRulesAsync(
-  call: ToolCall, opts: { signal?: AbortSignal; timeoutMs?: number; rules?: readonly BlockRule[] } = {}
-): Promise<BlockResult | undefined> {
-  const git = Object.freeze(await prefetchGitFacts(call.cwd, opts));   // async I/O only here
-  const ctx = Object.freeze({ toolCall: call, git });
-  return evaluateBlockRules(ctx, opts.rules ?? ALL_RULES);             // pure sync decision
-}
-```
+- **Risk:** the dispatcher may call handlers synchronously and read `result?.block`. If so, an async handler returns a `Promise`, `promise.block` is `undefined`, and **the tool runs unblocked**. That is a silent fail-open on the security path.
+- **Check:** grep the Pi runtime for the emitter of `tool_call` and confirm it does `await handler(event, ctx)`. Commands:
+  ```
+  rg -n "tool_call" node_modules/@mariozechner/pi-coding-agent/dist -g "*.js"
+  rg -n "await .*handler|for await|Promise.all" <emitter file>
+  ```
+- **Gate test:** register a handler that returns `Promise.resolve({ block: true, reason: "x" })` and confirm the tool doesn't run. Do this before writing any other code.
+- **Fallback if it doesn't await:** keep the sync path wired in `index.ts` and ship the async path only as a library API. Don't wire it into the hook.
 
-Key points:
+## 2. ASYNC-03: the async git primitive
 
-- **Only prefetch facts that some rule actually reads.** Have each rule declare `needs: readonly GitFactKey[]`, and prefetch the union of those keys. Otherwise every tool call pays for `git status`, which is the most expensive query (it is O(worktree)).
-- **Run the queries in parallel** with `Promise.allSettled`, not `Promise.all`. With `Promise.all`, one rejection discards the facts that did succeed.
-- **`Object.freeze` is shallow.** Freeze `git` and `errors` explicitly, or test that changing `ctx.git.branch` throws in strict mode (ESM is always strict).
-- **Contract change (UNVERIFIED):** today the rules probably call `git-query.ts` sync functions directly. Under the new pattern they must read facts from `ctx`. Migrating them changes their signatures, and that touches the sync API, which ASYNC-02 forbids.
-  - Recommended: give `BlockContext.git` an optional lazy getter. In sync mode it calls the existing `execFileSync` wrapper. In async mode it returns the prefetched value.
-  - This keeps `evaluateBlockRules(call)` unchanged for existing callers.
-
-## 3. ASYNC-02: thenable guard in the sync path
-
-```ts
-function isThenable(v: unknown): v is PromiseLike<unknown> {
-  return v !== null && (typeof v === "object" || typeof v === "function")
-      && typeof (v as any).then === "function";
-}
-// inside the evaluateBlockRules loop:
-const r = rule.check(ctx);
-if (isThenable(r)) {
-  // swallow the stray rejection so it doesn't become an unhandledRejection crash
-  Promise.resolve(r).catch(() => {});
-  throw new TypeError(`Block rule "${rule.name}" returned a thenable; use evaluateBlockRulesAsync`);
-}
-```
-
-- **Gotcha:** if you throw without attaching `.catch`, a rejected promise from the rule causes an `unhandledRejection`. Node ≥ 15 then crashes the process by default. That is why the `.catch(() => {})` above is needed.
-- Check with duck typing, not `instanceof Promise`, so cross-realm promises and custom thenables are also caught.
-- **Type-level guard:** declare `check: (ctx) => BlockResult | undefined`. Note this does not reject `async` functions assigned through `any`, so you still need the runtime check.
-- **Unknown:** does this "throw" count as a behaviour change under "sync unchanged"? Throwing where the code previously returned a Promise (which was truthy and so treated as a block?) is a semantic change. Confirm what the current code does with a truthy non-`BlockResult` value and document the delta.
-
-## 4. ASYNC-03: hardened async `execFile`
-
+Use this pattern:
 ```ts
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const execFileP = promisify(execFile);
 
-export async function gitAsync(args: readonly string[], cwd: string, signal: AbortSignal, timeoutMs = 2000) {
-  const { stdout } = await execFileP("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args], {
-    cwd, signal, timeout: timeoutMs, maxBuffer: 1 << 20,
-    windowsHide: true, shell: false, encoding: "utf8",
+export async function gitQueryAsync(args: string[], opts: { cwd: string; signal: AbortSignal; timeoutMs: number }) {
+  const { stdout } = await execFileP("git", args, {
+    cwd: opts.cwd,
+    signal: opts.signal,
+    timeout: opts.timeoutMs,
+    killSignal: "SIGTERM",
+    maxBuffer: 1 << 20,
+    windowsHide: true,
+    shell: false,
+    encoding: "utf8",
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
   });
   return stdout.trimEnd();
@@ -306,334 +285,840 @@ export async function gitAsync(args: readonly string[], cwd: string, signal: Abo
 ```
 
 Gotchas:
+- **`"git"` vs `"git.exe"`:** with `shell: false`, libuv on Windows searches PATH and appends `.exe`. Plain `"git"` works and stays portable. Spelling it `git.exe` breaks POSIX. The CVE-2024-27980 issue only applies to `.bat`/`.cmd` targets. Since Node 18.20.2, 20.12.2 and 21.7.3, those targets throw `EINVAL` without `shell: true`. If PATH resolves `git` to a `git.cmd` shim (some scoop or older GitHub Desktop installs), you get `EINVAL`. **Test for this and treat it as a git-unavailable fact, not a crash.**
+- **Abort error shape:** an aborted call rejects with `err.name === "AbortError"` and `err.code === "ABORT_ERR"`. A timeout rejects with `err.killed === true` and `err.signal === "SIGTERM"`, with **no** `code === "ETIMEDOUT"`. A `maxBuffer` overrun gives `code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"`. Classify all three explicitly.
+- **Windows kill semantics:** `SIGTERM` maps to `TerminateProcess` on `git.exe` only. Grandchildren that git spawns (hooks, `git-remote-*`, credential helpers) are **not** killed. Keep the commands read-only (`rev-parse`, `status --porcelain=v1 -z`, `symbolic-ref`, `diff --cached --name-only -z`) so nothing spawns grandchildren. Set `GIT_OPTIONAL_LOCKS=0` so `status` never takes `index.lock`. Without it, a killed status could leave a stale lock.
+- **Promisify needs a non-null error:** `promisify(execFile)` attaches `stdout` and `stderr` to the rejection. Don't log `err.stdout` without truncating it.
+- **Reuse:** share the arg-building and output parsing with `lib/git-query.ts` (UNVERIFIED-CONTRACT). Only the transport (sync or async) should differ. This avoids two copies of the same git parsing.
 
-| Issue | Detail |
+## 3. ASYNC-01: gather-then-decide design
+
+```ts
+export interface GitFacts { readonly branch?: string; readonly isDirty?: boolean; readonly stagedFiles?: readonly string[]; readonly errors: Readonly<Record<string,string>> }
+
+export async function evaluateBlockRulesAsync(input, rules = ALL_RULES, opts = {}) {
+  const ac = new AbortController();
+  const signal = opts.signal ? AbortSignal.any([opts.signal, ac.signal]) : ac.signal; // AbortSignal.any: Node >=20.3
+  try {
+    const facts = Object.freeze(await prefetchGitFacts(input.cwd, signal, opts.timeoutMs ?? 1500));
+    return evaluateBlockRules({ ...input, git: facts }, rules); // sync, unchanged
+  } finally { ac.abort(); }
+}
+```
+
+Key points:
+- **Run the prefetch with `Promise.allSettled`, not `Promise.all`.** One failing fact shouldn't throw away the others. Record each failure in `errors`.
+- **`Object.freeze` is shallow.** Freeze the arrays too (`Object.freeze([...files])`). Otherwise a rule can mutate `stagedFiles` and affect later rules.
+- **Fetch only what's needed.** Have each rule declare `needs?: ("branch"|"dirty"|"staged")[]`. Prefetch the union, filtered to rules whose matcher applies to this tool. Most tool calls (Read, Grep) need no git at all, and spawning git on every call would make the async path *slower* than the Phase 7 sync baseline.
+- **`AbortSignal.any` needs Node ≥ 20.3.** Check the `engines` field. On Node 18, combine the signals by hand.
+- **The `finally { ac.abort() }`** cleans up any straggling child when the sync rules short-circuit.
+
+## 4. ASYNC-04: timeout policy
+
+- **Recommended: fail-closed when a fact is missing but a rule needs it.** If prefetch times out and a rule that needs `branch` would fire, return a block with `reason: "git fact unavailable (timeout)"`. Rules that don't need git still run normally.
+- Make the policy explicit for each rule: `onFactError: "block" | "allow"`, defaulting to `"block"`. Put it in `BlockRule`, not in global config, so it gets reviewed alongside the rule.
+- **"Per-rule timeout" has a catch:** rules are sync, so a timer can't interrupt them. The timeout can only cover the async fact fetch. If the requirement means a time limit on the rule bodies themselves, measure each sync rule's duration after it runs and log an overrun. Don't pretend you can pre-empt it. Write this into the plan so the verifier doesn't mark ASYNC-04 as failed.
+- Use `timeout` on `execFile` as the hard cap and the `AbortSignal` for the overall evaluation deadline. Both kill the child.
+
+## 5. ASYNC-02: the thenable guard
+
+```ts
+const r = rule.evaluate(ctx);
+if (r != null && typeof (r as any).then === "function")
+  throw new TypeError(`Block rule "${rule.id}" returned a thenable; use evaluateBlockRulesAsync`);
+```
+- Check `typeof then === "function"`, not `instanceof Promise`. Cross-realm promises and custom thenables would slip past `instanceof`.
+- The rejected promise is still pending and will raise an `unhandledRejection` later. Attach a no-op handler before throwing: `Promise.resolve(r).catch(() => {})`.
+- **Telemetry:** check that `evaluateBlockRulesInstrumented` (UNVERIFIED-CONTRACT) still sees the `TypeError` and doesn't catch it and treat it as allow.
+- **Sync behaviour must not change.** Add a test that snapshots the current sync outputs over `ALL_RULES` fixtures before the change and asserts they're identical afterwards.
+
+## 6. TEST-01: test matrix (`*.test.mjs`, co-located)
+
+| Test | What it checks |
 |---|---|
-| **`git` vs `git.exe`** | Without `shell`, `execFile("git")` on Windows resolves through PATH plus PATHEXT inside libuv, so `.exe` is found. A `.cmd` or `.bat` shim is **not** run: since the CVE-2024-27980 fix (Node 18.20.2 / 20.12.2 / 21.7.3) it throws `EINVAL`. That is the intended fail-closed behaviour. Test the scoop/chocolatey shim case on this machine. |
-| **Binary hijack** | `execFile("git")` with `cwd` set to an untrusted repo can pick up `git.exe` from cwd on Windows, because of the legacy search order. Resolve the absolute path once at startup (e.g. `where.exe git`, cached) and pass that path. |
-| **Repo-config code execution** | Running `git status` inside a hostile repo can execute `core.fsmonitor` or hooks from `.git/config`. The `-c core.fsmonitor=false` above blocks the fsmonitor route. Also consider `safe.directory` behaviour. |
-| **Lock contention** | Without `--no-optional-locks`, `git status` takes `index.lock` and can collide with the user's own git commands. |
-| **`timeout` semantics** | `timeout` sends `killSignal` (SIGTERM). On Windows that is `TerminateProcess` on `git.exe` only. Grandchildren (e.g. `git-remote-https`, fsmonitor daemons) can survive. That is acceptable for read-only queries, but don't add network-touching commands. |
-| **Abort error shape** | An abort rejects with `err.name === "AbortError"` (`code: "ABORT_ERR"`). A timeout rejects with `err.killed === true` and `signal === "SIGTERM"`. A non-zero exit gives `err.code` as a number. Map all three explicitly to fact=`null` plus a reason string. |
-| **maxBuffer** | If exceeded, the child is killed and the promise rejects with `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`. `git status --porcelain` in a huge repo can hit 1 MB. For a dirty check, use `git status --porcelain -uno` and only test whether the output is non-empty, or use `git diff --quiet` and read the exit code. |
-| **Listener leaks** | Reusing one long-lived `AbortSignal` across many `execFile` calls adds a listener per call and triggers `MaxListenersExceededWarning`. Create one `AbortController` per evaluation and combine signals with `AbortSignal.any([parent, AbortSignal.timeout(ms)])` (Node ≥ 20.3). On older Node, write a manual combiner. |
+| A thenable returned to the sync evaluator | `TypeError`; no unhandled rejection (`process.on("unhandledRejection")` spy) |
+| A plain object with a `then` field that isn't a function | No throw |
+| Prefetch timeout (stub git that sleeps, e.g. `node -e "setTimeout(()=>{},5000)"` via injected spawner) | fail-closed block for rules that need the fact; other rules still run |
+| External abort mid-fetch | rejects with `AbortError` or fails closed (pick one and document it); child pid is dead |
+| `maxBuffer` exceeded | classified error; no crash |
+| No git on PATH (`ENOENT`), or `git.cmd` shim (`EINVAL`) | the fact's error is recorded; policy applies |
+| Directory isn't a repo | the fact is undefined, not a throw |
+| Mutating the frozen context | throws in strict mode (`.mjs` is strict) |
+| Short-circuit | async result equals the sync result for the same facts |
+| Parity | for each fixture, `await async(x) === sync(x with same facts)` |
 
-## 5. ASYNC-04: per-rule timeout and fail policy
+- **Make the spawner injectable** (`opts.execFile`) so tests don't depend on real git timing. Keep one real-git integration test that runs in a temp repo from `git init`.
+- **Real-process tests on Windows:** after an abort, assert the child is gone by polling `process.kill(pid, 0)`, which throws `ESRCH` once the process has exited. Use a 2 s cap.
 
-- **Sync rules cannot be pre-empted.** A per-rule timeout only works on the async part, i.e. the fact prefetch for that rule's `needs`. A sync `check()` that spins can't be interrupted on the main thread. Say this in the docs and the requirement text, or the AC will be untestable.
-- Recommended shape:
-  ```ts
-  interface BlockRule { name: string; needs?: readonly GitFactKey[]; timeoutMs?: number;
-                        onUnavailable: "block" | "allow"; check(ctx): BlockResult | undefined; }
-  ```
-  If any fact listed in `needs` is `null` (timeout, abort or error), the evaluator applies `onUnavailable` and does not call `check`. A `"block"` decision returns a reason such as `"git facts unavailable (timeout 2000ms): rule X fails closed"`.
-- **Default should be `"block"` (fail-closed) for safety rules.** Make the field required, with no default, so every rule states its policy. That satisfies "explicit".
-- **Global deadline:** set an overall budget, e.g. 3 s. Telemetry from Phase 7 should inform the number; take p99 of the sync baseline × 2.
-- **Aborting a cancelled tool call:** if Pi provides a signal, pass it down. Also make sure no promise outlives the evaluation, since a late-resolving `execFile` is harmless only if no one writes to shared state.
-- **Short-circuit ordering:** sync evaluation stops at the first block. Prefetching everything up front loses some of that short-circuit benefit. Optional optimisation: run rules that need no facts first, before awaiting the prefetch.
+## 7. Other risks
 
-## 6. Telemetry integration (Phase 7)
+1. **Latency regression:** spawning one git process costs about 15–40 ms on Windows. Compare against the Phase 7 telemetry baseline and treat "async p95 ≤ sync p95" as an acceptance check.
+2. **Concurrent tool calls:** parallel tool calls each spawn git. A short-lived cache keyed on `cwd` (around 250 ms, sharing the in-flight promise) prevents spawn storms. Cache misses must not leak a rejection across callers.
+3. **Node version floor:** `signal` on `execFile` needs ≥ 15.4 and `AbortSignal.any` needs ≥ 20.3. The CVE-2024-27980 fix needs the patched releases listed above. Pin the minimum in `engines`.
+4. **TS to `.mjs` tests:** check how `.test.mjs` imports the `.ts` modules (a build step, or a `--experimental-strip-types` / tsx loader). The pattern needs confirming against the existing test runner config (UNVERIFIED-CONTRACT).
 
-- Add an `evaluateBlockRulesAsyncInstrumented` that records prefetch time separately from decide time, plus timeout and fail-policy counts.
-- **Gotcha:** if the instrumented wrapper simply wraps the async function in `performance.now()` around an un-awaited call, it measures roughly 0 ms. Await inside the timer.
-
-## 7. TEST-01: test plan (`node --test`, co-located `.test.mjs`)
-
-Make the git runner injectable, `prefetchGitFacts(cwd, { run = gitAsync })`, so that most tests don't spawn processes.
-
-| Test | Asserts |
-|---|---|
-| Sync rule returns `Promise.resolve()` | `evaluateBlockRules` throws `TypeError`; no `unhandledRejection` (listen on `process`) |
-| Sync rule returns `Promise.reject()` | Same as above; the process does not crash |
-| Custom thenable `{then(){}}` | Throws `TypeError` |
-| Async path with all facts present | Same result as the sync path for every rule in `ALL_RULES` (parity table) |
-| Runner never resolves | Resolves within timeout + ε; `onUnavailable:"block"` blocks, `"allow"` allows |
-| Parent signal aborted beforehand | Rejects or fails fast, no spawn (`execFile` with an already-aborted signal errors immediately) |
-| Exit code 128 (not a repo) | Fact is `null` with a reason string, no throw |
-| maxBuffer exceeded | Fact is `null`, policy applied |
-| Context mutation attempt | Throws in strict mode (deep freeze) |
-| Rules that need no git facts | Runner is never called |
-| One real integration test | Spawns real git in `mkdtemp` + `git init`; `windowsHide` can't be asserted, so just check that it runs |
-| `.cmd` shim (Windows only, `skip` elsewhere) | Fails closed with `EINVAL`, not via a shell |
-
-Use `t.mock.timers` cautiously. It does not affect `execFile`'s internal timeout, so keep fake runners promise-based.
-
-## 8. Open risks summary
-
-1. **Whether `pi.on` awaits async handlers is unknown.** It blocks all wiring; verify it first.
-2. **Rules currently read git synchronously (unverified).** Migrating them without changing the sync API needs the lazy-getter context in section 2.
-3. **Sync `check()` can't be timed out.** The ASYNC-04 wording must limit the timeout to the prefetch.
-4. **Running git inside untrusted repos can execute code.** Use an absolute git path, `core.fsmonitor=false` and `--no-optional-locks`.
-5. **Node version.** `AbortSignal.any` needs Node 20.3+, and the `.cmd` `EINVAL` behaviour needs the 2024-04 patch releases. Check with `node -v` before planning.
-
-**Process note:** your CLAUDE.md requires design and pattern questions to go through multi-model `/gsd:cross-research`. This was one model's research, and the decisions in sections 2 and 5 should be cross-checked that way before planning commits to them.
+## Open items before planning
+- [ ] Confirm that the Pi `tool_call` dispatcher awaits handlers (§1). **This blocks the phase.**
+- [ ] Confirm the minimum Node version.
+- [ ] Read `git-query.ts`, `tool-blockers.ts` and `telemetry-collector.ts` to check the claims marked UNVERIFIED-CONTRACT.
+- [ ] Run cross-research on the fail-closed default and the meaning of "per-rule timeout" (§4).
 
 
 ---
 
 ## Sonnet5 Research (claude-sonnet-5-5[1m])
 
-# Phase 8 research: async block rules (ASYNC-01..04, TEST-01)
+# Research: Phase 8, Async Block Rules
 
-I did not inspect the repo. The working directory is an empty scratch checkout, so nothing here is verified against `tool-blockers.ts`, `git-query.ts`, or the Pi runtime. Items marked **VERIFY** are assumptions to check before planning.
+**Caveat:** I did not read the repo, and the review scratch directory has no source. Everything about `tool-blockers.ts`, `git-query.ts` and Pi's `tool_call` dispatch is inferred from your context summary. Items marked **VERIFY** are unconfirmed. Node behaviour comes from my knowledge of the Node docs, not from running anything here.
 
-## 1. Biggest design risk: "per-rule timeout" on sync rules
+## 1. Highest-risk finding: do the sync rules read git themselves?
 
-Once facts are gathered, rules run synchronously. No timer can preempt a sync function, because the event loop is blocked. So a per-rule timeout can't be applied to rule execution. The only things that can time out are the git fact fetches.
+The gather-then-decide design only works if rules read facts from the context. If any rule in `ALL_RULES` calls the sync `git-query.ts` (`execFileSync`) inside its body, the async path still blocks the event loop and ASYNC-01 is not met.
 
-**Recommendation:** implement ASYNC-04 as a per-fact timeout plus an overall gather deadline. Each rule declares a failure policy for missing facts.
+Before planning, grep every rule for `git-query` imports and `execFileSync` calls (**VERIFY**).
 
+Recommended shape:
 ```ts
-type Fact<T> = { ok: true; value: T } | { ok: false; reason: "timeout" | "aborted" | "error" | "overflow"; error?: Error };
-
 interface BlockRule {
-  name: string;
-  needs?: readonly GitFactKey[];          // e.g. ["branch","dirtyFiles"]
-  onFactFailure?: "fail-closed" | "fail-open";  // default: explicit, see below
-  check(ctx: Readonly<RuleContext>): BlockResult | undefined;
+  id: string;
+  needs?: readonly GitFactKey[];            // facts to prefetch
+  onGatherFailure?: 'block' | 'allow';      // ASYNC-04, explicit per rule
+  evaluate(input: ToolCallInput, ctx: Readonly<RuleContext>): BlockResult | undefined;
 }
 ```
+- The sync `evaluateBlockRules` builds `ctx` with lazy sync getters that call `git-query.ts`, so its behaviour stays identical.
+- The async path builds `ctx` from prefetched values. Same rule code, different fact source.
+- Prefetch only the union of `needs` for rules that apply to this call. Most `tool_call`s (Read, Edit) need no git at all, so skip the gather entirely and avoid regressing latency against the Phase 7 baseline.
+- Don't cache facts across tool calls. Git state changes between calls, and stale facts in a block rule are a correctness bug. Memoise only within one evaluation, with an in-flight promise map so two rules needing `status` share one spawn.
 
-- **fail-closed:** return a synthetic `BlockResult` such as `"rule X: git fact 'branch' unavailable (timeout 2000ms)"`.
-- **fail-open:** skip that rule and log telemetry.
-- **Default:** fail-closed for rules that guard destructive actions (protected branch, force-push). Fail-open for advisory rules. Require the policy to be set explicitly on every rule, and add a test that enumerates `ALL_RULES` to enforce it.
-- Facts should be a discriminated union (`Fact<T>`) in the frozen context. A rule can then tell "no changes" from "couldn't ask git".
-- Do not try a `Promise.race` timeout around sync rule execution. It adds nothing and misleads readers.
+## 2. Promisified `execFile` details (ASYNC-03)
 
-## 2. Inventory which rules use git (do this first)
+```js
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileP = promisify(execFile);   // resolves {stdout, stderr}; rejection carries .stdout/.stderr/.code/.killed/.signal
 
-Rules are "pure sync", but `git-query.ts` uses `execFileSync`. Any rule that calls it directly would block the event loop inside the "sync" phase and defeat the whole point.
-
-- Grep `ALL_RULES` for imports from `git-query`.
-- Refactor those rules to read `ctx.git.<fact>` instead of calling git.
-- The sync `evaluateBlockRules` path must keep working. Either:
-  - its context builder keeps populating facts via the sync `git-query` calls (unchanged behavior), or
-  - rules keep a fallback call that the async path never hits.
-- Prefer a `needs` declaration, so only the facts that the registered rules need are fetched. Fetching everything on every `tool_call` costs 1–N process spawns per tool call. Windows spawn is about 20–60 ms each.
-- Also skip the gather entirely when no rule applies to the tool name. A `read` tool call shouldn't spawn git.
-- Dedupe in-flight queries within one evaluation (`Map<key, Promise>`). Don't keep a cross-call cache, because it goes stale.
-
-## 3. Async git runner: exact pattern (ASYNC-03)
-
-```ts
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-const execFileP = promisify(execFile);
-
-async function runGit(args: string[], { cwd, signal, timeoutMs = 2000, maxBuffer = 1 << 20 } = {}) {
-  signal?.throwIfAborted();                 // avoid spawn+kill if already aborted
-  try {
-    const { stdout } = await execFileP("git", ["--no-pager", ...args], {
-      cwd, signal, timeout: timeoutMs, maxBuffer,
-      windowsHide: true, shell: false, encoding: "utf8",
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
-    });
-    return stdout;
-  } catch (e: any) {
-    // classify below
-  }
-}
-```
-
-**Error classification** (these are the actual Node shapes):
-
-| Cause | Shape |
-|---|---|
-| AbortSignal fired | `e.name === "AbortError"`, `e.code === "ABORT_ERR"` |
-| `timeout` elapsed | `e.killed === true`, `e.signal === "SIGTERM"`, `e.code === null` |
-| `maxBuffer` exceeded | `e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"`. The child is killed and stdout is truncated, so never treat the partial output as valid. |
-| git exits non-zero | `typeof e.code === "number"`, with `e.stderr` |
-| git not found | `e.code === "ENOENT"` |
-
-**Gotchas**
-- **CVE-2024-27980 class:** Node ≥ 18.20.2 / 20.12.2 / 21.7.3 refuses to spawn `.bat` or `.cmd` files without `shell: true`, and throws `EINVAL`. `execFile("git")` resolves `git.exe` through PATH. A `git.cmd` shim would break, which is the failure mode to expect. Never "fix" it with `shell: true`. A test can assert `shell` is `false`/unset by injecting the exec function.
-- **Combining abort sources:** use `AbortSignal.any([callerSignal, AbortSignal.timeout(totalMs)])`. It needs Node ≥ 20.3. **VERIFY** `engines` and the Pi runtime's Node version. `AbortSignal.timeout` timers are unref'd, so they don't hold the process open.
-- **Windows kill semantics:** `timeout` and `abort` terminate only the direct child. Grandchildren (credential helpers, `git-remote-*`, fsmonitor daemons) can survive. The read-only queries here (`rev-parse`, `status`, `diff --name-only`) shouldn't spawn these. Using `GIT_OPTIONAL_LOCKS=0` and `GIT_TERMINAL_PROMPT=0` reduces the risk. Don't build taskkill tree-kill unless a test shows leaks.
-- **Use `Promise.allSettled`, not `Promise.all`,** for the parallel gather. Otherwise the losing rejections become unhandled-rejection warnings (a crash under `--unhandled-rejections=strict`). Use one shared `AbortController`. For a fail-closed fact failure, abort the sibling queries early.
-- **Parsing:** use `-z` with NUL-separated output for paths. Add `-c core.quotepath=off` if you parse non-`-z` output.
-- **Untrusted repos:** git reads repo-local config such as `core.fsmonitor` and `core.sshCommand`. This is the same exposure as the existing sync wrapper, so it's out of scope. Note it, and mirror whatever `git-query.ts` does for env and `-c` flags.
-
-## 4. Sync API guard (ASYNC-02)
-
-```ts
-function isThenable(v: unknown): v is PromiseLike<unknown> {
-  return v != null && (typeof v === "object" || typeof v === "function")
-    && typeof (v as any).then === "function";
-}
-// in evaluateBlockRules loop:
-const r = rule.check(ctx);
-if (isThenable(r)) {
-  Promise.resolve(r).catch(() => {});   // prevent unhandled rejection from the discarded promise
-  throw new TypeError(`Block rule "${rule.name}" returned a thenable; use evaluateBlockRulesAsync`);
-}
-```
-
-- Share one helper between the sync and async paths. The async path also runs sync rules only (ASYNC-01), so it should throw the same `TypeError` for thenables.
-- The `.catch` noop matters. Without it, an `async` rule that rejects yields an unhandled rejection in addition to the `TypeError`.
-- Detecting `AsyncFunction` by constructor name is unreliable (transpiled or wrapped functions). Check return values instead.
-- Short-circuit: both paths evaluate rules in `ALL_RULES` order and stop at the first block. The async path pays for the gather up front, which `needs` mitigates.
-- Deep-freeze the context before running rules (`Object.freeze` on the context, the facts, and arrays). Add a test that a rule mutating the context throws in strict mode (ESM is strict).
-
-## 5. `pi.on("tool_call")` async support (**VERIFY, blocking**)
-
-I can't confirm from here that the Pi runner awaits async `tool_call` handlers and honors a `{ block: true, reason }` returned from a Promise. Read the Pi extension runner source before planning. Specifically check:
-
-1. Whether handlers are awaited and the return value is read after resolution.
-2. What happens when a handler throws or rejects: does it block the call, allow it, or crash the session? Wrap the handler body in try/catch and apply the explicit fail-open/fail-closed policy yourself rather than relying on the runner.
-3. Whether parallel tool calls in one assistant turn run handlers concurrently. If so, the per-evaluation context and in-flight map must not be module-global mutable state.
-4. Whether the handler receives an abort signal for session cancel or tool abort. If it does, thread it into the gather.
-
-If (1) is false, this phase can't ship the handler wiring. Scope it as a library change only and file the gap.
-
-## 6. Telemetry (Phase 7 integration)
-
-- Add `evaluateBlockRulesAsyncInstrumented`, or an options hook. Record gather time and rule-eval time separately with `performance.now()`.
-- Per-fact outcomes (ok / timeout / aborted / error / overflow) are useful telemetry fields.
-- **Expectation:** async won't necessarily lower latency against the Phase 7 sync baseline. Parallel spawns can win on wall-clock, but the main benefit is not blocking the event loop. Frame the success metric as "event-loop max block time" or "p95 total with N facts in parallel". Don't claim "faster than sync" without data.
-
-## 7. Testing (TEST-01, `node:test`, co-located `.test.mjs`)
-
-**VERIFY** how `.test.mjs` imports the `.ts` modules (strip-types, tsx, or a compiled output). Follow the existing co-located tests.
-
-Make the runner injectable (`runGit` or `execFile` as a parameter or a context field). Most edge cases can then use fakes and need no real git.
-
-Edge cases to cover:
-- **Sync guard:** rule returns a Promise → `TypeError`, with no unhandled rejection. Also cover a rule returning a custom `{ then(){} }`, an `async` rule, an object with a non-function `then` (allowed), and `undefined`.
-- **Order and short-circuit:** later rules aren't invoked after the first block, in both sync and async paths.
-- **Frozen context:** a mutation attempt throws.
-- **Timeout:** an injected runner that never resolves, with a short real timeout (50–100 ms). `mock.timers` doesn't mock `AbortSignal.timeout`, so use real short timers or inject the signal. Assert it settles within bounds.
-- **Abort:** a pre-aborted signal means no spawn (the fake runner is never called). An abort mid-flight rejects with `AbortError`.
-- **Policy:** a fail-closed rule yields a block with a reason. A fail-open rule is skipped. Test both on the same fact failure.
-- **Partial failure:** one fact fails and the others succeed. Rules that don't need the failed fact still run normally.
-- **maxBuffer overflow:** treated as a failure, not as partial data.
-- **No-git environment:** `ENOENT` classification, and a non-repo cwd (git exit 128).
-- **Real-process smoke test** (one test, skippable if git is missing): spawn `process.execPath -e "setTimeout(()=>{},60000)"` through the real runner with a 100 ms timeout. Assert rejection, `killed === true`, and that the pid is gone afterwards.
-- **Option assertions:** the captured `execFile` options contain `windowsHide: true`, `signal`, `timeout`, `maxBuffer`, and no `shell: true`.
-- **Concurrency:** two simultaneous evaluations don't share state or cached facts.
-- **Windows path:** a cwd with spaces. Run at least once on Windows, since that's the target platform.
-
-## 8. Risks and gaps to file
-
-1. The `pi.on("tool_call")` async contract is unverified (section 5). It is blocking for wiring.
-2. Rules that call sync `git-query` internally need refactoring (section 2). The scope is unknown until the grep.
-3. The per-rule timeout semantics in the requirement text are not implementable as literally written (section 1). Get the plan to restate ASYNC-04 as per-fact/gather timeout with a per-rule failure policy.
-4. The Node version floor (`AbortSignal.any`, `throwIfAborted`) is unchecked.
-5. Windows grandchild-process survival after timeout is an accepted residual risk, covered by the smoke test only for the direct child.
-
-
----
-
-## Gpt Research (gpt-6.1-sol)
-
-Architecture review based solely on the supplied material. These are planning findings; no implementation was provided.
-
-### 1. MEDIUM — Define which work a per-rule timeout can interrupt
-
-**Locations:** `lib/extensions/tool-blockers.ts` — `BlockRule`, `evaluateBlockRulesAsync(...)`; `lib/git-query.ts` — planned async queries.
-
-ASYNC-04 needs a clearer execution boundary. A timer or `Promise.race` cannot interrupt synchronous JavaScript running on the same event loop. If a rule blocks for five seconds, a configured 100 ms timer runs only after that rule returns. An `AbortSignal` can cancel a child query but cannot preempt the rule itself. Implement one deadline and `AbortController` for each rule’s asynchronous fact collection, and carry timeout outcomes into the synchronous decision stage. Explicitly define that as the timeout boundary. If ASYNC-04 requires a hard execution limit on synchronous rules too, execute those rules in a worker that the evaluator can terminate.
-
-The subprocess pattern should include every required option:
-
-```ts
-const execFileAsync = promisify(execFile);
-
-const { stdout } = await execFileAsync("git.exe", args, {
-  cwd,
-  encoding: "utf8",
-  signal: controller.signal,
-  timeout: remainingMs,
-  maxBuffer: MAX_GIT_OUTPUT_BYTES,
+const { stdout } = await execFileP(gitPath, ['--no-optional-locks', '-C', cwd, 'status', '--porcelain=v2', '-z'], {
+  signal,                 // Node >= 15.4
+  timeout: ms,            // backstop
+  maxBuffer: 1024 * 1024,
   windowsHide: true,
-  shell: false,
+  encoding: 'utf8',
+  env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
+  // no `shell`
 });
 ```
 
-Use the remaining deadline across a rule’s queries; restarting the full timeout for every query does not enforce a per-rule budget.
+Gotchas:
+- **Failure classification.** The error shape differs by cause, so don't match on message text.
+  - Abort: `err.name === 'AbortError'`, `err.code === 'ABORT_ERR'`. This also covers a pre-aborted signal, which rejects immediately.
+  - Built-in `timeout`: `err.killed === true`, `err.signal === 'SIGTERM'`, and `code` is null.
+  - `maxBuffer` exceeded: `err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'`, and the child is killed.
+  - Missing git: `err.code === 'ENOENT'`.
+  - Non-zero exit: a numeric `code`. Git exit 128 means not a repo, "dubious ownership" or `index.lock`.
+  - Classify with `signal.aborted` plus `signal.reason` first, then these codes.
+- **Using both `signal` and `timeout`.** Use `AbortSignal.timeout(ms)` or an `AbortController` as the authoritative deadline, and set the execFile `timeout` slightly higher as a backstop. Otherwise it's ambiguous which one fired.
+- **Combining signals.** `AbortSignal.any([callerSignal, AbortSignal.timeout(ms)])` needs Node 20.3+ or 18.17+ (**VERIFY** `engines`). Otherwise wire an `AbortController` manually, and `clearTimeout` and `unref()` the timer so tests and the host process can exit.
+- **Windows kill semantics.** The kill is `TerminateProcess` on `git.exe` only. Grandchildren (fsmonitor, credential helpers, hooks) are not killed. Mitigate with `-c core.fsmonitor=false` (the `-c` flag is a git argument, not a shell feature). Document the orphan risk and don't build a process-tree killer in this phase.
+- **CVE-2024-27980 class.** Since Node 18.20.2, 20.12.2 and 21.7.3, spawning `.bat` or `.cmd` without `shell: true` throws `EINVAL`. That is the reason to avoid `shell: true`. Always spawn `git.exe`, and a `git.cmd` shim would fail loudly. Never interpolate the model's tool input (the bash command string or a path) into args without a `--` separator and validation.
+- **Executable resolution on Windows.** libuv's PATH search can consult the current directory. I'm not certain of the exact behaviour, so treat it as unconfirmed. A `git.exe` planted in an untrusted repo cwd could run. Safest option: resolve an absolute git path once (reuse whatever `git-query.ts` already does) and pass that. If `git-query.ts` already pins a path, reuse it.
+- **Avoid lock contention.** Use `--no-optional-locks` and `GIT_OPTIONAL_LOCKS=0` so a gather never fights the user's own git for `index.lock`.
+- **Machine-readable output.** Use `-z`, `--porcelain=v2` and `-c core.quotepath=false`, and set `LC_ALL=C`. Don't parse localized output.
 
-### 2. MEDIUM — Preserve short-circuit behavior when prefetching fails
+## 3. "Per-rule timeout" can only apply to the gather phase (ASYNC-04)
 
-**Location:** `lib/extensions/tool-blockers.ts` — `evaluateBlockRulesAsync(...)`, `ALL_RULES`.
+Sync rules can't be interrupted by a timer. After the gather, a hung CPU-bound rule can't be timed out in-process. So the real semantics are:
+- Each rule's fact gather gets its own deadline, with an optional overall deadline on top.
+- A rule's `onGatherFailure` decides what happens if its facts are unavailable (timeout, abort, ENOENT, exit 128).
+  - `'block'` (fail-closed) returns a `BlockResult` whose reason names the rule and cause (e.g. "git status timed out after 3000ms").
+  - `'allow'` (fail-open) skips the rule.
+- Make the policy a required, explicit field with a safe default of fail-closed. Note the trade-off: fail-closed on a slow Windows repo (antivirus scans, huge index) blocks real work, so pick timeouts accordingly (about 2–5 s) and consider fail-open for purely advisory rules.
+- Represent facts as a tagged result, `{status:'ok', value} | {status:'error', kind:'timeout'|'abort'|'enoent'|'exit'|'maxbuffer'}`. Never encode "unknown" as `false` or `''`. That is the classic fail-open bug, where an empty status means "clean".
+- Emit telemetry for each degraded gather. Record gather time separately from rule-evaluation time in the Phase 7 instrumented path, so the baseline comparison is meaningful. Note that async will not reduce per-call latency. Its benefit is a non-blocked event loop and parallel gathers, so set expectations accordingly.
 
-The supplied contract says evaluation stops at the first blocking rule. Eager collection introduces a failure case that needs an explicit design: rule A can block immediately, while a query needed only by later rule B times out. If gathering rejects globally, evaluation never returns A’s block. Conversely, converting query failures into empty values can let B interpret unavailable evidence as permission to proceed. Gather settled outcomes per dependency, then traverse `ALL_RULES` in its existing order. Apply a rule’s failure policy only when evaluation reaches that rule, and default missing policies explicitly rather than relying on truthiness.
+## 4. Frozen context
 
-Use a distinct outcome type so unavailable evidence cannot masquerade as successful empty output:
+- Deep-freeze the context: `Object.freeze` on the context and on each fact object and array. A shallow freeze leaves nested arrays mutable.
+- `.mjs` tests run in strict mode, so assignment to a frozen property throws `TypeError`. Use that in a test: `assert.throws(() => { ctx.git.branch = 'x' }, TypeError)`.
+- Compiled TS emitted as ESM is also strict. Confirm the rule files aren't CommonJS sloppy mode (**VERIFY**), because there a mutation would fail silently.
+
+## 5. Sync path throws on a thenable (ASYNC-02)
 
 ```ts
-type Fact<T> =
-  | { status: "ok"; value: T }
-  | { status: "error"; error: Error };
-```
-
-For a reached rule with unavailable required facts, return a block under fail-closed policy; under fail-open policy, record the failure and continue.
-
-### 3. MEDIUM — Specify how existing rules consume the frozen facts
-
-**Locations:** `lib/extensions/tool-blockers.ts` — `BlockRule`, `evaluateBlockRulesAsync(...)`; `lib/git-query.ts` — existing synchronous wrapper. **UNVERIFIED-CONTRACT:** rule signatures and query call sites were not supplied.
-
-The overview identifies the collection stage but does not establish the dependency boundary between existing rules and prefetched facts. If a missing prefetched value triggers a synchronous query fallback, the async path still blocks the event loop and can evaluate against repository state that changed after collection. Make required facts explicit for each rule, populate them before decision execution, and make missing facts in async evaluation produce the configured failure outcome. Fact lookup must never launch another query during that stage. Preserve the public synchronous entry point through a separate context construction path.
-
-For snapshot integrity, freeze nested arrays and objects as well as the outer context; `Object.freeze(context)` alone does not prevent a rule from mutating a nested fact used by a later rule.
-
-### 4. MEDIUM — Carry the awaited result through the hook and telemetry boundary
-
-**Locations:** `extensions/index.ts` — `pi.on("tool_call")`; `lib/extensions/telemetry-collector.ts` — `evaluateBlockRulesInstrumented()`. **UNVERIFIED-CONTRACT:** neither the event dispatcher nor the instrumentation implementation was supplied.
-
-The context correctly identifies async hook support as a prerequisite. If the dispatcher proceeds without awaiting the handler’s returned promise, the tool can execute before a blocking decision arrives. Instrumentation also needs an asynchronous boundary: timing only promise creation would report collection as nearly instantaneous and could miss later rejection. Once dispatcher support is established, return an async handler that awaits the complete evaluation, and add an async instrumentation entry point whose timing and error handling surround that await:
-
-```ts
-const started = performance.now();
-try {
-  return await evaluateBlockRulesAsync(/* existing inputs */);
-} finally {
-  recordDuration(performance.now() - started);
+const r = rule.evaluate(input, ctx);
+if (r != null && typeof (r as any).then === 'function') {
+  // attach a handler BEFORE throwing, or the abandoned rejected promise
+  // becomes an unhandledRejection, which crashes Node >= 15 by default
+  Promise.resolve(r).catch(() => {});
+  throw new TypeError(`Block rule "${rule.id}" returned a thenable; use evaluateBlockRulesAsync`);
 }
 ```
+- Check for `.then` (a thenable), not `instanceof Promise`.
+- Use `Promise.resolve(r).catch(...)` rather than `r.catch`, because arbitrary thenables may lack `.catch`.
+- Test it with a rule that is an `async` function that rejects, and assert that no `unhandledRejection` fires (`process.once('unhandledRejection', ...)`).
+- Add a test that sync behaviour is byte-identical, including first-block short-circuit order.
+- The async path should still short-circuit in rule order, but gather in parallel (`Promise.all` over the needed facts). Decide deterministically which rule's block wins: the first in `ALL_RULES` order, not the first to settle.
 
-Add an integration test that holds collection pending and proves the tool has not executed, then resolves a blocking result and proves execution remains prevented. If the dispatcher cannot await handlers, retain synchronous enforcement until an awaited dispatch boundary is implemented.
+## 6. `pi.on("tool_call")` async support (blocking prerequisite)
+
+Your context already flags this as unverified. I can't confirm it, so **VERIFY** in Pi's extension runner source that:
+1. The handler's return value is awaited (`await handler(event, ctx)`), not just invoked.
+2. A resolved `{ block: true, reason }` actually blocks.
+3. **A thrown or rejected handler is not swallowed as "allow".** If Pi catches and logs handler errors, an exception in the async path silently becomes fail-open. Wrap the whole async evaluation in a try/catch that returns an explicit block or allow per the policy, and don't rely on Pi's behaviour.
+4. Whether Pi has its own handler timeout, and whether concurrent tool calls invoke handlers in parallel. If so, the evaluation must hold no shared mutable state.
+5. Whether multiple extensions' handlers are chained serially. Gather latency then adds to every tool call.
+
+Write a small spike test or script for this before planning tasks around it.
+
+## 7. Testing (TEST-01)
+
+Use `node --test` with co-located `*.test.mjs` files.
+
+- **Import path (VERIFY).** The tests are `.mjs` but the libs are `.ts`. Check how existing tests import TS. Either there's a build step, or Node type-stripping is used (unflagged by default in Node 22.18+/23.6+, `--experimental-strip-types` before that). Type stripping rejects TS-only runtime syntax such as enums and parameter properties, and requires `.ts` extensions in import specifiers. Match the existing convention rather than introducing a new one.
+- **Injectable exec.** Add an optional `{ execFile }` dependency parameter to the gather module. Mocking ESM built-ins is awkward, and injection makes the tests deterministic.
+
+Edge cases to cover:
+- Timeout fires, with a fake exec that honours `signal` and never resolves.
+- A real child process (`process.execPath`, `-e setTimeout(()=>{},60000)`) is actually killed on abort.
+- Pre-aborted caller signal.
+- `maxBuffer` exceeded.
+- `ENOENT`.
+- Exit 128 (not a repo, tested in a `mkdtemp` directory).
+- Options assertion: `shell` is undefined, `windowsHide === true`, and args are an array.
+- Parallel gather with deduped in-flight calls (the fake exec is called once for two rules).
+- Fail-closed versus fail-open per rule.
+- Frozen context mutation throws.
+- Sync path throws `TypeError` on a thenable, and there is no unhandled rejection.
+- The async result equals the sync result on the same fixture (a parity test).
+- Deterministic first-block ordering when a later rule's facts resolve faster.
+- No leaked timers or handles. The test process must exit cleanly, which means `unref`/`clearTimeout`.
+- Paths with spaces and unicode, a branch named `-x` (a leading-dash arg is only safe after `--`), and a Windows path.
+- One real-git integration test in a temp repo, skipped if git is absent.
+
+## 8. Plan breakdown suggestion (small, separately committed)
+
+1. Spike: confirm Pi's async `tool_call` semantics (section 6) and the TS-import convention for tests.
+2. Refactor rules to read facts from `ctx`, with the sync path using lazy sync getters. Behaviour-preserving, with a parity test. Add `needs` and `onGatherFailure`.
+3. `git-async.ts` plus tests: the exec wrapper, error classification and deadlines.
+4. `evaluateBlockRulesAsync` plus tests: gather, freeze, run rules in order, and the failure policy.
+5. The thenable guard in sync `evaluateBlockRules`, plus its test.
+6. An instrumented async variant, wiring into `extensions/index.ts`, and a baseline comparison.
+
+## Open questions I could not resolve
+
+- The Node version in `engines` and on the Pi runtime. This decides whether `AbortSignal.any` is available.
+- Whether any current rule calls git or the filesystem synchronously inside its body.
+- Pi's handler-error semantics (section 6).
+- Whether libuv's Windows cwd search is a real concern for the git invocation. Pinning an absolute git path sidesteps it either way.
+
 
 ---
 
 ## Gpt6 Research (gpt-6-astra)
 
-These are architecture findings based solely on the supplied material. References use module and API names because no source code or line numbers were provided.
+The supplied material is a design brief, not a code diff. These are planning risks, not confirmed defects. References use the supplied module and API names because source lines were not provided.
 
-1. **MEDIUM — Synchronous rule execution cannot enforce an asynchronous timeout.**  
-   **Location:** `lib/extensions/tool-blockers.ts` — `BlockRule`, `evaluateBlockRules()`, and the planned `evaluateBlockRulesAsync()` integration. ASYNC-04 requires per-rule deadlines, while ASYNC-01 retains synchronous rule execution. If a rule blocks the event loop, a timer or `Promise.race()` cannot interrupt it; an `AbortSignal` cannot interrupt JavaScript execution either. Define whether the deadline covers fact acquisition or actual rule execution. For fact-acquisition deadlines, abort the associated `execFile` operation and apply the rule’s failure policy. For literal rule-execution deadlines, execute rules in workers selected by rule identifier and terminate the worker from the parent on timeout. Add a co-located test using a deliberately blocking rule; a delayed promise alone does not test this failure.
+### 1. MEDIUM — Define which work a per-rule timeout can interrupt
 
-2. **MEDIUM — Eager collection needs failure handling that preserves rule order.**  
-   **Location:** `lib/extensions/tool-blockers.ts` — `evaluateBlockRules()` and the planned `evaluateBlockRulesAsync()` integration. The supplied contract says evaluation short-circuits on the first block. If rule A would block immediately but a git query needed only by later rule B fails, a fail-fast collection step can reject before A runs. Applying B’s fail-open policy globally can likewise bypass A’s block. Store collection failures as explicit fact outcomes, then inspect each rule’s dependencies in the existing rule order. Apply that rule’s declared failure policy only when evaluation reaches it. Establish an explicit dependency mapping so a shared query failure can receive different policies for different rules.
+**Location:** `lib/extensions/tool-blockers.ts` — planned `evaluateBlockRulesAsync()`, `BlockRule`; requirements ASYNC-01 and ASYNC-04.
 
-   A suitable proposed representation is:
+The design combines synchronous rule execution with per-rule timeouts. A timer or `Promise.race()` cannot interrupt a synchronous rule that blocks the event loop; its timeout callback runs only after that rule returns. Aborting a git child also cannot interrupt JavaScript already executing. Implement per-rule budgets around each rule’s asynchronous fact gathering, record expiration in its gathered inputs, and apply the declared timeout policy during ordered synchronous evaluation. If ASYNC-04 requires hard deadlines for the synchronous callbacks themselves, execute those callbacks in workers that the parent can terminate. Explicitly settle that distinction before implementation; an ordinary promise timeout does not satisfy the latter contract.
 
-   ```ts
-   type FactOutcome<T> =
-     | { kind: "value"; value: T }
-     | { kind: "failure"; error: unknown };
-   ```
+For the subprocess portion, use the required direct invocation pattern:
 
-   Freeze these outcomes with the evaluation context. Test that an earlier blocking rule still wins when a later rule’s dependency rejects, and that a failed query never becomes a successful empty result.
+```ts
+const execFileAsync = promisify(execFile);
 
-3. **MEDIUM — Throwing on a thenable also requires handling its eventual rejection.**  
-   **Location:** `lib/extensions/tool-blockers.ts` — `evaluateBlockRules()`. ASYNC-02 requires a synchronous `TypeError` when a rule returns a thenable. An accidentally declared `async` rule can return an already-rejected promise. Throwing the required `TypeError` leaves that rejection unhandled, potentially producing an additional process-level failure even when the caller catches the contract error. Detect thenables immediately after invoking each rule, before interpreting or returning its result; attach rejection reporting before throwing. Check callable thenables as well as ordinary objects.
+await execFileAsync("git.exe", args, {
+  cwd,
+  signal: controller.signal,
+  timeout: budgetMs,
+  maxBuffer: outputLimitBytes,
+  windowsHide: true,
+  shell: false,
+  encoding: "utf8",
+});
+```
 
-   ```ts
-   const result = rule(context);
-   const isThenable =
-     result !== null &&
-     (typeof result === "object" || typeof result === "function") &&
-     typeof result.then === "function";
+Add a co-located test demonstrating cancellation of a running child and, if callback deadlines are promised, termination of a deliberately blocking rule.
 
-   if (isThenable) {
-     // reportRuleError must be a non-throwing diagnostic sink.
-     void Promise.resolve(result).catch(reportRuleError);
-     throw new TypeError("Block rules must return synchronously");
-   }
-   ```
+### 2. MEDIUM — Prefetched facts need an enforced path into existing rules
 
-   Keep this guard in the shared synchronous evaluation path so both entry points enforce it. Add tests for a rejected promise, a callable thenable, and a thenable that resolves to a blocking result; all must produce the synchronous contract error.
+**Location:** `lib/extensions/tool-blockers.ts` — `BlockRule`, `evaluateBlockRulesAsync()`; `lib/git-query.ts` — existing synchronous wrapper.
 
-The supplied material does not establish whether `pi.on("tool_call")` awaits callback promises or how it handles callback rejection. That integration contract remains **UNVERIFIED-CONTRACT**.
+The brief identifies the current `execFileSync` wrapper but does not specify how existing rules will consume prefetched facts. If a rule retains its synchronous git lookup, asynchronous evaluation performs duplicate queries, still blocks the event loop, and can make its decision from a later repository state instead of the gathered context. That would violate ASYNC-01 even if the context object itself is frozen.
+
+Introduce an internal fact-reader interface consumed by the rules. Keep lazy synchronous lookups behind the synchronous facade; supply lookup-only access to gathered facts behind the asynchronous facade. An absent prefetched key must produce an explicit internal error, never fall back to synchronous git execution. Freeze detached fact records and their nested collections before evaluation. Test the asynchronous path with the synchronous git reader replaced by a function that throws, proving that no rule reaches it.
+
+### 3. MEDIUM — Gather failures must preserve rule order and individual failure policies
+
+**Location:** `lib/extensions/tool-blockers.ts` — `ALL_RULES`, `evaluateBlockRules()`, planned `evaluateBlockRulesAsync()`.
+
+The existing evaluator stops at the first block. An eager gather can accidentally change that behavior: rule A would block immediately, but an unrelated git query needed only by later rule B times out and rejects the entire gathering operation. Alternatively, converting that failure into an empty result can allow B to pass despite a fail-closed policy. The brief requires explicit policies but leaves this failure representation unspecified.
+
+Gather tagged outcomes instead of collapsing errors into missing facts:
+
+```ts
+type Fact<T> =
+  | Readonly<{ kind: "ok"; value: T }>
+  | Readonly<{ kind: "timeout"; error: Error }>
+  | Readonly<{ kind: "error"; error: Error }>;
+```
+
+After gathering settles, traverse `ALL_RULES` in its existing order. Apply a failed fact’s policy only when reaching a rule that requires it, and preserve the error in the returned diagnostic or logging path. Keep ordinary query failures distinct from timeouts unless the policy explicitly covers both. Test an early blocking rule followed by a timed-out dependency, plus fail-open and fail-closed rules receiving the same failure.
+
+### 4. MEDIUM — Sharing an asynchronous evaluator would change synchronous error behavior
+
+**Location:** `lib/extensions/tool-blockers.ts` — `evaluateBlockRules()`, planned `evaluateBlockRulesAsync()`; requirement ASYNC-02.
+
+A shared core declared `async` would turn a thrown `TypeError` into a rejected promise. Existing callers using synchronous `try/catch` would no longer receive the required exception. Checking for thenables after treating a result as a blocking result would also allow an invalid promise to enter the decision path.
+
+Keep the common decision runner synchronous. Have the asynchronous facade await gathering and then invoke that runner. Immediately after each executed rule returns, reject both object-shaped and function-shaped thenables:
+
+```ts
+function rejectThenable(value: unknown): void {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  ) {
+    throw new TypeError("Block rules must return synchronously");
+  }
+}
+```
+
+Test synchronous throwing, native promises, custom thenables, and function-shaped thenables. Preserve short-circuiting: rules after the first block should remain unexecuted.
+
+### 5. MEDIUM — UNVERIFIED-CONTRACT: Awaiting inside the handler does not establish dispatcher support
+
+**Location:** `extensions/index.ts` — `pi.on("tool_call", handler)`.
+
+The brief correctly identifies async handler support as an integration prerequisite, but the event dispatcher’s implementation is absent. If the dispatcher proceeds without awaiting the callback’s returned promise, a tool can execute before the blocking decision arrives. An `await` inside the callback alone cannot prevent that. This is an unresolved producer contract, not evidence that the current dispatcher behaves incorrectly.
+
+Once the producer contract is established, register a handler that returns the complete evaluation promise and propagates its blocking result. If this event does not support awaited decisions, gather facts through a supported awaited pre-dispatch boundary and retain synchronous enforcement at `tool_call`. Add an integration test using a manually deferred evaluation: assert that tool execution remains pending until resolution and never starts when the resolved decision blocks. This tests the dispatch contract directly without relying on timing-sensitive sleeps.
+
+---
+
+## Gpt Research (gpt-6.1-sol)
+
+The material contains an architecture summary, not a code diff. These findings identify implementation risks using the supplied module and declaration names; they do not establish defects in unseen source.
+
+### 1. MEDIUM — A same-thread timeout cannot interrupt synchronous rules
+
+**Location:** `lib/extensions/tool-blockers.ts` — proposed `evaluateBlockRulesAsync()` and existing `BlockRule`.
+
+ASYNC-01 requires synchronous rule execution after gathering, while ASYNC-04 requires per-rule timeouts. Wrapping a synchronous rule in `Promise.race()` does not enforce that deadline: a rule performing a long computation prevents the timeout callback from running until the computation finishes. Aborting a git child process also cannot interrupt that rule. For literal execution deadlines, run each synchronous rule in a worker, enforce its deadline from the parent, terminate the worker on expiry, and apply the configured fail policy. If the intended deadline covers only git gathering, narrow ASYNC-04 explicitly and attach cancellation to those queries.
+
+### 2. MEDIUM — Gathering failures need a representation distinct from valid empty results
+
+**Location:** `lib/extensions/tool-blockers.ts` — proposed `evaluateBlockRulesAsync()`; `lib/git-query.ts` — existing synchronous git-query wrapper. **UNVERIFIED-CONTRACT:** the wrapper’s implementation and failure representation were not supplied.
+
+The summary does not specify how failed facts reach rule evaluation. If a timed-out git query becomes an empty string, a rule could interpret unavailable repository state as a successful query with no relevant changes and allow the operation. Conversely, one rejected `Promise.all()` could bypass every rule’s configured fail-open policy. Define a discriminated fact result, associate each rule with its required facts, and apply policy before invoking that rule:
+
+```ts
+type GitFact<T> =
+  | Readonly<{ status: "ok"; value: T }>
+  | Readonly<{
+      status: "error";
+      kind: "timeout" | "aborted" | "execution";
+      error: Error;
+    }>;
+```
+
+Keep failures explicit, preserve rule order, and test timeout, cancellation, nonzero exit, and successful empty output separately.
+
+### 3. MEDIUM — Prefetching needs an explicit connection to existing rule queries
+
+**Location:** `lib/extensions/tool-blockers.ts` — `BlockRule`, `evaluateBlockRules()`, and proposed `evaluateBlockRulesAsync()`; `lib/git-query.ts` — synchronous query wrapper. **UNVERIFIED-CONTRACT:** rule bodies and their query call sites were not supplied.
+
+Gathering facts asynchronously improves responsiveness only if the subsequent rules consume those facts. A migrated rule that still invokes the existing synchronous wrapper would repeat the query, block the event loop, and potentially observe repository state different from the gathered context. Introduce a context-aware fact accessor and route every git-dependent rule through it. In the async path, that accessor must read exclusively from the snapshot and throw on a missing fact; in the sync path, it should retain the existing query behavior. Freeze the snapshot’s nested records as well as its outer context. Test the async path with the synchronous query adapter configured to throw, proving that no fallback occurs.
+
+### 4. MEDIUM — Thenable rejection must precede block-result handling
+
+**Location:** `lib/extensions/tool-blockers.ts` — `evaluateBlockRules()` and `BlockRule`.
+
+ASYNC-02 requires rejection of **any thenable**, which is broader than native promises. An `instanceof Promise` check misses custom thenables and promises from another realm. If the existing evaluator treats any truthy return as a block, a promise could also be returned as a malformed `BlockResult`. Add the guard immediately after each rule invocation, before inspecting or returning its result:
+
+```ts
+function assertSynchronous(value: unknown): void {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  ) {
+    throw new TypeError("Block rules must return synchronously");
+  }
+}
+```
+
+Use this guard in the shared decision pass, including the async entry point, so that asynchronous gathering does not silently permit asynchronous rules. Test native promises, object thenables, callable thenables, and valid synchronous results.
+
+### 5. MEDIUM — Awaiting inside the hook is insufficient unless dispatch also awaits it
+
+**Location:** `extensions/index.ts` — `pi.on("tool_call")` handler. **UNVERIFIED-CONTRACT:** the event dispatcher’s implementation was not supplied.
+
+An `async` callback returns a promise immediately. If the dispatcher ignores that promise, tool execution can begin before a blocking decision arrives, even when the callback correctly awaits `evaluateBlockRulesAsync()`. Replace the handler with an async callback that awaits evaluation and returns the existing hook response conversion. If dispatch currently invokes handlers synchronously, change the tool-call dispatch path to await each handler result before allowing execution. Add an integration test with a manually controlled pending evaluation: assert that the tool has not started, resolve evaluation to a blocking result, and assert that the tool never starts. This directly establishes the required ordering without relying on sleeps.
+
+---
+
+## Qwen38 Research (qwen3.8-max)
+
+<!-- QwenCLI: model=qwen3.8-max model_requested=qwen3.8-max model_resolved=qwen3.8-max elapsed=336.5s -->
+
+## Material Received
+
+**The code packet on stdin was empty.** The working directory (`gsd-review-scratch-29640`) contains no files, and no source was inlined. What I have is the Context Summary (module paths + symbol names) and the five requirements.
+
+Per the calibration's architecture-level provision, I'm reviewing against `lib/extensions/tool-blockers.ts` (`evaluateBlockRules`, `BlockRule`, `ALL_RULES`), `lib/extensions/telemetry-collector.ts` (`evaluateBlockRulesInstrumented`), `lib/git-query.ts`, and `lib/state-home.ts` by **module path and symbol**, not file:line. **Every finding that asserts something about existing code is tagged UNVERIFIED-CONTRACT and capped at MEDIUM.** Findings that assert Node.js/Git platform behavior are verifiable independently and are graded normally.
+
+The single highest-value result below (**F1**) is a genuine requirements conflict, not a code claim — it stands on its own.
+
+---
+
+## Findings
+
+| # | Sev | Subject |
+|---|-----|---------|
+| F1 | **HIGH** | ASYNC-01 and ASYNC-04 are mutually unsatisfiable as written — sync rules cannot be timed out |
+| F2 | **HIGH** | Fact-fetch failure must never surface as `undefined` to a rule (silent fail-open) |
+| F3 | **HIGH** | Concurrent git prefetch will contend on `.git/index.lock` without `--no-optional-locks` |
+| F4 | **HIGH** | `git` credential prompt can hang the prefetch past its timeout budget on Windows |
+| F5 | MEDIUM | `.cmd`/`.bat` git shims throw `EINVAL` on patched Node when `shell: false` (Scoop/Choco) |
+| F6 | MEDIUM | Killing `git.exe` does not kill its process tree on Windows |
+| F7 | MEDIUM | Unhandled rejection from fire-and-forget prefetch promises |
+| F8 | MEDIUM | Default `maxBuffer` (1 MB) overflow on large repos misclassified as "clean" or "error" |
+| F9 | MEDIUM | `.test.mjs` cannot import `.ts` under plain `node --test` — TEST-01 may not run at all |
+| F10 | MEDIUM | `pi.on("tool_call")` async support is an unverified load-bearing assumption |
+| F11 | MEDIUM | Gather-all breaks sync short-circuit parity; rule order must be identical |
+| F12 | MEDIUM | `Object.freeze` is shallow; nested fact arrays remain mutable |
+| F13 | MEDIUM | Inherited `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` corrupt queries when host runs inside git |
+| F14 | MEDIUM | Phase 7 telemetry parity: async path needs split prefetch/rule timing |
+| F15 | LOW | Thenable rejection message must name the offending rule |
+
+---
+
+## F1 — HIGH — ASYNC-01 ⊥ ASYNC-04: you cannot abort a synchronous rule
+
+**Location:** `lib/extensions/tool-blockers.ts` → `evaluateBlockRulesAsync` (new), requirement text ASYNC-01 + ASYNC-04.
+
+ASYNC-01 says the async path **prefetches, then runs rules sync**. ASYNC-04 says **per-rule timeout with `AbortSignal` killing the child process**. Once control enters a synchronous rule body, the Node event loop is blocked: no timer can fire, no `AbortSignal` can be delivered, no child can be killed. A "per-rule timeout" enforced during sync rule execution is not implementable.
+
+**Failure scenario:** implementer adds `setTimeout(() => controller.abort(), perRuleMs)` around the rule loop. The timer callback is queued but never runs, because the loop never yields. On a pathological rule (catastrophic regex over a 50k-line `git diff` blob, or a rule that calls the existing **sync** `lib/git-query.ts` fallback), `evaluateBlockRulesAsync` blocks the host for the full duration of the regex/`execFileSync`. The tool call neither blocks nor proceeds — the UI freezes. The timeout code is dead, and the test suite passes because tests use fast inputs.
+
+**Fix — relocate the timeout to the only place it can be enforced, and make the mapping explicit:**
+
+```ts
+// Timeout lives on the FACT QUERY, not the rule.
+type FactState<T> =
+  | { status: 'ok'; value: T; ms: number }
+  | { status: 'timeout'; ms: number }
+  | { status: 'aborted' }
+  | { status: 'error'; code: string; stderr: string };
+
+// Rule declares what it needs + what to do when it can't have it.
+interface BlockRule {
+  id: string;
+  requires?: readonly FactKey[];              // ['git.status', 'git.ignored']
+  onUnavailable: 'fail-closed' | 'fail-open'; // ASYNC-04's "explicit policy"
+  check(ctx: FrozenRuleContext): BlockResult | undefined;
+}
+```
+
+Then enforce a **second, non-preemptive** budget for the sync phase by measuring, not interrupting:
+
+```ts
+const t0 = process.hrtime.bigint();
+for (const rule of ALL_RULES) {
+  const r = runRule(rule, frozen);            // sync
+  const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
+  if (elapsedMs > SYNC_PHASE_BUDGET_MS) {
+    telemetry.recordSyncOverrun(rule.id, elapsedMs);
+    // cannot unwind — apply the rule's declared policy for the REMAINDER
+    return failRemainingClosed(ALL_RULES, ruleIndex);
+  }
+  if (r) return r;
+}
+```
+
+Document in the module header that the sync-phase budget is **detect-and-degrade, not preempt**. If true preemption is required, ASYNC-01 must change (rules become async) — that is a requirements decision, not an implementation detail, and should be surfaced to the planning track before code is written.
+
+---
+
+## F2 — HIGH — `undefined` fact is indistinguishable from "clean repo"
+
+**Location:** prefetch layer feeding `FrozenRuleContext` (new module).
+
+`Promise.allSettled` gives `{status:'rejected'}` for failures. The natural-looking code is:
+
+```ts
+const facts = { status: s.value ?? null, ignored: i.value ?? null };  // ✗
+// or worse
+const facts = { status: s.value, ignored: i.value };                  // ✗ undefined on reject
+```
+
+A rule written as `if (!ctx.facts.ignored.includes(path)) return block()` treats a **timed-out query** as "path is not ignored" — or, inverted, treats it as "path is ignored, allow". Either way an infrastructure failure is laundered into a policy decision. This is a determinism failure in an authoritative path (the blocker decides whether a tool runs) and a fail-open security hole.
+
+**Failure scenario:** repo on a network drive / large monorepo; `git status --porcelain` exceeds its 800 ms timeout; `ctx.facts.status` is `undefined`; `rule.check` does `ctx.facts.status.split('\n')` → `TypeError` thrown out of `evaluateBlockRulesAsync` → depending on the host's error handling (F10), the tool call proceeds **unblocked**. The dangerous command runs and the logs show a stack trace, not a block reason.
+
+**Fix:** the discriminated union from F1 is mandatory, and rules must be *unable* to read a raw value:
+
+```ts
+function factOr<T>(f: FactState<T>, rule: BlockRule): T {
+  if (f.status === 'ok') return f.value;
+  throw new FactUnavailableError(rule.id, f.status);   // caught by the loop → applies rule.onUnavailable
+}
+```
+
+Add an ESLint/`tsc`-enforceable invariant: no `FactState.value` access outside `factOr`. Add a test per requirement in TEST-01 asserting that a rejected prefetch produces a **block with `reasonCode: 'infra-timeout'`**, never a pass and never a thrown TypeError escaping the evaluator.
+
+---
+
+## F3 — HIGH — parallel git spawns contend on `.git/index.lock`
+
+**Location:** prefetch layer; `ALL_RULES` facts likely include `git status`, `git diff`, `git check-ignore`.
+
+ASYNC-03 implies parallel `execFile` calls. `git status` and `git diff` **opportunistically refresh and write `.git/index`**. Two concurrent invocations race for `.git/index.lock`.
+
+**Failure scenario:** prefetch fires `git status --porcelain` and `git diff --name-only` simultaneously in a repo whose index is stale (common after a branch switch or a fresh clone). One wins the lock; the other exits 128 with `fatal: Unable to create 'C:/.../.git/index.lock': File exists.` Intermittent, machine-speed-dependent, and **will not reproduce in CI** on a small warm repo. Surfaces in the field as random `fail-closed` blocks.
+
+**Fix:** every read-only query gets `--no-optional-locks` (Git ≥ 2.19) and the env belt-and-braces:
+
+```ts
+const GIT_READONLY_ARGS = ['--no-optional-locks'] as const;
+execFile(GIT_EXE, [...GIT_READONLY_ARGS, 'status', '--porcelain=v1', '-z'], {
+  cwd, signal, timeout, maxBuffer, windowsHide: true, shell: false,
+  env: { ...sanitizedEnv, GIT_OPTIONAL_LOCKS: '0' },
+});
+```
+
+Prefer `-z` (NUL-separated) over porcelain text parsing — it sidesteps CRLF normalization, quoting of non-ASCII paths (`core.quotepath`), and embedded newlines in filenames. If any query is genuinely write-capable, serialize those behind a mutex; do not rely on lock-retry.
+
+---
+
+## F4 — HIGH — credential prompts hang past the timeout on Windows
+
+**Location:** `execFile` env construction (ASYNC-03).
+
+Any query that touches a remote (`git fetch`, `git ls-remote`, `git log origin/...`) or a LFS/filter driver can invoke Git Credential Manager, which pops a **GUI dialog**. `timeout` kills `git.exe`; the GCM helper process survives (F6) holding the console, and the user sees a modal at tool-call time. Worse, some helpers block on a TTY read that `timeout` does terminate — but only after the full budget, per query.
+
+**Failure scenario:** rule needs `git config --get remote.origin.url` plus a remote-tracking check. Corporate machine, expired PAT. GCM dialog appears mid-tool-call; `evaluateBlockRulesAsync` burns its whole budget; every subsequent tool call repeats it. User perceives the assistant as hung.
+
+**Fix — non-interactive env is mandatory, not optional:**
+
+```ts
+const GIT_NONINTERACTIVE_ENV = {
+  GIT_TERMINAL_PROMPT: '0',   // git fails instead of prompting on the TTY
+  GIT_ASKPASS: '',            // no askpass helper
+  GCM_INTERACTIVE: 'never',   // Git Credential Manager
+  GCM_PROVIDER: '',           // avoid provider auto-detection probes
+  GIT_OPTIONAL_LOCKS: '0',
+  LC_ALL: 'C',                // stable, parseable English messages
+} as const;
+```
+
+Also **scope the phase to local-only queries.** If any fact requires network I/O, it does not belong in a tool-call blocker's hot path; raise it as a scope question to the planning track rather than shipping it with a 2 s timeout.
+
+---
+
+## F5 — MEDIUM — `EINVAL` from `.cmd` git shims (CVE-2024-27980 mitigation side-effect)
+
+**Location:** git executable resolution, new prefetch module.
+
+The context cites "CVE-2024-27980 class guidance" as the reason for `shell: false`. That CVE's Node mitigation (v18.20.2 / 20.12.2 / 21.7.3+) made spawning **any** `.bat`/`.cmd` without `shell: true` throw `EINVAL`. Git for Windows ships a real `git.exe`, but **Scoop and Chocolatey install `git.cmd` / `git.ps1` shims**, and MSYS2/Cygwin setups can put a `git` shell script first on PATH.
+
+**Failure scenario:** user (this machine is `win32`) installed Git via Scoop. `execFile('git', [...])` resolves `C:\Users\bedit\scoop\shims\git.cmd` → patched Node throws `EINVAL` synchronously → **every** git-backed rule fails → all rules hit their `onUnavailable` policy. If any safety rule is `fail-closed`, the assistant is bricked for that user with an opaque `EINVAL`. If `fail-open`, protection silently disappears.
+
+**Fix:** resolve to a real `.exe` once, cache it, and fail loudly at module load with an actionable message:
+
+```ts
+// Resolve candidates in order; require a .exe suffix on win32.
+const CANDIDATES = [
+  process.env.GIT_PATH,
+  'C:/Program Files/Git/cmd/git.exe',
+  'C:/Program Files/Git/bin/git.exe',
+  'C:/Program Files (x86)/Git/cmd/git.exe',
+];
+// Fall back to `where.exe git` and filter to entries ending in .exe.
+```
+
+Do **not** "fix" this with `shell: true` — that reintroduces the exact injection class the constraint exists to prevent. Add a TEST-01 case that spawns a `.cmd` shim and asserts the resolver rejects it with a clear diagnostic rather than propagating `EINVAL`.
+
+---
+
+## F6 — MEDIUM — `timeout`/`abort` kills `git.exe`, not its children (Windows)
+
+**Location:** ASYNC-03 "AbortSignal killing child process".
+
+POSIX `SIGTERM` to git often reaches the process group; on Windows there is no group signal. `git.exe` spawns `git-remote-https.exe`, `ssh.exe`, filter/LFS helpers. Killing the parent orphans them, and **an orphan holding stdout keeps the pipe open**, so `execFile`'s promise may not settle promptly even though the child is dead.
+
+**Failure scenario:** a timed-out query leaves `ssh.exe` running with a console window (mitigated by `windowsHide`, but the process persists). Over a long session, dozens of orphans accumulate. Additionally, the awaited promise lingers, so `evaluateBlockRulesAsync` overshoots its total budget despite every individual timeout firing "correctly."
+
+**Fix:** on `win32`, escalate to a tree kill on timeout/abort:
+
+```ts
+if (process.platform === 'win32' && child.pid) {
+  spawnSync('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+}
+```
+
+`util.promisify(execFile)` hides the `ChildProcess`, so use the callback form (or `spawn`) for queries where you need `child.pid`. Also guarantee settlement: race the execFile promise against a hard `setTimeout` that resolves to `{status:'timeout'}` so a stuck pipe can never stall the evaluator.
+
+---
+
+## F7 — MEDIUM — unhandled rejection from concurrent prefetch
+
+**Location:** prefetch fan-out.
+
+```ts
+const p1 = runGit(a); const p2 = runGit(b);   // p2 rejects before any await
+const r1 = await p1;                           // ✗ unhandledRejection on p2
+```
+
+Node's default `--unhandled-rejections=throw` (Node 15+) **crashes the host process**. Inside an extension host this can take down the whole session.
+
+**Fix:** make the query helper total — it never rejects:
+
+```ts
+async function fetchFact<T>(spec: QuerySpec<T>): Promise<FactState<T>> {
+  try { /* execFile */ return { status: 'ok', value, ms }; }
+  catch (e) { return classify(e); }   // 'timeout' | 'aborted' | 'error'
+}
+const states = await Promise.all(specs.map(fetchFact));   // allSettled is then redundant
+```
+
+Register a defensive `process.on('unhandledRejection')` **only** if the extension host doesn't already; otherwise log-and-swallow there and break the host's own diagnostics.
+
+---
+
+## F8 — MEDIUM — default `maxBuffer` is 1 MB; overflow looks like a git failure
+
+**Location:** ASYNC-03 mentions `maxBuffer` but no value is specified.
+
+`git status --porcelain` or `git diff --name-only` in a large monorepo easily exceeds 1 MB. Node kills the child and rejects with `err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'`.
+
+**Failure scenario:** classifier keys on "non-zero exit / killed" → tags it `timeout` or `error` → rule applies `onUnavailable` → `fail-closed` blocks every tool call in that repo. Or, worse, the truncated stdout is parsed as valid and yields a **wrong but plausible** answer (partial file list → "path not tracked" → allow).
+
+**Fix:** set `maxBuffer` explicitly (8–16 MB), and **never parse stdout when the error indicates truncation**:
+
+```ts
+if (err?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return { status: 'error', code: 'maxbuffer', stderr: '' };
+```
+
+Also cap output at the source where possible (`git status --porcelain -z -- <pathspec>`, `git diff --name-only -- <path>`) so the query is O(relevant paths), not O(repo). Add a TEST-01 case with a synthetic >maxBuffer output.
+
+---
+
+## F9 — MEDIUM (UNVERIFIED-CONTRACT) — `.test.mjs` importing `.ts` needs a loader
+
+**Location:** TEST-01; `package.json` test script (not in packet).
+
+TEST-01 mandates co-located **`.test.mjs`** files, but the modules under test are **`.ts`** (`lib/extensions/tool-blockers.ts`). Plain `node --test lib/**/*.test.mjs` cannot resolve `import { evaluateBlockRules } from './tool-blockers.ts'` unless one of these holds:
+
+- tests import **compiled output** (`dist/...js`) → requires a build step before test, and tests then validate stale artifacts if the build is skipped;
+- a TS loader is registered (`--import tsx`, `--loader ts-node/esm`);
+- Node ≥ 23.6 type-stripping is active (also reportedly default-on in 22.18+ — **verify, do not assume**).
+
+**Failure scenario:** the phase's "done" criterion is TEST-01. Tests are written, `node --test` exits 0 because the glob matched **zero** files (a very common silent pass), and the phase is reported complete with no coverage. Alternatively tests pass against `dist/` built from a previous commit, masking a regression.
+
+**Fix — verify before writing a single test:**
+
+```bash
+node --version && node -p "require('./package.json').scripts"
+# smoke-test the import path you intend to use:
+node -e "import('./lib/extensions/tool-blockers.ts').then(m=>console.log(Object.keys(m))).catch(e=>console.error('LOADER MISSING:',e.code))"
+```
+
+Then make the glob fail loudly: `node --test --test-reporter=spec "lib/**/*.test.mjs"` plus an assertion in CI that the collected test count is > 0. Recent commits in this repo reference a `conftest_loader` rule in `TESTING.md` — check whether an analogous documented loader convention already exists for the TS side and follow it rather than inventing one.
+
+---
+
+## F10 — MEDIUM (UNVERIFIED-CONTRACT) — `pi.on("tool_call")` async support
+
+**Location:** `extensions/index.ts` handler; flagged in the Context Summary itself as "verify before proceeding."
+
+This is the load-bearing assumption of the entire phase. If the host does **not** await the handler's returned promise, the tool executes immediately and the block decision lands afterwards — the blocker becomes decorative.
+
+**Failure scenario:** handler is `async`, does `await evaluateBlockRulesAsync(...)`, then returns `{ block: true }`. Host treats the returned Promise as an opaque truthy value or ignores it. Tool runs. No error anywhere. Telemetry records "blocked" while the action already happened — actively misleading diagnostics.
+
+**Fix — verify empirically, not by reading types alone:**
+
+```js
+// temporary probe in extensions/index.ts
+pi.on("tool_call", async (e) => {
+  await new Promise(r => setTimeout(r, 3000));
+  console.error('[PROBE] handler resumed after 3s');
+  return { block: true, reason: 'probe' };
+});
+```
+
+Observe: does the tool call wait 3 s and get blocked, or execute immediately? Also inspect the emitter's declared handler signature (`void | Promise<void>` vs `BlockResult | Promise<BlockResult>`) and whether it does `await handler(...)` or collects results synchronously.
+
+**If the host does not await:** do not ship the async path as the decision-maker. Options, in order of preference: (a) keep `evaluateBlockRules` sync in the handler and use async prefetch only as a **background cache warmer** for the next call; (b) return a synchronous "pending/deny-by-default" result and resolve out-of-band if the API allows; (c) request an API change. Record the outcome in the phase notes either way — it constrains ASYNC-01 more than any other fact.
+
+---
+
+## F11 — MEDIUM — gather-then-decide breaks short-circuit parity
+
+**Location:** `evaluateBlockRulesAsync` vs `evaluateBlockRules` (`tool-blockers.ts`).
+
+The sync path "short-circuits on first block" (per Context Summary). The async path prefetches **all** facts before deciding. Two divergences:
+
+1. **Work amplification:** every tool call spawns N git processes even when a cheap regex rule blocks in microseconds. On Windows, process spawn is ~10–30 ms each; N=5 → 50–150 ms of added latency, which may make the async path **slower** than the sync baseline Phase 7 measured. That inverts the phase's stated success criterion ("async should improve on this").
+2. **Different reported rule:** if the async path evaluates facts/rules in a different order (e.g., object-key order of the facts map, or `Promise.all` completion order leaking into the decision), the *blocking reason* shown to the user can differ between paths for identical input. That is a determinism failure in an authoritative path.
+
+**Fix:**
+- Iterate `ALL_RULES` in the **same array order** in both paths. Assert this in a test: identical inputs → identical `BlockResult.ruleId`.
+- **Lazy prefetch:** run cheap sync rules first; only fetch facts for the first rule that declares `requires`. Or prefetch in parallel with the cheap rules and `await` only at the first rule that needs facts.
+- Record prefetch wall-clock **and** process count in telemetry so the Phase 7 comparison is apples-to-apples (see F14).
+
+---
+
+## F12 — MEDIUM — shallow freeze leaves facts mutable
+
+**Location:** ASYNC-01 "frozen context".
+
+`Object.freeze({ facts })` does not freeze `facts`, nor the arrays inside it. A rule doing `ctx.facts.status.value.push(...)` or `sort()`-in-place mutates shared state read by later rules.
+
+**Failure scenario:** rule A calls `paths.sort()` on the frozen-context array (in-place, returns the same reference) to binary-search. Rule B then iterates the same array expecting `git status` emission order. Output differs by rule ordering — a subtle, non-reproducible decision change.
+
+**Fix:**
+
+```ts
+function deepFreeze<T>(o: T): T {
+  for (const v of Object.values(o ?? {})) if (v && typeof v === 'object') deepFreeze(v);
+  return Object.freeze(o);
+}
+```
+
+Prefer **defensive copies** for anything a rule might want to sort (`[...arr].sort()`), and note that freeze violations throw `TypeError` only in strict mode — ESM is always strict, so this holds *if* the compiled output stays ESM. If `tsconfig` targets CommonJS without `"use strict"`, mutations fail **silently**. Verify the module format; add a TEST-01 case asserting a mutation attempt throws.
+
+---
+
+## F13 — MEDIUM — inherited `GIT_*` env corrupts queries
+
+**Location:** `execFile` env (ASYNC-03).
+
+If the extension host is itself launched from a git hook, a CI step, or another git process, the environment may carry `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_PREFIX`. Child `git` invocations then query the **wrong repository** — silently, with exit 0 and valid-looking output.
+
+**Failure scenario:** CI runs the host inside a `git rebase` (sets `GIT_DIR`). Prefetch queries the rebase's temporary dir; `git check-ignore` reports the target path as untracked-but-not-ignored; a safety rule that blocks writes to untracked-but-tracked paths decides incorrectly. No error, no stderr, wrong answer.
+
+**Fix:** build the child env by **deleting** all `GIT_*` keys, then adding back only the intentional ones from F4:
+
+```ts
+function gitEnv(base = process.env) {
+  const env = { ...base };
+  for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
+  return { ...env, ...GIT_NONINTERACTIVE_ENV };
+}
+```
+
+Always pass `cwd` explicitly; never rely on `process.cwd()` inheritance alone. Add `-c core.quotepath=false` and `-c color.ui=never` as `-c` overrides so a user's global config can't change the output format.
+
+---
+
+## F14 — MEDIUM (UNVERIFIED-CONTRACT) — telemetry parity with Phase 7
+
+**Location:** `lib/extensions/telemetry-collector.ts` → `evaluateBlockRulesInstrumented`.
+
+Phase 7 established an instrumented sync wrapper as the baseline. If `evaluateBlockRulesAsync` isn't instrumented identically, the phase cannot demonstrate its own success criterion, and metric shapes diverge between paths (dashboards/queries silently drop async rows).
+
+**Fix:** mirror the wrapper (`evaluateBlockRulesAsyncInstrumented`) and split the measurement — a single total is useless for diagnosing F11:
+
+```ts
+{ ruleId, path: 'async', prefetchMs, prefetchCount, ruleMs, syncOverrun: boolean,
+  factStates: { 'git.status': 'ok', 'git.ignored': 'timeout' },   // F2's union, as strings
+  decision: 'block' | 'allow' | 'fail-closed' | 'fail-open', reasonCode }
+```
+
+Emitting `factStates` is what makes fail-closed-due-to-timeout distinguishable from fail-closed-due-to-policy in production — without it, F3/F4/F5-class incidents are undiagnosable.
+
+---
+
+## F15 — LOW — thenable detection message
+
+**Location:** ASYNC-02, sync `evaluateBlockRules`.
+
+`typeof result?.then === 'function'` is correct, but note the important subtlety: an `async` rule returning "no block" still yields a **resolved Promise**, so detection must happen on the return value, never on the block decision. The thrown `TypeError` should name the rule:
+
+```ts
+if (result != null && typeof (result as any).then === 'function') {
+  throw new TypeError(
+    `Block rule "${rule.id}" returned a thenable; evaluateBlockRules is synchronous. ` +
+    `Use evaluateBlockRulesAsync, or make the rule sync.`);
+}
+```
+
+Throw **before** any telemetry/state mutation so a rejected call leaves no partial record.
+
+---
+
+## Platform facts worth pinning in the plan
+
+```js
+// promisify(execFile) resolves to an OBJECT, not a string — the #1 mistake here
+const execFileAsync = promisify(execFile);
+const { stdout, stderr } = await execFileAsync(exe, args, opts);   // ✓
+const stdout = await execFileAsync(exe, args, opts);               // ✗ always truthy object
+
+// Error classification table (verify each in a real test — don't trust this table blindly)
+// timeout exceeded      → err.killed === true, err.signal === 'SIGTERM', err.code = exit|null
+// signal aborted        → err.name === 'AbortError', err.code === 'ABORT_ERR'
+// maxBuffer exceeded    → err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+// exec not found        → err.code === 'ENOENT'
+// .cmd/.bat, patched Node → err.code === 'EINVAL'
+// non-zero exit         → err.code === <number>, err.stdout may still be populated → do NOT trust it
+// empty repo / not git  → exit 128, stderr 'fatal: not a git repository'
+```
+
+Node version floors implied by these requirements — **confirm `engines` before relying on them**:
+
+| API | Minimum |
+|---|---|
+| `options.signal` on `execFile` | 15.4.0 |
+| `AbortSignal.timeout(ms)` | 17.3.0 (16.14.0) |
+| `AbortSignal.any([...])` | 20.3.0 / 18.17.0 |
+| `.cmd` spawn → `EINVAL` | 18.20.2 / 20.12.2 / 21.7.3 |
+| `--experimental-strip-types` | 22.6.0 (default-on ≥23.6; 22.18+ **verify**) |
+
+Use `AbortSignal.any([AbortSignal.timeout(perQueryMs), hostShutdownSignal])` so host teardown aborts in-flight git. Check `signal.aborted` **before** spawning and classify as `'aborted'`, distinct from `'timeout'` — they warrant different policies (shutdown should not emit a user-facing block).
+
+One lifecycle gotcha not in any requirement: pending `execFile` children **hold the event loop open**. If the host shuts down mid-prefetch, exit can hang. Wire a shutdown `AbortController` and add a hard cap on total prefetch concurrency (4 is plenty; unbounded fan-out on a large repo is a fork-bomb-adjacent pattern).
+
+---
+
+## TEST-01 edge-case matrix
+
+| Case | Asserts |
+|---|---|
+| Query timeout | `status:'timeout'`, rule applies declared policy, `reasonCode` distinguishes infra from policy |
+| Pre-aborted signal | `status:'aborted'`, **no** user-facing block |
+| `maxBuffer` overflow | `status:'error'/'maxbuffer'`, truncated stdout **never** parsed |
+| `ENOENT` (git missing) | clear diagnostic, not a raw stack |
+| `.cmd` shim present (win32) | resolver rejects with actionable message (F5) |
+| Exit 128, not a repo | treated as a known state, not `error` |
+| CRLF + trailing newline in stdout | parsed identically to LF (or use `-z`) |
+| Non-ASCII / space-containing paths | `core.quotepath=false` + `-z` round-trip |
+| Concurrent prefetch, stale index | no `index.lock` failure (F3) — run against a real repo with `touch`ed index |
+| Sync rule returns a thenable | `TypeError` naming the rule; no partial telemetry |
+| **Async** rule in async path | either supported deliberately or rejected — pick one, test it |
+| Frozen-context mutation | throws `TypeError` (confirms strict mode, F12) |
+| Rule order parity | same input → same `ruleId` in both paths (F11) |
+| Host shutdown mid-prefetch | no unhandled rejection, no hang (F6/F7) |
+
+Inject `runGit` as a dependency for the logic tests (fast, deterministic, no Windows variance) **and** keep a small set of real-`git` integration tests that exercise the actual `execFile` option surface — the injected-mock-only suite will pass while F3/F4/F5/F8 all remain broken.
+
+---
+
+## Must-verify before implementation
+
+1. **F10** — does `pi.on("tool_call")` await the handler? Empirical probe, not type reading. Everything else is downstream of this.
+2. **F1** — confirm with the planning track that ASYNC-04's "per-rule timeout" means *per-fact-query timeout + non-preemptive sync budget*. As written the two requirements contradict.
+3. **F9** — the actual `test` script and TS import mechanism; confirm a `.test.mjs` can import `tool-blockers.ts` today.
+4. `node --version`, `git --version` (≥2.19 for `--no-optional-locks`), and whether git resolves to a real `.exe` on the target machines: `where.exe git`.
+5. **Scope:** confirm all prefetched facts are local-only. Any network-touching query should be escalated out of this phase (F4).
+6. `tsconfig` module format (ESM vs CJS) — determines whether `Object.freeze` violations throw or fail silently (F12), and whether `.test.mjs` interop works at all.
+
 
 ---
 
