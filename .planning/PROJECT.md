@@ -27,14 +27,18 @@ Agent sessions execute with the same safety rules and orchestration enforcement 
 - ✓ Git integration (status, diffs, worktrees) — existing
 - ✓ Subagent creation and tracking — existing
 
+- ✓ State home resolver, process liveness, git query, shell command parser — v1.0
+- ✓ BlockRuleContext type extension with backward compatibility (23 rules) — v1.0
+- ✓ Port block-probe-in-fork hook (subagent-aware probe blocking) — v1.0
+- ✓ Port fork-completion-gate hook (fork result validation) — v1.0
+- ✓ Port block-manual-integrate hook (autopilot lock/PID liveness) — v1.0
+- ✓ Port block-redispatch-without-fix hook (pipeline + git history) — v1.0
+- ✓ Port ensure-lane-driver hook (daemon lifecycle management) — v1.0
+- ✓ Port audit-scope-guard hook (scope token enforcement) — v1.0
+
 ### Active
 
-- [ ] Port ensure-lane-driver hook (daemon lifecycle management)
-- [ ] Port fork-completion-gate hook (fork tracking)
-- [ ] Port block-probe-in-fork hook (probe awareness)
-- [ ] Port audit-scope-guard hook (audit scope enforcement)
-- [ ] Port block-manual-integrate hook (autopilot lock/PID checks)
-- [ ] Port block-redispatch-without-fix hook (manifest + git history queries)
+(None — next milestone TBD)
 
 ### Out of Scope
 
@@ -45,16 +49,16 @@ Agent sessions execute with the same safety rules and orchestration enforcement 
 
 ## Context
 
-Pi-web wraps the `@earendil-works/pi-*` SDK (v1.2.0) and exposes coding-agent sessions through a Next.js App Router application. The extension system (`lib/extensions/tool-blockers.ts`) already has 21 block rules ported from Claude CLI PreToolUse hooks. The remaining 6 hooks require infrastructure that doesn't exist yet in pi-web — daemon lifecycle tracking, fork/probe state, autopilot lock files, and git history queries from within the extension context.
+Pi-web wraps the `@earendil-works/pi-*` SDK (v1.2.0) and exposes coding-agent sessions through a Next.js App Router application. The extension system has 23 BlockRules (21 original + 2 context-aware) plus 3 InlineExtension handlers and a lane driver manager. All 6 orchestration hooks from the CLI are now ported.
 
-The GSD lane extension (`lib/gsd-lane-extension.ts`) enforces orchestrator mode via a tool-call allow-list gate. The dispatch status reader (`lib/dispatch-status.ts`) already parses lane manifests from `.planning/impl-lanes/p-*.json`. These are the foundation for the infrastructure-dependent hooks.
+Foundation utilities in `lib/`: state-home resolver, process liveness checker, git query wrapper, shell command parser. These are consumed by the context-aware rules and InlineExtension handlers. The audit scope extension intercepts Write/Edit in audit sessions and enforces scope boundaries via base64url scope tokens.
 
 ## Constraints
 
 - **Runtime:** Node.js >=22.19.0 with `--experimental-strip-types`
 - **Framework:** Next.js 16 App Router — no Pages Router
 - **SDK:** Must use `@earendil-works/pi-*` v1.2.0 APIs for session and extension management
-- **Extensions:** Block rules must be pure functions in `tool-blockers.ts` with the existing `BlockRule` signature
+- **Extensions:** Block rules are pure functions with optional `BlockRuleContext` parameter; InlineExtension handlers for complex hooks
 - **Testing:** Co-located `.test.mjs` files using `node --test` with jiti fallback for TS imports
 
 ## Key Decisions
@@ -64,7 +68,8 @@ The GSD lane extension (`lib/gsd-lane-extension.ts`) enforces orchestrator mode 
 | Pure-function block rules | Testable without mocking agent internals | ✓ Good |
 | Extension system via pi.on("tool_call") | Aligns with pi SDK's event model | ✓ Good |
 | File-based state (no DB) | Matches pi CLI's approach, zero-config | ✓ Good |
-| Infrastructure hooks need new pi-web services | CLI hooks read daemon PIDs, lock files, git history — pi-web needs equivalent abstractions | — Pending |
+| Infrastructure hooks need new pi-web services | CLI hooks read daemon PIDs, lock files, git history — pi-web needs equivalent abstractions | ✓ Good — 4 utility modules + InlineExtension pattern |
+| Hybrid BlockRule + InlineExtension architecture | Simple gates as BlockRules with optional context, complex hooks as InlineExtension handlers | ✓ Good — clean separation of concerns |
 
 ## Evolution
 
@@ -84,4 +89,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-14 after initialization*
+*Last updated: 2026-10-15 after v1.0 milestone (Orchestration Hook Porting)*
