@@ -18,6 +18,9 @@ import { evaluateInputRules, ALL_INPUT_RULES } from "./input-handlers";
 import { fireSessionStart, fireSessionEnd, trackToolCall, ALL_SESSION_RULES, createSessionState } from "./session-lifecycle";
 import type { ToolCallEvent, ToolResultEvent, InputEvent, SessionStartEvent, SessionEndEvent, ExtensionTiming, InputRule, SessionRule, BlockRuleContext } from "./types";
 import { resolveStateHome } from "../state-home";
+import { checkManualIntegrate } from "./block-manual-integrate";
+import { checkRedispatchWithoutFix } from "./block-redispatch";
+import { ensureLaneDriver } from "./lane-driver-manager";
 
 export const GSD_EXTENSION_NAME = "pi-web-gsd-unified";
 
@@ -58,6 +61,11 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
           sessionId: ev.sessionId,
           stateHome: resolveStateHome(),
         };
+        try {
+          ensureLaneDriver(blockRuleCtx.cwd, blockRuleCtx.stateHome);
+        } catch {
+          // Lane driver spawn failure is non-fatal
+        }
       });
 
       if (enableBlockRules) {
@@ -80,6 +88,18 @@ export function createGsdExtension(options: GsdExtensionOptions = {}): InlineExt
             console.warn(`[gsd-ext] tool_call handler took ${durationMs.toFixed(1)}ms for ${ev.toolName} — investigate performance`);
           }
 
+          return result;
+        });
+
+        pi.on("tool_call", (ev: ToolCallEvent) => {
+          const start = performance.now();
+          const cwd = blockRuleCtx?.cwd ?? process.cwd();
+          const result = checkManualIntegrate(ev.toolName, ev.input ?? {}, cwd)
+                      ?? checkRedispatchWithoutFix(ev.toolName, ev.input ?? {}, cwd);
+          const durationMs = performance.now() - start;
+          if (onTiming) {
+            onTiming({ event: "tool_call", handlerName: "inline-gates", durationMs, blocked: result?.block ?? false, timestamp: Date.now() });
+          }
           return result;
         });
       }
