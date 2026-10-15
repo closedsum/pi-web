@@ -54,7 +54,7 @@ const V2_REQUIRED_FIELDS = [
   "state",
 ] as const;
 
-function isValidV2(data: Record<string, unknown>): data is LockDataV2 {
+function isValidV2(data: Record<string, unknown>): boolean {
   if (data.schema !== 2) return false;
   for (const field of V2_REQUIRED_FIELDS) {
     if (!(field in data) || data[field] == null) return false;
@@ -84,7 +84,7 @@ export function parseLockFile(filePath: string): ParsedLock | null {
   if (data.schema === 2) {
     if (!isValidV2(data)) return null;
     return {
-      data: data as LockDataV2,
+      data: data as unknown as LockDataV2,
       schemaVersion: 2,
       identityVerified: true,
       raw,
@@ -94,7 +94,7 @@ export function parseLockFile(filePath: string): ParsedLock | null {
   if (typeof data.pid !== "number") return null;
 
   return {
-    data: data as LockDataV1,
+    data: data as unknown as LockDataV1,
     schemaVersion: 1,
     identityVerified: false,
     raw,
