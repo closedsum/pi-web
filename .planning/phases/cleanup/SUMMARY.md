@@ -13,7 +13,7 @@
 | 2B | e2e: run_step snapshot + SSE chunked decoding | Already done | (prior session) |
 | 2C | Consolidate model-ID tables in tests | Already done | (prior session — _config.mjs + _hooks.mjs infrastructure) |
 | 3A | Task Panel dispatch visibility | Already done | (DispatchSection.tsx already wired) |
-| 3B | Global Chrome launch scripts | Deferred | gsd-config dependency not yet created |
+| 3B | Global Chrome launch scripts | Done | feat(cleanup): refactor pi_launcher.py to use global gsd_chrome_launch.py |
 | 4A | Document impl-lanes manifest format | Done | docs(cleanup): document impl-lanes manifest format |
 | 4B | Analyze cross-session coupling | Done | docs(cleanup): analyze cross-session coupling |
 
@@ -32,7 +32,7 @@
 ## Deviations
 
 - Tasks 2A, 2B, 2C, 3A were already completed in prior sessions. No new code needed.
-- Task 3B deferred: the global gsd-config Chrome scripts don't exist yet, so the pi_launcher.py refactor can't happen. Only the gsd-config side is blocking.
+- Task 3B was initially deferred (gsd-config scripts missing), then completed after the global agent created them.
 
 ## Self-Check
 
