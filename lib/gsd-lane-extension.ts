@@ -95,26 +95,36 @@ async function resolveOrchestratorBudgets(python: string, gsdBinDir: string, ove
   return { ...DEFAULT_BUDGETS, ...configBudgets, ...overrides };
 }
 
-/** `gsd-config.py get` prints JSON, so string values arrive quoted; a bare value is accepted too. */
+/** `gsd-config.py get` prints JSON, so string values arrive quoted; a bare value is accepted too.
+ *  CLI output may have warning/debug lines before the value — scan from the last line. */
 export function parseConfigString(stdout: string): string | null {
-  const text = stdout.trim();
-  if (!text) return null;
-  try {
-    const value = JSON.parse(text);
-    return typeof value === "string" && value ? value : null;
-  } catch {
-    return text;
+  const lines = stdout.trim().split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    try {
+      const value = JSON.parse(line);
+      if (typeof value === "string" && value) return value;
+      if (value === null || typeof value !== "string") continue;
+    } catch { /* not JSON — try as bare value below */ }
   }
+  const last = lines[lines.length - 1].trim();
+  if (!last) return null;
+  try { JSON.parse(last); return null; } catch { /* not a JSON literal — treat as bare value */ }
+  return last;
 }
 
 export interface ResolvedLaneModel { provider: string; model: string; effort: string; reason?: string }
 
-/** `gsd_impl_lane.py resolve-model` prints {Provider, Model, Effort, ModelReason}, currently twice. */
+/** `gsd_impl_lane.py resolve-model` prints {Provider, Model, Effort, ModelReason}, currently twice.
+ *  CLI output may have warning/debug lines before the JSON — find the first `{`-prefixed block. */
 export function parseResolvedModel(stdout: string): ResolvedLaneModel | null {
-  const first = stdout.trim().split(/\r?\n(?=\{)/)[0];
+  const blocks = stdout.trim().split(/\r?\n(?=\{)/);
+  const jsonBlock = blocks.find((b) => b.trimStart().startsWith("{"));
+  if (!jsonBlock) return null;
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(first);
+    parsed = JSON.parse(jsonBlock.trim());
   } catch {
     return null;
   }
