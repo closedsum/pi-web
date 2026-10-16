@@ -13,27 +13,18 @@ SERVER_PORT = 30141
 
 log = lambda msg: print(msg, flush=True)
 
-_CHROME_CANDIDATES = [
-    os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-    os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-    os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-]
-
-
-def find_chrome():
-    for path in _CHROME_CANDIDATES:
-        if os.path.isfile(path):
-            return path
-    return None
+_GSD_CHROME = os.path.join(
+    os.environ.get("HOME") or os.environ.get("USERPROFILE", ""),
+    "gsd-config", "get-shit-done", "bin", "gsd_chrome_launch.py",
+)
 
 
 def open_in_new_chrome_window(url):
-    chrome = find_chrome()
-    if chrome:
-        subprocess.Popen([chrome, "--new-window", url])
+    if os.path.isfile(_GSD_CHROME):
+        subprocess.Popen([sys.executable, _GSD_CHROME, url])
     else:
         import webbrowser
-        log("Chrome not found — falling back to default browser")
+        log("gsd_chrome_launch.py not found — falling back to default browser")
         webbrowser.open(url)
 
 
