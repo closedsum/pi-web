@@ -48,7 +48,7 @@ Next.js app that hosts coding-agent sessions for user-selected projects, with a 
 | `lib/task-board.ts` | Reads `.planning/threads/board.jsonl` task board data |
 | `lib/model-catalog.ts` | Provider model catalog (discovery, presets) |
 | `lib/model-scope.ts` | Resolves visible models from `enabledModels` whitelist |
-| `lib/dispatch-status.ts` | Reads lane pipeline manifests (`cwd/.planning/impl-lanes/p-*.json`) and UE dispatch progress into unified `DispatchItem[]` |
+| `lib/dispatch-status.ts` | Reads lane pipeline manifests (`cwd/.planning/impl-lanes/p-*.json`) and UE dispatch progress into unified `DispatchItem[]` — see [`docs/impl-lanes-manifest.md`](docs/impl-lanes-manifest.md) for field reference |
 | `app/api/dispatch-status/route.ts` | API route serving dispatch data — calls `readAllDispatches(cwd)` with no session filtering |
 | `components/task-panel/TaskPanel.tsx` | Task panel with color-coded model/effort/tasktype tags; passes `key={cwd:sessionId}` to DispatchSection |
 | `components/task-panel/DispatchSection.tsx` | Lanes section — filters pre-existing terminal lanes via baseline snapshot; resets on fetch-recovery (server restart) |
