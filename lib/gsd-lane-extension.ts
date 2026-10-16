@@ -24,6 +24,10 @@ const OWNERSHIP_PATTERNS = [
 
 export const ORCH_ALLOW = new Set(["read", "grep", "find", "ls", "glob", "search", "DispatchLane", "CheckLaneStatus", "CheckDispatchStatus", "ue_dispatch"]);
 
+export function shouldTriggerModelTurn(failureClass: DispatchFailureClass): boolean {
+  return failureClass === "unknown";
+}
+
 export function classifyDispatchFailure(error: string): DispatchFailureClass {
   const lower = error.toLowerCase();
   if (OWNERSHIP_PATTERNS.some((p) => lower.includes(p))) return "ownership";
@@ -262,7 +266,7 @@ export function createGsdLaneExtension(options: GsdLaneExtensionOptions): Inline
           customType: "gsd-lane-lifecycle",
           content: `Lane failed: ${slug} [${failureClass}]\n${error}`,
           display: true,
-        }, { triggerTurn: false });
+        }, { triggerTurn: shouldTriggerModelTurn(failureClass) });
         if (failureClass === "infra") {
           mode = "inline";
           autoFlipped = true;
