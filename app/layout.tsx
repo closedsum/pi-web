@@ -65,6 +65,13 @@ export default function RootLayout({
     <html lang="en" translate="no" className={`${notoSansMono.variable} notranslate`} suppressHydrationWarning>
       <head>
         <meta name="google" content="notranslate" />
+        {process.env.NODE_ENV !== "production" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(r){if(r.length){r.forEach(function(s){s.unregister()});caches.keys().then(function(k){return Promise.all(k.map(function(n){return caches.delete(n)}))}).then(function(){try{if(!sessionStorage.getItem("__pi_sw_cleared")){sessionStorage.setItem("__pi_sw_cleared","1");location.reload()}}catch(e){location.reload()}})}})}`
+            }}
+          />
+        )}
         <script
           dangerouslySetInnerHTML={{
             __html: THEME_INIT_SCRIPT,

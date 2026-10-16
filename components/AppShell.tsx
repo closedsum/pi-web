@@ -28,6 +28,7 @@ import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
 import { useViewportHeight } from "@/hooks/useViewportHeight";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useAudio } from "@/hooks/useAudio";
+import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { copyText } from "@/lib/clipboard";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { getFileName } from "@/lib/file-paths";
@@ -117,6 +118,7 @@ export function AppShell() {
   const { prefs: layoutPrefs } = useLayoutPreferences();
   const isNarrowMobile = useIsNarrowMobile();
   useViewportHeight();
+  useHeartbeat();
 
   // Once the user has granted notification permission, register a Web Push
   // subscription so the server can notify backgrounded PWAs (notably iOS,
